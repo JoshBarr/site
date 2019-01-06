@@ -41,7 +41,7 @@ const IndexPage = ({ data }) => (
           <h4 className="font-primary">Latest article</h4>
           {data.allMarkdownRemark.edges.map(({ node: post }) => {
             return (
-              <div className="hero__post">
+              <div key={post.frontmatter.path} className="hero__post">
                 <Link className="theme-link-block font-display" to={post.frontmatter.path}>
                   <h3 className="hero__post-title theme-link__brand">
                     {post.frontmatter.title}

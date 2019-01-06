@@ -20,7 +20,7 @@ const BlogIndex = ({
       <div className="theme--light">
   
         {data.allMarkdownRemark.edges.map(({ node: post }) => {
-          return (<div className=""><PostListing post={post} /></div>)})}
+          return (<div key={post.frontmatter.path}><PostListing post={post} /></div>)})}
 
         {previousPagePath && <Link to={previousPagePath}>Previous</Link>}
         {nextPagePath && <Link to={nextPagePath}>Next</Link>}

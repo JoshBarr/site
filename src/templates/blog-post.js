@@ -28,7 +28,7 @@ export default function Template({
             <h6 className="keyline--top theme-border space--tight">Post tags:</h6>
             <ul className={`small font-primary list-unstyled`}>
             {post.frontmatter.tags.map((tag => (
-              <li>
+              <li key={tag}>
                 <Tag tag={tag} />
               </li>
             )))}

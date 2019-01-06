@@ -6,7 +6,7 @@ const PostMetadata = ({ post, stacked = false }) => (
   <ul className={`small font-primary ${stacked ? 'list-unstyled' : 'list-inline'}`}>
     <li>{post.frontmatter.date}</li>
     {post.frontmatter.tags.map((tag => (
-      <li>
+      <li key={tag}>
         <Tag tag={tag} />
       </li>
     )))}
