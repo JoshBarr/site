@@ -6,7 +6,7 @@ My public website, built with [gatsby](https://www.gatsbyjs.org).
 
 ## 💫 Deploy
 
-The website is hosted on github pages, and deployed with the [gh-pages] package. To deploy it, run the `ship` command from npm:
+The website is hosted on github pages, and deployed with the [gh-pages](https://www.npmjs.com/package/gh-pages) package. To deploy it, run the `ship` command from npm:
 
 ```sh
 # Runs the gatsby build, and uploads the compiled assets to github
