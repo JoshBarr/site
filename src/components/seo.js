@@ -59,6 +59,14 @@ function SEO({ description, lang, meta, keywords, title, thumbnail }) {
                   content: thumbnail && thumbnail.src,
               },
               {
+                property: 'og:image:width',
+                content: thumbnail && thumbnail.width,
+              },
+              {
+                property: 'og:image:height',
+                content: thumbnail && thumbnail.height,
+              },
+              {
                 name: 'twitter:image',
                 content: thumbnail && thumbnail.src,
               },
