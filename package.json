@@ -34,7 +34,8 @@
     "start": "npm run develop",
     "format": "prettier --write \"src/**/*.js\"",
     "test": "echo \"Write tests! -> https://gatsby.app/unit-testing\"",
-    "deploy": "gh-pages public --branch master"
+    "deploy": "gh-pages -d public --branch master",
+    "ship": "gatsby build && gh-pages -d public --branch master"
   },
   "devDependencies": {
     "gh-pages": "^2.0.1",

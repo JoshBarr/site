@@ -253,7 +253,7 @@ h3 {
   padding-left: 0;
   padding-right: 0;
   padding-top: 0;
-  margin-bottom: 1.45rem;
+  margin-bottom: .5rem;
   color: inherit;
   font-weight: bold;
   text-rendering: optimizeLegibility;
@@ -725,16 +725,21 @@ h1 {
 }
 
 .container {
-  margin-left: 10vw;
-  margin-right: 10vw;
+  margin-left: 6vw;
+  margin-right: 6vw;
   max-width: 80em;
 }
 
-.container--secondary {
-  margin-right: 10vw;
-}
-
 @media only screen and (min-width: 1000px) {
+  .container {
+    margin-left: 10vw;
+    margin-right: 10vw;
+  }
+
+  .container--secondary {
+    margin-right: 12vw;
+  }
+
   .split {
     flex-direction: row;
   }
@@ -967,7 +972,13 @@ h1 {
 */
 
 .header {
-  padding: 4vw 0 2vw;
+  padding: calc(1.25em + 3vw) 0 2vw;
+}
+
+@media only screen and (min-width: 700px) {
+  /* .header {
+    padding: 4vw 0 2vw;
+  } */
 }
 
 .header__title {
