@@ -8,7 +8,7 @@ import styles from './resume.module.css';
 
 const Resume = () => (
   <div className={styles.cvBody}>
-    <SEO title="Resumé" />
+    <SEO title="Resumé" description="My career story" />
       <link href='http://fonts.googleapis.com/css?family=Merriweather:900,300i,300,700' rel='stylesheet' type='text/css' />
 
       <div className={styles.cv}>
