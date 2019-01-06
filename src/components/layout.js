@@ -37,9 +37,14 @@ const Layout = ({ children, theme = 'theme--light' }) => (
           <div className="theme--footer">
             <footer className="footer theme-background theme-text">
               <div className="container container--secondary small">
-                <p className="">
-                  © 2019, built with <a href="https://www.gatsbyjs.org" className="theme-link">Gatsby</a>
-                </p>
+                <ul className="list-inline">
+                  <li>
+                    © 2019, built with <a href="https://www.gatsbyjs.org" className="theme-link">Gatsby</a>
+                  </li>
+                  <li>
+                    <a className="theme-link" href="https://github.com/joshbarr/joshbarr.github.io">Source code on Github</a>
+                  </li>
+                </ul>
               </div>
             </footer>
           </div>
