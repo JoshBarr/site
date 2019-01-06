@@ -9,7 +9,7 @@ published: true
 authors: [josh_barr]
 ---
 
-A couple of years ago, my new years resolution was to stop spending lots of money on subscription services. I used to host a number of small websites for friends on WebFaction. Not only was it costing me money, it was sapping my time. So I shut down the lot of it. My personal website, an ancient wordpress blog, was also hosted there, and vanished in the clear-out. 
+A couple of years ago, my new years resolution was to stop spending lots of money on subscription services. I used to host a number of small websites for friends on WebFaction. Not only was it costing me money, it was sapping my time. So I shut down the lot of it. My personal website, an ancient Wordpress blog, was also hosted there, and vanished in the clear-out. 
 
 It's 2019, and I've resolved to start writing again – and that means I need a website. I started with some priorities:
 
