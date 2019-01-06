@@ -1,9 +1,10 @@
 module.exports = {
   siteMetadata: {
     title: `Josh Barr`,
-    description: `Kick off your next, great Gatsby project with this default starter. This barebones starter ships with the main Gatsby configuration files you might need.`,
-    author: `@gatsbyjs`,
-    siteUrl: `http://joshbarr.com`,
+    description: `Software architect, designer, guitarist and sound engineer,
+    from Wellington, New Zealand.`,
+    author: `@joshbarrnz`,
+    siteUrl: `https://joshbarr.com`,
   },
   mapping: {
     "MarkdownRemark.frontmatter.authors": `AuthorYaml`,
