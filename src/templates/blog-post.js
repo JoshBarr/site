@@ -16,7 +16,7 @@ export default function Template({
   console.log(data);
   return (
     <Layout>
-      <SEO title={`${post.frontmatter.title}`} />
+      <SEO title={`${post.frontmatter.title}`} description={post.frontmatter.blurb} />
       <div className="container">
         <div className="section-top">
           <h1 className="">{post.frontmatter.title}</h1>
