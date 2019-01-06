@@ -8,8 +8,9 @@ function SEO({ description, lang, meta, keywords, title, thumbnail }) {
     <StaticQuery
       query={detailsQuery}
       render={data => {
-        const metaDescription =
-          description || data.site.siteMetadata.description
+        const metaDescription = description || data.site.siteMetadata.description;
+        const coverImage = thumbnail || data.placeholderImage.childImageSharp.fixed;
+
         return (
           <Helmet
             htmlAttributes={{
@@ -52,23 +53,23 @@ function SEO({ description, lang, meta, keywords, title, thumbnail }) {
               },
               {
                 property: 'og:image',
-                content: thumbnail && thumbnail.src,
+                content: coverImage && coverImage.src,
               },
               {
                   property: 'og:image:secure_url',
-                  content: thumbnail && thumbnail.src,
+                  content: coverImage && coverImage.src,
               },
               {
                 property: 'og:image:width',
-                content: thumbnail && thumbnail.width,
+                content: coverImage && coverImage.width,
               },
               {
                 property: 'og:image:height',
-                content: thumbnail && thumbnail.height,
+                content: coverImage && coverImage.height,
               },
               {
                 name: 'twitter:image',
-                content: thumbnail && thumbnail.src,
+                content: coverImage && coverImage.src,
               },
             ]
               .concat(
@@ -110,6 +111,13 @@ const detailsQuery = graphql`
         title
         description
         author
+      }
+    }
+    placeholderImage: file(relativePath: { eq: "cover-image.png" }) {
+      childImageSharp {
+        fixed(width: 1200, height: 628) {
+          ...GatsbyImageSharpFixed
+        }
       }
     }
   }
