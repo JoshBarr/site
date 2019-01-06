@@ -2,15 +2,16 @@ import React from "react"
 import Img from 'gatsby-image'
 
 
-const Author = ({ author }) => (
-  <div className="">
-    <div className="avatar">
+const Author = ({ author, date }) => (
+  <div className="media">
+    <div className="media__image avatar">
       <Img fixed={author.image.childImageSharp.fixed} />
     </div>
-    <div className="small">
+    <div className="media__body small">
       <strong>
         {author.name}
-      </strong>
+      </strong><br />
+      {date}
     </div>
   </div>
 );

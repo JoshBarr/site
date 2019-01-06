@@ -77,7 +77,7 @@ exports.createPages = ({ actions, graphql }) => {
       createPage, // The Gatsby `createPage` function
       items: posts, // An array of objects
       itemsPerPage: 2, // How many items you want per page
-      pathPrefix: '/blog', // Creates pages like `/blog`, `/blog/2`, etc
+      pathPrefix: '/articles', // Creates pages like `/blog`, `/blog/2`, etc
       component: blogIndexTemplate, // Just like `createPage()`
     });
   })

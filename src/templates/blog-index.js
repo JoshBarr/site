@@ -14,13 +14,13 @@ const BlogIndex = ({
 }) => (
   <Layout>
     <SEO title="Blog" keywords={[`frontend development`, `architecture`, `react`]} />
-    <div className="container">
-      <h1 className="h0 section-top space--large">All blog posts</h1>
+    <div className="container generic-page">
+      <h1 className="hero__title section-top space--large">Articles</h1>
 
-      <div className="article theme--light">
+      <div className="theme--light">
   
         {data.allMarkdownRemark.edges.map(({ node: post }) => {
-          return (<PostListing post={post} />)})}
+          return (<div className=""><PostListing post={post} /></div>)})}
 
         {previousPagePath && <Link to={previousPagePath}>Previous</Link>}
         {nextPagePath && <Link to={nextPagePath}>Next</Link>}

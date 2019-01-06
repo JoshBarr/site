@@ -19,10 +19,8 @@ export default function Template({
     <Layout>
       <SEO title={tag}></SEO>
       <div className="container generic-page">
-        <div className="article section-top">
-          <h1>{tag}</h1>
-
-          <ul className="list-inline space--large">
+        <h1 className="section-top">{tag}</h1>
+        <ul className="list-inline space--large">
             <li>
               {tagHeader}
             </li>
@@ -30,6 +28,7 @@ export default function Template({
               <Link to="/tags">See all tags</Link>
             </li>
           </ul>
+        <div className="article">
           {edges.map(({ node }) => {
             const { path, title } = node.frontmatter
             return (

@@ -21,7 +21,7 @@ const Contact = () => (
   <Layout theme="theme--hero">
     <SEO title="Contact" />
     <div className="container generic-page">
-      <h1 className="h0 hero__title theme-text theme-display-weight">Contact me</h1>
+      <h1 className="hero__title section-top theme-text theme-display-weight">Contact me</h1>
 
   
       <ul className="list-unstyled list-nospace theme-text hero__subtitle">

@@ -12,12 +12,12 @@ import PostMetadata from '../components/PostMetadata';
 const IndexPage = ({ data }) => (
   <Layout theme="theme--hero">
     <SEO title="Home" keywords={[`frontend development`, `architecture`, `react`]} />
-    <div className="hero theme--hero">
+    <div className="hero theme-text">
       <div className="container">
-        <h1 className="h0 hero__title text-display-weight">
+        <h1 className="hero__title section-top text-display-weight ">
           Code. Pixels. Tunes.
         </h1>
-        <p className="hero__subtitle text-display-weight">
+        <p className="hero__subtitle font-display text-display-weight">
           I'm a software architect, designer, guitarist and sound engineer,
           from Wellington, New Zealand. I help companies build scalable, secure web applications 
           and beautiful user experiences.
@@ -29,16 +29,16 @@ const IndexPage = ({ data }) => (
           <li>
             <a className="theme-link" href="https://www.linkedin.com/in/josh-barr-1291572a/">LinkedIn</a>
           </li>
-          <li>
+          {/* <li>
             <Link className="theme-link" to="/resume/">
               Resumé
             </Link>
-          </li>
+          </li> */}
         </ul>
       </div>
       <div className="container">
-        <div className="hero__article">
-          <h4>Latest blog posts</h4>
+        <div className="section">
+          <h4 className="font-primary">Latest article</h4>
           {data.allMarkdownRemark.edges.map(({ node: post }) => {
             return (
               <div className="hero__post">
@@ -55,7 +55,7 @@ const IndexPage = ({ data }) => (
               </div>
            )
           })}
-          <Link className="theme-link__brand" to='/blog'>All posts</Link>
+          <Link className="theme-link__brand" to='/articles'>All articles</Link>
         </div>
       </div> 
     </div>
@@ -66,7 +66,7 @@ export const pageQuery = graphql`
 {
   allMarkdownRemark(
     sort: { order: DESC, fields: [frontmatter___date] }
-    limit: 2
+    limit: 1
   ) {
     edges {
       node {

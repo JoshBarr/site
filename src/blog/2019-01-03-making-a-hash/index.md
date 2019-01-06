@@ -1,5 +1,5 @@
 ---
-path: "/blog/first-post"
+path: "/articles/first-post"
 date: "2019-01-03T15:12:33.962Z"
 title: "Making a hash of it"
 blurb: "At Xero, there's lots of different ways of naming releases for production web services."

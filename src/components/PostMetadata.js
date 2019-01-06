@@ -1,14 +1,5 @@
-
 import React from 'react'
-import { Link } from 'gatsby'
-import kebabCase from 'lodash/kebabCase';
-
-
-const Tag = ({ tag }) => (
-  <Link className="theme-link theme-border pill" to={`/tags/${kebabCase(tag)}`}>
-    {tag}
-  </Link>
-);
+import Tag from './Tag';
 
 
 const PostMetadata = ({ post, stacked = false }) => (

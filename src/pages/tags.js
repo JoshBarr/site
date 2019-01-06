@@ -10,16 +10,16 @@ const Tags = ({
       allMarkdownRemark: { group },
     },
   }) => (
-  <Layout theme="theme--hero">
+  <Layout theme="theme--light">
     <SEO title="Tags" />
     <div className="container generic-page ">
-      <h1 className="section-top h0 theme-text theme-display-weight">Posts by tag</h1>
+      <h1 className="section-top theme-text theme-display-weight space--large">Posts by tag</h1>
       {/* <div className="article "> */}
         <ul className="list-inline font-primary">
           {group.map(tag => (
             <li>
-              <Link key={tag.fieldValue} to={`/tags/${kebabCase(tag.fieldValue)}/`} className="shadow pill pill--large theme-link theme-border space">
-                {tag.fieldValue}  <span className="counter theme-border theme-link__brand">{tag.totalCount}</span>
+              <Link key={tag.fieldValue} to={`/tags/${kebabCase(tag.fieldValue)}/`} className="shadow pill pill--large theme-link theme-border-link space">
+                {tag.fieldValue}  <span className="counter theme-border-link theme-link__brand">{tag.totalCount}</span>
               </Link> 
             </li> 
           ))}
