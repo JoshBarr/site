@@ -3,7 +3,7 @@ path: "/articles/building-the-new-joshbarrcom-website"
 date: "2019-01-10T15:12:33.962Z"
 title: "A colophon for joshbarr.com"
 blurb: "The colophon is a wonderful concept from publication design that's found its way to the internet. This is my website's colophon, giving details of its authorship and printing."
-cover_image: ../../images/gatsby-astronaut.png
+cover_image: ../../images/gatsby-icon.png
 tags: ["Frontend development"]
 published: true
 authors: [josh_barr]
