@@ -4,8 +4,6 @@
  * See: https://www.gatsbyjs.org/docs/node-apis/
  */
 
-// You can delete this file if you're not using it
-
 const path = require("path")
 const _ = require("lodash");
 const { paginate } = require('gatsby-awesome-pagination');
@@ -22,6 +20,7 @@ exports.createPages = ({ actions, graphql }) => {
     {
       allMarkdownRemark(
         sort: { order: DESC, fields: [frontmatter___date] }
+        filter: { frontmatter: { published: { ne: false } } }
         limit: 2000
       ) {
         edges {
@@ -76,7 +75,7 @@ exports.createPages = ({ actions, graphql }) => {
     paginate({
       createPage, // The Gatsby `createPage` function
       items: posts, // An array of objects
-      itemsPerPage: 2, // How many items you want per page
+      itemsPerPage: 20, // How many items you want per page
       pathPrefix: '/articles', // Creates pages like `/blog`, `/blog/2`, etc
       component: blogIndexTemplate, // Just like `createPage()`
     });

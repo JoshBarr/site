@@ -14,10 +14,10 @@ const IndexPage = ({ data }) => (
     <SEO title="Home" keywords={[`frontend development`, `architecture`, `react`]} />
     <div className="hero theme-text">
       <div className="container">
-        <h1 className="hero__title section-top text-display-weight ">
+        <h1 className="hero__title section-top theme-display-weight ">
           Code. Pixels. Tunes.
         </h1>
-        <p className="hero__subtitle font-display text-display-weight">
+        <p className="hero__subtitle font-display theme-display-weight">
           I'm a software architect, designer, guitarist and sound engineer,
           from Wellington, New Zealand. I help companies build scalable, secure web applications 
           and beautiful user experiences.

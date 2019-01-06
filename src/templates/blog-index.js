@@ -37,6 +37,7 @@ const BlogIndex = ({
       sort: { order: DESC, fields: [frontmatter___date] }
       skip: $skip      
       limit: $limit
+      filter: { frontmatter: { published: { ne: false } } }
     ) {
       edges {
         node {
