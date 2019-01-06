@@ -36,6 +36,7 @@
     "test": "echo \"Write tests! -> https://gatsby.app/unit-testing\""
   },
   "devDependencies": {
+    "gh-pages": "^2.0.1",
     "lodash": "^4.17.11",
     "prettier": "^1.15.2"
   },
