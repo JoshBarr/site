@@ -16,7 +16,11 @@ export default function Template({
   console.log(data);
   return (
     <Layout>
-      <SEO title={`${post.frontmatter.title}`} description={post.frontmatter.blurb} />
+      <SEO 
+        title={`${post.frontmatter.title}`} 
+        description={post.frontmatter.blurb} 
+        thumbnail={post.frontmatter.cover_image.childImageSharp.fixed} 
+      />
       <div className="container">
         <div className="section-top">
           <h1 className="">{post.frontmatter.title}</h1>
@@ -64,7 +68,11 @@ export const pageQuery = graphql`
             fluid(maxWidth: 880) {
               ...GatsbyImageSharpFluid
             }
+            fixed(width: 500, height: 500) {
+              ...GatsbyImageSharpFixed
+            }
           }
+          
         }
         authors {
           id
