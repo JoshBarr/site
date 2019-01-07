@@ -253,7 +253,7 @@ h3 {
   padding-left: 0;
   padding-right: 0;
   padding-top: 0;
-  margin-bottom: .5rem;
+  margin-bottom: 1.2rem;
   color: inherit;
   font-weight: bold;
   text-rendering: optimizeLegibility;
@@ -429,6 +429,8 @@ blockquote {
   padding-right: 0;
   padding-top: 0;
   margin-bottom: 1.45rem;
+  font-style: italic;
+  font-weight: 400;
 }
 form {
   margin-left: 0;

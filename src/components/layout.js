@@ -19,7 +19,7 @@ const Layout = ({ children, theme = 'theme--light' }) => (
     `}
     render={data => (
       <>
-        <link href="https://fonts.googleapis.com/css?family=Merriweather:300,400,700|Lato:400,400i,700" rel="stylesheet" />
+        <link href="https://fonts.googleapis.com/css?family=Merriweather:300,400,400i,700|Lato:400,400i,700" rel="stylesheet" />
         <Helmet
             bodyAttributes={{
                 class: `${theme} theme-body`
