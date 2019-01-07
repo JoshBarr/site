@@ -24,10 +24,9 @@ const Header = ({ siteTitle, theme }) => (
         {/* <Link className="theme-link" to="/services">Services</Link> */}
         {/* <Link className="theme-link" to="/work">Work</Link> */}
         <Link className="theme-link-selectable theme-link-secondary" to="/articles">Articles</Link>
-        <Link className="theme-link-selectable theme-link-secondary" to="/contact">Contact</Link>
         <Link className="theme-link-selectable theme-link-secondary" to="/bookmarks">Bookmarks</Link>
+        <Link className="theme-link-selectable theme-link-secondary" to="/contact">Contact</Link>
       </nav>
-      
     </div>
   </div>
 )
