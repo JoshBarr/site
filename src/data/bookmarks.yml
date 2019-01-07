@@ -120,6 +120,13 @@
   url: http://www.the-paper-trail.org/post/2014-08-09-distributed-systems-theory-for-the-distributed-systems-engineer/
   date: 2019-01-07
 
+
+- title: AWS architecture diagrams
+  description: Beautifully illustrated pages that outline key features of various AWS technologies.
+  category: Software architecture
+  url: https://www.awsgeek.com/
+  date: 2019-01-07
+
 - title: API first at Paypal
   description: How Paypal managed their transition to an api-centric architecture.
   category: Software architecture
