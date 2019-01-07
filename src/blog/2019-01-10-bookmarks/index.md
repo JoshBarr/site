@@ -116,11 +116,10 @@ The "aha" moments.
 
 ### Wisdom
 
-> "A complex system that works is invariably found to have evolved from a simple system that worked. A complex system designed from scratch never works and cannot be patched up to make it work. You have to start over, beginning with a working simple system." — John Gall
+> "A complex system that works is invariably found to have evolved from a simple system that worked. A complex system designed from scratch never works and cannot be patched up to make it work. You have to start over, beginning with a working simple system." — John Gall, [via Twitter](https://twitter.com/kylemathews/status/1059637080207253504)
 
-* https://twitter.com/kylemathews/status/1059637080207253504
 
 > Software engineer (quoting Fred Brooks): The programmer, like the poet, works only slightly removed from pure thought-stuff. He builds his castles in the air, from air, creating by exertion of the imagination.
 > 
-> SRE: Your service fell over after it ran out of file descriptors.
-* https://twitter.com/lhochstein/status/1057080725034291200
+> SRE: Your service fell over after it ran out of file descriptors. [via Twitter](https://twitter.com/lhochstein/status/1057080725034291200)
+

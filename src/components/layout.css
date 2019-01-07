@@ -998,7 +998,7 @@ h1 {
   width: 3.68em;
   height: 2.368em;
   margin-bottom: 0;
-  margin-right: .75rem;
+  
   vertical-align: middle;
   /* border: solid 1px hsla(0, 0%, 0%, 0.12); */
   padding: .5rem;
@@ -1021,6 +1021,10 @@ h1 {
 }
 
 @media only screen and (min-width: 450px) {
+  .logo {
+    margin-right: .75rem;
+  }
+
   .logo__wordmark {
     display: inline-block;
   }
@@ -1034,9 +1038,16 @@ h1 {
 
 .header__nav > a {
   display: inline-block;
-  margin-left: 2rem;
+  margin-left: .75rem;
   text-decoration: none;
 }
+
+@media only screen and (min-width: 450px) {
+  .header__nav > a {
+    margin-left: 2rem;
+  }
+}
+
 
 .footer {
   padding-top: calc(1.75rem + 1vw);
