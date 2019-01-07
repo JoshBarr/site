@@ -720,6 +720,10 @@ h1 {
   margin-right: auto;
 }
 
+.measure {
+  max-width: 38em;
+}
+
 .sidebar {
   padding-top: .5rem;
   width: 12rem;
@@ -732,7 +736,9 @@ h1 {
   max-width: 80em;
 }
 
+
 @media only screen and (min-width: 1000px) {
+
   .container {
     margin-left: 10vw;
     margin-right: 10vw;
@@ -752,6 +758,8 @@ h1 {
   }
 }
 
+
+
 /* 
   =================================================================
   Spacing
@@ -760,6 +768,10 @@ h1 {
 
 .space {
   margin-bottom: 1.75rem;
+}
+
+.space--medium {
+  margin-bottom: 3.5rem;
 }
 
 .space--large {
@@ -855,6 +867,11 @@ h1 {
 .keyline--top {
   border-top: solid 1px transparent;
   padding-top: 1.75rem;
+}
+
+.keyline--bottom {
+  border-bottom: solid 1px transparent;
+  padding-bottom: 1.75rem;
 }
 
 
