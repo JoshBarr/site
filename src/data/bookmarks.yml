@@ -48,11 +48,19 @@
   favourite: true
 
 - title: Choose Boring Technology
-  description: TODO
+  description: This post was referenced in Run Less Software, and explains why your team should get good at a few key technologies.
   category: Favourites
   url: http://mcfunley.com/choose-boring-technology
   date: 2019-01-07
   favourite: true
+
+- title: On being lost
+  description: Simon Wardley's introduction to using mapping for business strategy. 
+  category: Favourites
+  url: https://medium.com/wardleymaps/on-being-lost-2ef5f05eb1ec
+  date: 2019-01-07
+  favourite: true
+
 
 - title: Microservice testing
   description: A comprehensive guide to testing strategies for microservices, helping to define exactly which system is under test at each stage.
