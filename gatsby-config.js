@@ -1,7 +1,7 @@
 module.exports = {
   siteMetadata: {
     title: `Josh Barr`,
-    description: `Software architect, designer, guitarist and sound engineer,
+    description: `Software architect, designer, guitarist and live audio engineer,
     from Wellington, New Zealand.`,
     author: `@joshbarrnz`,
     siteUrl: `https://joshbarr.com`,
