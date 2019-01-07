@@ -18,7 +18,7 @@ const IndexPage = ({ data }) => (
           Code. Pixels. Tunes.
         </h1>
         <p className="hero__subtitle font-display theme-display-weight">
-          I'm a software architect, designer, guitarist and sound engineer,
+          I'm a software architect, designer, guitarist and live audio engineer,
           from Wellington, New Zealand. I help companies build scalable, secure web applications 
           and beautiful user experiences.
         </p>
