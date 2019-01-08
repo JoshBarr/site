@@ -388,3 +388,9 @@
   category: Test
   description: Test upload
   url: 'https://google.com'
+- title: 'Test 2 '
+  favourite: false
+  category: ' Software architecture '
+  description: ' Test bookmarking my own site lololol '
+  url: ' http://joshbarr.com'
+  date: '2019-01-08T09:41:14.273Z'
