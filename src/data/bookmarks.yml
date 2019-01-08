@@ -406,3 +406,9 @@
   description: Test bookmarking my own site
   favourite: false
   date: '2019-01-08T10:19:43.180Z'
+- title: Wipster
+  url: 'https://wipster.io'
+  category: Design/FED
+  description: 'Video workflow software, produced locally in Wellington.'
+  favourite: false
+  date: '2019-01-08T10:49:53.559Z'
