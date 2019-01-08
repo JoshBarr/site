@@ -384,3 +384,9 @@
   description: 'Video workflow software, produced locally in Wellington.'
   favourite: false
   date: '2019-01-08T10:49:53.559Z'
+- title: Scaling engineering teams
+  url: 'https://stripe.com/atlas/guides/scaling-eng'
+  category: Engineering
+  description: How Stripe has grown while remaining nimble
+  favourite: false
+  date: '2019-01-08T17:34:18.321Z'
