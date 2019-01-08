@@ -21,7 +21,7 @@ After a couple of hours tinkering, I've come up with an approach leveraging Slac
 
 ### How it works
 
-We start with a Slack command `/bookmark` that accepts Title, Description, Category and URL properties: 
+We start with a Slack command – `/bookmark` – that accepts Title, Description, Category and URL properties: 
 
 ![/bookmark command](./bookmarks-command.png)
 
