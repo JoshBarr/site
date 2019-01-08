@@ -400,3 +400,9 @@
   description: Test bookmarking my own site lololol
   favourite: false
   date: '2019-01-08T10:19:17.938Z'
+- title: Test
+  url: 'http://joshbarr.com'
+  category: Software architecture
+  description: Test bookmarking my own site
+  favourite: false
+  date: '2019-01-08T10:19:43.180Z'
