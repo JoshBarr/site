@@ -1,7 +1,7 @@
 ---
 path: "/articles/how-i-publish-bookmarks"
 date: "2019-01-09T15:12:33.962Z"
-title: "Using lambda to save bookmarks"
+title: "Using Lambda to save bookmarks"
 blurb: "My serverless Rube Goldberg machine for automatically publishing interesting links to the bookmarks page"
 cover_image: ../../images/cover-image.png
 tags: ["Software architecture"]
@@ -21,11 +21,11 @@ After a couple of hours tinkering, I've come up with an approach leveraging Slac
 
 ### How it works
 
-We start with a Slack command `/bookmark` that accepts a pipe separated Title, Description, Category and URL: 
+We start with a Slack command `/bookmark` that accepts Title, Description, Category and URL properties: 
 
 ![/bookmark command](./bookmarks-command.png)
 
-A Lambda deployed as a [Netlify](https://netlify.com/) function, triggered from the Slack command, that checks out my `bookmarks.yml` file, adds the new bookmark, and commits it. 
+The Slack command is pointing at a Lambda (deployed as a [Netlify](https://netlify.com/) function), which checks out my `bookmarks.yml` file, adds the new bookmark, and commits it back to Github. 
 
 ![/bookmark response](./bookmarks-response.png)
 
@@ -43,4 +43,3 @@ This lets me quickly save a bookmark in Slack, and a minute or two later, it sho
 * All my data continues to live in source control, I don't need a query editor or a GUI to make changes to my bookmarks data.
 * My bookmarks are public by default - no more risk of losing them in a Slack direct message.
 * I'm [running less software](https://www.intercom.com/blog/run-less-software/), by outsourcing all the heavy-lifing to great platforms (Slack, Github, Netlify). 
-
