@@ -395,8 +395,8 @@
   url: ' http://joshbarr.com'
   date: '2019-01-08T09:41:14.273Z'
 - title: Test 2
-  favourite: false
+  url: 'http://joshbarr2.com'
   category: Software architecture
   description: Test bookmarking my own site lololol
-  url: 'http://joshbarr2.com'
-  date: '2019-01-08T09:53:03.522Z'
+  favourite: false
+  date: '2019-01-08T10:19:17.938Z'
