@@ -1,368 +1,392 @@
 - title: Code as Craft
-  description: Etsy's technology blog. I've enjoyed their in-depth writeups which are often backed by comprehensive data and analysis.
+  description: >-
+    Etsy's technology blog. I've enjoyed their in-depth writeups which are often
+    backed by comprehensive data and analysis.
   category: Engineering
-  url: https://codeascraft.com/
-  date: 2019-01-07
-
+  url: 'https://codeascraft.com/'
+  date: 2019-01-07T00:00:00.000Z
 - title: Increment magazine
-  description: A beautiful editorial website, focusing on a different software development topic each issue.
+  description: >-
+    A beautiful editorial website, focusing on a different software development
+    topic each issue.
   category: Engineering
-  url: https://increment.com/
-  date: 2019-01-07
-
+  url: 'https://increment.com/'
+  date: 2019-01-07T00:00:00.000Z
 - title: Intercom blog
   description: Big focus on product management and continuous delivery best practices.
   category: Engineering
-  url: https://www.intercom.com/blog/
-  date: 2019-01-07
-
+  url: 'https://www.intercom.com/blog/'
+  date: 2019-01-07T00:00:00.000Z
 - title: Dropbox tech blog
   description: Some particularly interesting reads about data at scale.
   category: Engineering
-  url: https://blogs.dropbox.com/tech/
-  date: 2019-01-07
-
+  url: 'https://blogs.dropbox.com/tech/'
+  date: 2019-01-07T00:00:00.000Z
 - title: A List Apart
-  description: One of the most established and well respected authorities on web design, inclusivity and accessibility. Guest posts from many leading minds.
+  description: >-
+    One of the most established and well respected authorities on web design,
+    inclusivity and accessibility. Guest posts from many leading minds.
   category: Engineering
-  url: https://blogs.dropbox.com/tech/
-  date: 2019-01-07
-
+  url: 'https://blogs.dropbox.com/tech/'
+  date: 2019-01-07T00:00:00.000Z
 - title: Brad Frost's blog
-  description: Design systems, frontend development, refreshing honesty.
+  description: 'Design systems, frontend development, refreshing honesty.'
   category: Engineering
-  url: http://bradfrost.com/blog/
-  date: 2019-01-07
-
+  url: 'http://bradfrost.com/blog/'
+  date: 2019-01-07T00:00:00.000Z
 - title: Michael Lopp
-  description: Literally wrote the book on engineering management. Great slack community too.
+  description: >-
+    Literally wrote the book on engineering management. Great slack community
+    too.
   category: Leadership
-  url: http://randsinrepose.com/
-  date: 2019-01-07
-
+  url: 'http://randsinrepose.com/'
+  date: 2019-01-07T00:00:00.000Z
 - title: Run Less Software
   description: The philosophy behind software development at Intercom.
   category: Favourites
-  url: https://www.intercom.com/blog/run-less-software/
-  date: 2019-01-07
+  url: 'https://www.intercom.com/blog/run-less-software/'
+  date: 2019-01-07T00:00:00.000Z
   favourite: true
-
 - title: Choose Boring Technology
-  description: This post was referenced in Run Less Software, and explains why your team should get good at a few key technologies.
+  description: >-
+    This post was referenced in Run Less Software, and explains why your team
+    should get good at a few key technologies.
   category: Favourites
-  url: http://mcfunley.com/choose-boring-technology
-  date: 2019-01-07
+  url: 'http://mcfunley.com/choose-boring-technology'
+  date: 2019-01-07T00:00:00.000Z
   favourite: true
-
 - title: On being lost
-  description: Simon Wardley's introduction to using mapping for business strategy. 
+  description: Simon Wardley's introduction to using mapping for business strategy.
   category: Favourites
-  url: https://medium.com/wardleymaps/on-being-lost-2ef5f05eb1ec
-  date: 2019-01-07
+  url: 'https://medium.com/wardleymaps/on-being-lost-2ef5f05eb1ec'
+  date: 2019-01-07T00:00:00.000Z
   favourite: true
-
-
 - title: Microservice testing
-  description: A comprehensive guide to testing strategies for microservices, helping to define exactly which system is under test at each stage.
+  description: >-
+    A comprehensive guide to testing strategies for microservices, helping to
+    define exactly which system is under test at each stage.
   category: Favourites
-  url: https://martinfowler.com/articles/microservice-testing/
-  date: 2019-01-07
+  url: 'https://martinfowler.com/articles/microservice-testing/'
+  date: 2019-01-07T00:00:00.000Z
   favourite: true
-
-
 - title: Klim Type Foundry
   description: Amazing fonts and studies of historical typefaces.
   category: Design/FED
-  url: http://klim.co.nz/blog/
-  date: 2019-01-07
-
+  url: 'http://klim.co.nz/blog/'
+  date: 2019-01-07T00:00:00.000Z
 - title: Refactoring UI
   description: Teaches various approaches for improving UIs
   category: Design/FED
-  url: https://refactoringui.com/
-  date: 2019-01-07
-
+  url: 'https://refactoringui.com/'
+  date: 2019-01-07T00:00:00.000Z
 - title: Web performance checklist
-  description: Addy Osmani will depress you by reminding you how much work is involved in building a performant UI.
+  description: >-
+    Addy Osmani will depress you by reminding you how much work is involved in
+    building a performant UI.
   category: Design/FED
-  url: https://dev.to/ben/addy-osmanis-18-point-web-performance-checklist-2e1
-  date: 2019-01-07
-
+  url: 'https://dev.to/ben/addy-osmanis-18-point-web-performance-checklist-2e1'
+  date: 2019-01-07T00:00:00.000Z
 - title: Gov.UK design principles
-  description: I keep coming back to this. Clear, simple design principles and a brilliant piece of organisational communication.
+  description: >-
+    I keep coming back to this. Clear, simple design principles and a brilliant
+    piece of organisational communication.
   category: Design/FED
-  url:   https://www.gov.uk/guidance/government-design-principles
-  date: 2019-01-07
-
-
+  url: 'https://www.gov.uk/guidance/government-design-principles'
+  date: 2019-01-07T00:00:00.000Z
 - title: Stripping Away Cross Cutting Concerns
   description: How to enforce sensible NFRs without requiring developers to do anything.
   category: Dotnet Core
-  url:   https://cetus.io/tim/ASPNET-Core-2.0-Stripping-Away-Cross-Cutting-Concerns/
-  date: 2019-01-07
-
+  url: 'https://cetus.io/tim/ASPNET-Core-2.0-Stripping-Away-Cross-Cutting-Concerns/'
+  date: 2019-01-07T00:00:00.000Z
 - title: Policy-based authorisation
-  description: Dotnet Core does an exceptional job of authorisation. This is a good writeup of the policy system and how to use it.
+  description: >-
+    Dotnet Core does an exceptional job of authorisation. This is a good writeup
+    of the policy system and how to use it.
   category: Dotnet Core
-  url:   https://docs.microsoft.com/en-us/aspnet/core/security/authorization/policies?view=aspnetcore-2.1
-  date: 2019-01-07
-
+  url: >-
+    https://docs.microsoft.com/en-us/aspnet/core/security/authorization/policies?view=aspnetcore-2.1
+  date: 2019-01-07T00:00:00.000Z
 - title: Architecture patterns in dotnet core
-  description: A git repo full of examples of how to implement various architectural patterns (good accounting references).
+  description: >-
+    A git repo full of examples of how to implement various architectural
+    patterns (good accounting references).
   category: Dotnet Core
-  url:   https://github.com/Arch
-  date: 2019-01-07
-
-
+  url: 'https://github.com/Arch'
+  date: 2019-01-07T00:00:00.000Z
 - title: Distributed systems theory
   description: A good reference on the challenges of designing distributed systems
   category: Software architecture
-  url: http://www.the-paper-trail.org/post/2014-08-09-distributed-systems-theory-for-the-distributed-systems-engineer/
-  date: 2019-01-07
-
-
+  url: >-
+    http://www.the-paper-trail.org/post/2014-08-09-distributed-systems-theory-for-the-distributed-systems-engineer/
+  date: 2019-01-07T00:00:00.000Z
 - title: AWS architecture diagrams
-  description: Beautifully illustrated pages that outline key features of various AWS technologies.
+  description: >-
+    Beautifully illustrated pages that outline key features of various AWS
+    technologies.
   category: Software architecture
-  url: https://www.awsgeek.com/
-  date: 2019-01-07
-
+  url: 'https://www.awsgeek.com/'
+  date: 2019-01-07T00:00:00.000Z
 - title: API first at Paypal
   description: How Paypal managed their transition to an api-centric architecture.
   category: Software architecture
-  url: https://www.infoq.com/articles/paypal-api-first-part3
-  date: 2019-01-07
-
-
-- title: Decoupled, immutable REST APIs with Kafka
-  description: A reliable microservice system should favour asynchronous communication, and Kafka is a good way to implement this.
+  url: 'https://www.infoq.com/articles/paypal-api-first-part3'
+  date: 2019-01-07T00:00:00.000Z
+- title: 'Decoupled, immutable REST APIs with Kafka'
+  description: >-
+    A reliable microservice system should favour asynchronous communication, and
+    Kafka is a good way to implement this.
   category: Software architecture
-  url: https://speakerdeck.com/bobbycalderwood/commander-decoupled-immutable-rest-apis-with-kafka-streams
-  date: 2019-01-07
-
-
+  url: >-
+    https://speakerdeck.com/bobbycalderwood/commander-decoupled-immutable-rest-apis-with-kafka-streams
+  date: 2019-01-07T00:00:00.000Z
 - title: GraphQL and gRPC
-  description: Buzzwords galore. Using Google's RPC protocol with GraphQL. 
+  description: Buzzwords galore. Using Google's RPC protocol with GraphQL.
   category: Software architecture
-  url: https://www.infoq.com/articles/paypal-api-first-part3
-  date: 2019-01-07
-
+  url: 'https://www.infoq.com/articles/paypal-api-first-part3'
+  date: 2019-01-07T00:00:00.000Z
 - title: Three mistakes we made moving to a microservices architecture
-  description: Hard lessons learned while implementing microservices. 
+  description: Hard lessons learned while implementing microservices.
   category: Software architecture
-  url: https://www.infoworld.com/article/3268186/enterprise-architecture/3-mistakes-we-made-moving-to-a-microservices-architecture.html
-  date: 2019-01-07
-
+  url: >-
+    https://www.infoworld.com/article/3268186/enterprise-architecture/3-mistakes-we-made-moving-to-a-microservices-architecture.html
+  date: 2019-01-07T00:00:00.000Z
 - title: Why digital strategies fail
-  description: Digital transformations are seen as a panacea to all an organisations problems. Is it that simple? 
+  description: >-
+    Digital transformations are seen as a panacea to all an organisations
+    problems. Is it that simple?
   category: Leadership
-  url: https://www.mckinsey.com/business-functions/digital-mckinsey/our-insights/why-digital-strategies-fail?cid=soc-web
-  date: 2019-01-07
-
-
+  url: >-
+    https://www.mckinsey.com/business-functions/digital-mckinsey/our-insights/why-digital-strategies-fail?cid=soc-web
+  date: 2019-01-07T00:00:00.000Z
 - title: How Etsy caches
-  description: Performant distributed systems need a solid caching strategy. I'm always on the lookout for how other SaaS products handle this.
+  description: >-
+    Performant distributed systems need a solid caching strategy. I'm always on
+    the lookout for how other SaaS products handle this.
   category: Software architecture
-  url: https://codeascraft.com/2017/11/30/how-etsy-caches/
-  date: 2019-01-07
-
+  url: 'https://codeascraft.com/2017/11/30/how-etsy-caches/'
+  date: 2019-01-07T00:00:00.000Z
 - title: Service discovery at Stripe
-  description: As soon as you have multiple components in your architecture, you need to invest in ways to observe and discover them.
+  description: >-
+    As soon as you have multiple components in your architecture, you need to
+    invest in ways to observe and discover them.
   category: Software architecture
-  url: https://stripe.com/blog/service-discovery-at-stripe
-  date: 2019-01-07
-
+  url: 'https://stripe.com/blog/service-discovery-at-stripe'
+  date: 2019-01-07T00:00:00.000Z
 - title: Idempotency
-  description: Networks are unreliable, so distributed systems should handle the same message arriving multiple times.
+  description: >-
+    Networks are unreliable, so distributed systems should handle the same
+    message arriving multiple times.
   category: Software architecture
-  url: https://stripe.com/blog/idempotency
-  date: 2019-01-07
-
+  url: 'https://stripe.com/blog/idempotency'
+  date: 2019-01-07T00:00:00.000Z
 - title: AWS Kinesis - the best event queue you're not using
-  description: Makes a case for Kinesis over various alternative messaging and pub-sub systems.
+  description: >-
+    Makes a case for Kinesis over various alternative messaging and pub-sub
+    systems.
   category: Software architecture
-  url: https://www.reddit.com/r/programming/comments/5suvmp/amazon_kinesis_the_best_event_queue_youre_not/
-  date: 2019-01-07
-
+  url: >-
+    https://www.reddit.com/r/programming/comments/5suvmp/amazon_kinesis_the_best_event_queue_youre_not/
+  date: 2019-01-07T00:00:00.000Z
 - title: Common patterns of multi datacenter architectures with Apache Kafka
   description: Multi-region Kafka and handling eventual consitency.
   category: Software architecture
-  url: https://www.slideshare.net/ConfluentInc/common-patterns-of-multi-datacenter-architectures-with-apache-kafka
-  date: 2019-01-07
-
-
+  url: >-
+    https://www.slideshare.net/ConfluentInc/common-patterns-of-multi-datacenter-architectures-with-apache-kafka
+  date: 2019-01-07T00:00:00.000Z
 - title: How to bridge stateful and event sourced systems
-  description: Nobody gets to live in a perfect world. Strategies for working with traditional database-driven applications and event-driven systems side-by-side.
+  description: >-
+    Nobody gets to live in a perfect world. Strategies for working with
+    traditional database-driven applications and event-driven systems
+    side-by-side.
   category: Software architecture
-  url: https://medium.freecodecamp.org/how-to-bridge-stateful-and-event-sourced-systems-70a419842e29
-  date: 2019-01-07
-
+  url: >-
+    https://medium.freecodecamp.org/how-to-bridge-stateful-and-event-sourced-systems-70a419842e29
+  date: 2019-01-07T00:00:00.000Z
 - title: Dissecting SQS FIFO queues
   description: Achieving guaranteed ordering with SQS.
   category: Software architecture
-  url: https://sookocheff.com/post/messaging/dissecting-sqs-fifo-queues/
-  date: 2019-01-07
-
+  url: 'https://sookocheff.com/post/messaging/dissecting-sqs-fifo-queues/'
+  date: 2019-01-07T00:00:00.000Z
 - title: Web performance case study
   description: A look at how Netflix optimise their UI applications.
   category: Software architecture
-  url: https://medium.com/dev-channel/a-netflix-web-performance-case-study-c0bcde26a9d9
-  date: 2019-01-07
-
+  url: >-
+    https://medium.com/dev-channel/a-netflix-web-performance-case-study-c0bcde26a9d9
+  date: 2019-01-07T00:00:00.000Z
 - title: What I've learned working with Amazon SQS
-  description: It can be difficult to figure out how to structure an AWS service for best price/performance. Found this very useful. 
+  description: >-
+    It can be difficult to figure out how to structure an AWS service for best
+    price/performance. Found this very useful.
   category: Software architecture
-  url: https://medium.com/@sorenso/what-ive-learned-working-with-amazon-sqs-f0192fc10a29
-  date: 2019-01-07
-
-
+  url: >-
+    https://medium.com/@sorenso/what-ive-learned-working-with-amazon-sqs-f0192fc10a29
+  date: 2019-01-07T00:00:00.000Z
 - title: Twelve Factor Applications
-  description: Written by Heroku several years ago, this is still a great reference for how to build a cloud web service. 
+  description: >-
+    Written by Heroku several years ago, this is still a great reference for how
+    to build a cloud web service.
   category: Engineering
-  url: https://12factor.net/
-  date: 2019-01-07
-
+  url: 'https://12factor.net/'
+  date: 2019-01-07T00:00:00.000Z
 - title: On being a senior engineer
   description: What's expected of a senior engineer
   category: Engineering
-  url: https://www.kitchensoap.com/2012/10/25/on-being-a-senior-engineer/amp/
-  date: 2019-01-07
-
+  url: 'https://www.kitchensoap.com/2012/10/25/on-being-a-senior-engineer/amp/'
+  date: 2019-01-07T00:00:00.000Z
 - title: DevOps Strategy
   description: GitLab's guide to DevOps. Useful if you need to do any DevOps.
   category: Engineering
-  url: https://about.gitlab.com/2017/10/04/devops-strategy/
-  date: 2019-01-07
-
+  url: 'https://about.gitlab.com/2017/10/04/devops-strategy/'
+  date: 2019-01-07T00:00:00.000Z
 - title: Becoming a 10x developer
   description: Tips on being a better teammate and lifting up those around you
   category: Engineering
-  url: https://kateheddleston.com/blog/becoming-a-10x-developer
-  date: 2019-01-07
-
+  url: 'https://kateheddleston.com/blog/becoming-a-10x-developer'
+  date: 2019-01-07T00:00:00.000Z
 - title: Winning the battle against flaky tests
-  description: Tests that are unrelaible don't inspire much confidence. Some techniques for improving testing success rates.
+  description: >-
+    Tests that are unrelaible don't inspire much confidence. Some techniques for
+    improving testing success rates.
   category: Engineering
-  url: https://blogs.dropbox.com/tech/2018/05/how-were-winning-the-battle-against-flaky-tests/
-  date: 2019-01-07
-
-
+  url: >-
+    https://blogs.dropbox.com/tech/2018/05/how-were-winning-the-battle-against-flaky-tests/
+  date: 2019-01-07T00:00:00.000Z
 - title: The art of refactoring
-  description: Most software you'll encounter in a SaaS company was written by someone else, ages ago. It's a good idea to learn how to work with old code safely. 
+  description: >-
+    Most software you'll encounter in a SaaS company was written by someone
+    else, ages ago. It's a good idea to learn how to work with old code safely.
   category: Engineering
-  url: https://purple.pizza/art-of-refactoring-part-1/
-  date: 2019-01-07
-
+  url: 'https://purple.pizza/art-of-refactoring-part-1/'
+  date: 2019-01-07T00:00:00.000Z
 - title: Migrations
-  description: Sometimes a step-change in technology means you need to move from one system to another, while keeping the lights on.
+  description: >-
+    Sometimes a step-change in technology means you need to move from one system
+    to another, while keeping the lights on.
   category: Engineering
-  url: https://lethain.com/migrations/
-  date: 2019-01-07
-
+  url: 'https://lethain.com/migrations/'
+  date: 2019-01-07T00:00:00.000Z
 - title: Microservice testing - coupling and cohesion
-  description: To test distributed systems, you need to draw very clear boundaries. This post talks about how to do that.
+  description: >-
+    To test distributed systems, you need to draw very clear boundaries. This
+    post talks about how to do that.
   category: Engineering
-  url: https://itnext.io/microservice-testing-coupling-and-cohesion-all-the-way-down-a9f100cda523
-  date: 2019-01-07
-
+  url: >-
+    https://itnext.io/microservice-testing-coupling-and-cohesion-all-the-way-down-a9f100cda523
+  date: 2019-01-07T00:00:00.000Z
 - title: Sizing engineering teams
   description: What's an efficient number of people to solve a problem?
   category: Engineering
-  url: https://lethain.com/sizing-engineering-teams/
-  date: 2019-01-07
-
+  url: 'https://lethain.com/sizing-engineering-teams/'
+  date: 2019-01-07T00:00:00.000Z
 - title: Building services at Airbnb
-  description: Guidelines and checklists aren't enough to ensure consistency in a service ecosystem. Airbnb automate a lot of their cross-cutting concerns. 
+  description: >-
+    Guidelines and checklists aren't enough to ensure consistency in a service
+    ecosystem. Airbnb automate a lot of their cross-cutting concerns.
   category: Engineering
-  url: https://medium.com/airbnb-engineering/building-services-at-airbnb-part-2-142be1c5d506
-  date: 2019-01-07
-
+  url: >-
+    https://medium.com/airbnb-engineering/building-services-at-airbnb-part-2-142be1c5d506
+  date: 2019-01-07T00:00:00.000Z
 - title: How to write a good software design document
-  description: Successful software engineers need to clearly articulate their decisions to other stakeholders. 
+  description: >-
+    Successful software engineers need to clearly articulate their decisions to
+    other stakeholders.
   category: Engineering
-  url: https://medium.freecodecamp.org/how-to-write-a-good-software-design-document-66fcf019569c
-  date: 2019-01-07
-
-- title: Practical test pyramid 
+  url: >-
+    https://medium.freecodecamp.org/how-to-write-a-good-software-design-document-66fcf019569c
+  date: 2019-01-07T00:00:00.000Z
+- title: Practical test pyramid
   description: A good primer on software testing strategies.
   category: Engineering
-  url: https://martinfowler.com/articles/practical-test-pyramid.html
-  date: 2019-01-07
-
+  url: 'https://martinfowler.com/articles/practical-test-pyramid.html'
+  date: 2019-01-07T00:00:00.000Z
 - title: Prioritising non-feature work and continuous improvement
-  description: It's common for SaaS organisations to invest in new features while paying little attention to growing technical debt. How to hold these things in balance. 
+  description: >-
+    It's common for SaaS organisations to invest in new features while paying
+    little attention to growing technical debt. How to hold these things in
+    balance.
   category: Engineering
-  url: https://hackernoon.com/prioritizing-non-feature-work-and-continuous-improvement-bad2a612d860
-  date: 2019-01-07
-
-
+  url: >-
+    https://hackernoon.com/prioritizing-non-feature-work-and-continuous-improvement-bad2a612d860
+  date: 2019-01-07T00:00:00.000Z
 - title: How Twitch uses PostgreSQL
   description: Case-study on Twitch's database implementation
   category: Databases
-  url: https://blog.twitch.tv/how-twitch-uses-postgresql-c34aa9e56f58
-  date: 2019-01-07
-
-
+  url: 'https://blog.twitch.tv/how-twitch-uses-postgresql-c34aa9e56f58'
+  date: 2019-01-07T00:00:00.000Z
 - title: Why Uber Engineering Switched from Postgres to MySQL
   description: Case-study on Uber's databse implementation
   category: Databases
-  url: https://eng.uber.com/mysql-migration/
-  date: 2019-01-07
-
+  url: 'https://eng.uber.com/mysql-migration/'
+  date: 2019-01-07T00:00:00.000Z
 - title: OSS Will Eat Cloud Computing
-  description: Cloud computing has grown in part by reselling open-source technology. This article explores what might happen next.
+  description: >-
+    Cloud computing has grown in part by reselling open-source technology. This
+    article explores what might happen next.
   category: Trends
-  url: https://medium.com/open-consensus/7-oss-will-eat-all-of-cloud-computing-40fdbf9c1da0
-  date: 2019-01-07
-
+  url: >-
+    https://medium.com/open-consensus/7-oss-will-eat-all-of-cloud-computing-40fdbf9c1da0
+  date: 2019-01-07T00:00:00.000Z
 - title: Convergence to Kubernetes
-  description: Argues for the standardisation of compute workloads on the Kubernetes platform
+  description: >-
+    Argues for the standardisation of compute workloads on the Kubernetes
+    platform
   category: Trends
-  url: https://medium.com/@pingles/convergence-to-kubernetes-137ffa7ea2bc
-  date: 2019-01-07
-
+  url: 'https://medium.com/@pingles/convergence-to-kubernetes-137ffa7ea2bc'
+  date: 2019-01-07T00:00:00.000Z
 - title: Why are enterprises so slow?
-  description: Insightful read about what slows down development at big companies.  
+  description: Insightful read about what slows down development at big companies.
   category: Trends
-  url: https://zwischenzugs.com/2018/10/02/why-are-enterprises-so-slow/
-  date: 2019-01-07
-
-
+  url: 'https://zwischenzugs.com/2018/10/02/why-are-enterprises-so-slow/'
+  date: 2019-01-07T00:00:00.000Z
 - title: Software disenchantment
-  description: Ever noticed how websites and apps seems so slow these days? This article explores why.
+  description: >-
+    Ever noticed how websites and apps seems so slow these days? This article
+    explores why.
   category: Trends
-  url: http://tonsky.me/blog/disenchantment/
-  date: 2019-01-07
-
-
+  url: 'http://tonsky.me/blog/disenchantment/'
+  date: 2019-01-07T00:00:00.000Z
 - title: The Coming Software Apocalypse
-  description: Software is still written by entering text into an editor. Will it always be this way?
+  description: >-
+    Software is still written by entering text into an editor. Will it always be
+    this way?
   category: Trends
-  url: https://www.theatlantic.com/technology/archive/2017/09/saving-the-world-from-code/540393/
-  date: 2019-01-07
-
-
+  url: >-
+    https://www.theatlantic.com/technology/archive/2017/09/saving-the-world-from-code/540393/
+  date: 2019-01-07T00:00:00.000Z
 - title: OAuth reference
-  description: Okta have written a very comprehensive and approachable introduction to OAuth2. 
+  description: >-
+    Okta have written a very comprehensive and approachable introduction to
+    OAuth2.
   category: Authentication
-  url: https://www.oauth.com/
-  date: 2019-01-07
-
-
+  url: 'https://www.oauth.com/'
+  date: 2019-01-07T00:00:00.000Z
 - title: OpenId Connect specification
-  description: I've spent more time referencing this specification than I care to admit. 
+  description: I've spent more time referencing this specification than I care to admit.
   category: Authentication
-  url: https://openid.net/specs/openid-connect-core-1_0.html
-  date: 2019-01-07
-
+  url: 'https://openid.net/specs/openid-connect-core-1_0.html'
+  date: 2019-01-07T00:00:00.000Z
 - title: Open sourcing BuzzFeed’s single sign-on experience
-  description: Case study on how BuzzFeed handle authentication 
+  description: Case study on how BuzzFeed handle authentication
   category: Authentication
-  url: https://increment.com/security/open-sourcing-buzzfeeds-single-sign-on-process/
-  date: 2019-01-07
-
+  url: >-
+    https://increment.com/security/open-sourcing-buzzfeeds-single-sign-on-process/
+  date: 2019-01-07T00:00:00.000Z
 - title: What happens when you visit FT.com
-  description: Case study on how Financial Times implement authentication, paywalls, and other edge concerns.
+  description: >-
+    Case study on how Financial Times implement authentication, paywalls, and
+    other edge concerns.
   category: Authentication
-  url: http://engineroom.ft.com/2017/11/27/what-happens-when-you-visit-ft-com/
-  date: 2019-01-07
+  url: 'http://engineroom.ft.com/2017/11/27/what-happens-when-you-visit-ft-com/'
+  date: 2019-01-07T00:00:00.000Z
+- title: Wipster
+  url: 'https://wipster.io'
+  category: Design/FED
+  description: 'Video workflow software, produced locally in Wellington.'
+  favourite: false
+  date: '2019-01-08T10:49:53.559Z'
+- title: Scaling engineering teams
+  url: 'https://stripe.com/atlas/guides/scaling-eng'
+  category: Engineering
+  description: How Stripe has grown while remaining nimble
+  favourite: false
+  date: '2019-01-08T17:34:18.321Z'
