@@ -378,34 +378,6 @@
   category: Authentication
   url: 'http://engineroom.ft.com/2017/11/27/what-happens-when-you-visit-ft-com/'
   date: 2019-01-07T00:00:00.000Z
-- title: Test
-  favourite: false
-  category: Test
-  description: Test upload
-  url: 'https://google.com'
-- title: Test
-  favourite: false
-  category: Test
-  description: Test upload
-  url: 'https://google.com'
-- title: 'Test 2 '
-  favourite: false
-  category: ' Software architecture '
-  description: ' Test bookmarking my own site lololol '
-  url: ' http://joshbarr.com'
-  date: '2019-01-08T09:41:14.273Z'
-- title: Test 2
-  url: 'http://joshbarr2.com'
-  category: Software architecture
-  description: Test bookmarking my own site lololol
-  favourite: false
-  date: '2019-01-08T10:19:17.938Z'
-- title: Test
-  url: 'http://joshbarr.com'
-  category: Software architecture
-  description: Test bookmarking my own site
-  favourite: false
-  date: '2019-01-08T10:19:43.180Z'
 - title: Wipster
   url: 'https://wipster.io'
   category: Design/FED
