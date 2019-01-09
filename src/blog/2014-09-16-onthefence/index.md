@@ -1,6 +1,6 @@
 ---
 path: "/articles/getting-young-voters-off-the-fence"
-date: "2012-09-16T15:00:00.962Z"
+date: "2014-09-16T15:00:00.962Z"
 title: "Motivating young voters to get off the fence"
 blurb: "On The Fence is a tool for encouraging youth voter participation. We explore how the 2014 incarnation of the project was delivered."
 cover_image: ../../images/cover-image.png
