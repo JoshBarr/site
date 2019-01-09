@@ -272,7 +272,7 @@ h4 {
   color: inherit;
   font-weight: bold;
   text-rendering: optimizeLegibility;
-  font-size: 13px;
+  font-size: 1em;
   line-height: 1.1;
 }
 h5 {
@@ -1076,7 +1076,7 @@ h1 {
   margin-bottom: 0;
 }
 
-.hero h4 {
+.hero h5 {
   font-weight: 400;
 }
 

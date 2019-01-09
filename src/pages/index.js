@@ -38,7 +38,7 @@ const IndexPage = ({ data }) => (
       </div>
       <div className="container">
         <div className="section">
-          <h4 className="font-primary">Latest article</h4>
+          <h5 className="font-primary">Latest article</h5>
           {data.allMarkdownRemark.edges.map(({ node: post }) => {
             return (
               <div key={post.frontmatter.path} className="hero__post">
