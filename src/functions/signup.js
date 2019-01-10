@@ -7,7 +7,7 @@ const mailChimpAPI = process.env.MAILCHIMP_API_KEY;
 const mailChimpListID = process.env.MAILCHIMP_LIST_ID;
 const mcRegion = process.env.MAILCHIMP_REGION;
 
-module.exports.handler = (event, context, callback) => {
+exports.handler = (event, context, callback) => {
 
     const formData = JSON.parse(event.body);
     const email = formData.email;
