@@ -2,37 +2,95 @@
 // https://github.com/tobilg/netlify-functions-landingpage/blob/master/src/lambda/signup.js
 
 const request = require("request");
+const Joi = require("joi");
 
-const mailChimpAPI = process.env.MAILCHIMP_API_KEY;
-const mailChimpListID = process.env.MAILCHIMP_LIST_ID;
-const mcRegion = process.env.MAILCHIMP_REGION;
+const config = {
+    mailChimpAPI: process.env.MAILCHIMP_API_KEY,
+    mailChimpListID: process.env.MAILCHIMP_LIST_ID,
+    mailChimpRegion: process.env.MAILCHIMP_REGION,
+    origin: process.env.ORIGIN,
+};
 
-exports.handler = (event, context, callback) => {
-    const formData = JSON.parse(event.body);
-    const email = formData.email;
-    let errorMessage = null;
+const schema = Joi.object().keys({
+    email: Joi.string().email({ minDomainAtoms: 2 }).required(),
+});
 
-    if (!formData) {
-        errorMessage = "No form data supplied";
-        console.log(errorMessage);
-        callback(errorMessage);
+const configSchema = Joi.object().keys({
+    mailChimpRegion: Joi.string().required(),
+    mailChimpAPI: Joi.string().required(),
+    mailChimpListID: Joi.string().required(),
+    origin: Joi.string().required(),
+});
+
+
+const tryParse = (body) => {
+    try {
+        return JSON.parse(body);
+    } catch(e) {
+        console.error(e);
+        return null;
+    }
+};
+
+const cors = (host) => ({
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Credentials": "true"
+});
+
+
+const createResponder = (callback, host) => (status, body) => {
+    callback(null,  {
+        statusCode: status,
+        headers: cors(host),
+        body: JSON.stringify(body)
+    });
+};
+
+
+const handleResponse = (respond) => (error, response, body) => {
+    if (error) {
+        callback(error, null);
+        return;
+    }
+    
+    const bodyObj = tryParse(body);
+
+    if (!bodyObj) {
+        console.log("No response from MailChimp");
+        respond(500, {
+            status: "Internal server error"
+        });
         return;
     }
 
-    if (!email) {
-        errorMessage = "No EMAIL supplied";
-        console.log(errorMessage);
-        callback(errorMessage);
+    console.log("Mailchimp body: " + JSON.stringify(bodyObj));
+    console.log("Status Code: " + response.statusCode);
+    
+    if ((bodyObj.status === 400 && bodyObj.title === "Member Exists")) {
+        console.log("Member already added");
+        respond(400, {
+            status: "Member already added"
+        });
         return;
     }
 
-    if (!mailChimpListID) {
-        errorMessage = "No LIST_ID supplied";
-        console.log(errorMessage);
-        callback(errorMessage);
+    if (response.statusCode < 300) {
+        console.log("Added to list in Mailchimp subscriber list");
+        respond(201, {
+            status: "Added email to list"
+        });
         return;
     }
+    
+    console.log("Error from mailchimp", bodyObj.detail);
+    respond(500, {
+        status: "Internal server error"
+    });
+}
 
+
+const buildRequest = (email, validatedConfig) => {
     const data = {
         email_address: email,
         status: "subscribed",
@@ -42,40 +100,63 @@ exports.handler = (event, context, callback) => {
     const subscriber = JSON.stringify(data);
     console.log("Sending data to mailchimp", subscriber);
 
-    request({
+    return {
         method: "POST",
-        url: `https://${mcRegion}.api.mailchimp.com/3.0/lists/${mailChimpListID}/members`,
+        url: `https://${validatedConfig.mailChimpRegion}.api.mailchimp.com/3.0/lists/${validatedConfig.mailChimpListID}/members`,
         body: subscriber,
         headers: {
-            "Authorization": `apikey ${mailChimpAPI}`,
+            "Authorization": `apikey ${validatedConfig.mailChimpAPI}`,
             "Content-Type": "application/json"
         }
-    }, (error, response, body) => {
-        if (error) {
-            callback(error, null);
-            return;
-        }
-        const bodyObj = JSON.parse(body);
+    };
+}
 
-        console.log("Mailchimp body: " + JSON.stringify(bodyObj));
-        console.log("Status Code: " + response.statusCode);
 
-        if (response.statusCode < 300 || (bodyObj.status === 400 && bodyObj.title === "Member Exists")) {
-            console.log("Added to list in Mailchimp subscriber list");
-            callback(null, {
-                statusCode: 201,
-                headers: {
-                    "Content-Type": "application/json",
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Credentials": "true"
-                },
-                body: JSON.stringify({
-                    status: "saved email"
-                })
-            })
-        } else {
-            console.log("Error from mailchimp", bodyObj.detail);
-            callback(bodyObj.detail, null);
-        }
-    });  
+
+exports.handler = (event, context, callback) => {
+    const validatedConfig = Joi.validate(config, configSchema);
+    const respond = createResponder(callback, event.headers.host);
+    let errorMessage = null;
+
+    if (validatedConfig.error) {
+        errorMessage = JSON.stringify(validatedConfig.error);
+        console.log(errorMessage);
+        respond(500, {
+            status: "The function is not configured properly"
+        });
+        return;
+    }
+
+    if (event.headers.host != validatedConfig.value.origin) {
+        errorMessage = "Invalid host";
+        console.log(errorMessage, event.headers.host);
+        respond(400, { status: errorMessage });
+        return;
+    }
+
+    const formData = tryParse(event.body);
+
+    if (!formData) {
+        errorMessage = "No form data supplied";
+        console.log(errorMessage);
+        respond(400, { status: errorMessage });
+        return;
+    }
+
+    const validatedBody = Joi.validate(formData, schema);
+
+    if (validatedBody.error) {
+        errorMessage = JSON.stringify(validatedBody.error);
+        console.log(errorMessage);
+        respond(400, { 
+            status: "Invalid body", 
+            details: validatedBody.error 
+        });
+        return;
+    }
+
+    request(
+        buildRequest(validatedBody.value.email, validatedConfig.value), 
+        handleResponse(respond)
+    );
 };

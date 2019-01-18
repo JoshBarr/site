@@ -19,6 +19,7 @@
     "gatsby-transformer-remark": "^2.1.19",
     "gatsby-transformer-sharp": "^2.1.8",
     "gatsby-transformer-yaml": "^2.1.6",
+    "joi": "^14.3.1",
     "prop-types": "^15.6.2",
     "react": "^16.6.3",
     "react-dom": "^16.6.3",
