@@ -32,17 +32,17 @@ const tryParse = (body) => {
     }
 };
 
-const cors = (host) => ({
+const cors = () => ({
     "Content-Type": "application/json",
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Credentials": "true"
 });
 
 
-const createResponder = (callback, host) => (status, body) => {
+const createResponder = (callback) => (status, body) => {
     callback(null,  {
         statusCode: status,
-        headers: cors(host),
+        headers: cors(),
         body: JSON.stringify(body)
     });
 };
@@ -115,7 +115,7 @@ const buildRequest = (email, validatedConfig) => {
 
 exports.handler = (event, context, callback) => {
     const validatedConfig = Joi.validate(config, configSchema);
-    const respond = createResponder(callback, event.headers.host);
+    const respond = createResponder(callback);
     let errorMessage = null;
 
     if (validatedConfig.error) {
@@ -124,15 +124,6 @@ exports.handler = (event, context, callback) => {
         respond(500, {
             status: "The function is not configured properly"
         });
-        return;
-    }
-    
-    console.log(JSON.stringify(event));
-
-    if (event.headers.host != validatedConfig.value.origin) {
-        errorMessage = "Invalid host";
-        console.log(errorMessage, event.headers.host);
-        respond(400, { status: errorMessage });
         return;
     }
 
