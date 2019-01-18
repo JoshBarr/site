@@ -36,14 +36,17 @@
     "test": "echo \"Write tests! -> https://gatsby.app/unit-testing\"",
     "deploy": "gh-pages -d public --branch master",
     "func": "netlify-lambda build ./src/functions && git add ./functions && git commit -am'built functions' && git push",
-    "ship": "gatsby build && gh-pages -d public --branch master"
+    "ship": "gatsby build && gh-pages -d public --branch master",
+    "develop:func": "run.env netlify-lambda serve ./src/functions"
   },
   "devDependencies": {
+    "dotenv": "^6.2.0",
     "gh-pages": "^2.0.1",
     "lodash": "^4.17.11",
     "netlify-lambda": "^1.1.1",
     "prettier": "^1.15.2",
-    "request": "^2.88.0"
+    "request": "^2.88.0",
+    "run.env": "^1.1.0"
   },
   "repository": {
     "type": "git",
