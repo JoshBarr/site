@@ -126,6 +126,8 @@ exports.handler = (event, context, callback) => {
         });
         return;
     }
+    
+    console.log(JSON.stringify(event));
 
     if (event.headers.host != validatedConfig.value.origin) {
         errorMessage = "Invalid host";
