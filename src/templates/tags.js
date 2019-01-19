@@ -1,9 +1,8 @@
-import React from "react"
+import React from 'react'
 import SEO from '../components/seo'
 import Layout from '../components/layout'
-import { Link, graphql } from "gatsby"
+import { Link, graphql } from 'gatsby'
 import PostListing from '../components/PostListing'
-
 
 export default function Template({
   pageContext,
@@ -12,34 +11,30 @@ export default function Template({
   const { tag } = pageContext
   const { edges, totalCount } = data.allMarkdownRemark
   const tagHeader = `${totalCount} post${
-    totalCount === 1 ? "" : "s"
+    totalCount === 1 ? '' : 's'
   } tagged with "${tag}"`
 
   return (
     <Layout>
-      <SEO title={tag}></SEO>
+      <SEO title={tag} />
       <div className="container generic-page">
         <h1 className="section-top">{tag}</h1>
         <ul className="list-inline space--large">
-            <li>
-              {tagHeader}
-            </li>
-            <li>
-              <Link to="/tags">See all tags</Link>
-            </li>
-          </ul>
+          <li>{tagHeader}</li>
+          <li>
+            <Link to="/tags">See all tags</Link>
+          </li>
+        </ul>
         <div className="article">
           {edges.map(({ node }) => {
             const { path, title } = node.frontmatter
-            return (
-              <PostListing key={path} post={node} />
-            )
+            return <PostListing key={path} post={node} />
           })}
         </div>
       </div>
     </Layout>
   )
-};
+}
 
 export const pageQuery = graphql`
   query($tag: String) {
@@ -58,7 +53,7 @@ export const pageQuery = graphql`
             blurb
             tags
             cover_image {
-              childImageSharp{
+              childImageSharp {
                 fluid(maxWidth: 450) {
                   ...GatsbyImageSharpFluid
                 }
@@ -69,4 +64,4 @@ export const pageQuery = graphql`
       }
     }
   }
-`;
+`

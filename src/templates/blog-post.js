@@ -1,12 +1,12 @@
-import React from "react"
-import { graphql, Link } from "gatsby"
+import React from 'react'
+import { graphql, Link } from 'gatsby'
 
 import SEO from '../components/seo'
 import Layout from '../components/layout'
 import PostMetadata from '../components/PostMetadata'
 import Author from '../components/Author'
 import Tag from '../components/Tag'
-
+import SubscribeWidget from '../components/SubscribeWidget';
 
 
 export default function Template({
@@ -15,10 +15,10 @@ export default function Template({
   const { markdownRemark: post } = data // data.markdownRemark holds our post data
   return (
     <Layout>
-      <SEO 
-        title={`${post.frontmatter.title}`} 
-        description={post.frontmatter.blurb} 
-        thumbnail={post.frontmatter.cover_image.childImageSharp.fixed} 
+      <SEO
+        title={`${post.frontmatter.title}`}
+        description={post.frontmatter.blurb}
+        thumbnail={post.frontmatter.cover_image.childImageSharp.fixed}
       />
       <div className="container">
         <div className="section-top">
@@ -27,14 +27,19 @@ export default function Template({
 
         <div className="split section-small">
           <div className="sidebar">
-            <Author author={post.frontmatter.authors[0]} date={post.frontmatter.date} />
-            <h6 className="keyline--top theme-border space--tight">Post tags:</h6>
+            <Author
+              author={post.frontmatter.authors[0]}
+              date={post.frontmatter.date}
+            />
+            <h6 className="keyline--top theme-border space--tight">
+              Post tags:
+            </h6>
             <ul className={`small font-primary list-unstyled`}>
-            {post.frontmatter.tags.map((tag => (
-              <li key={tag}>
-                <Tag tag={tag} />
-              </li>
-            )))}
+              {post.frontmatter.tags.map(tag => (
+                <li key={tag}>
+                  <Tag tag={tag} />
+                </li>
+              ))}
             </ul>
           </div>
           <div className="article theme--light">
@@ -44,9 +49,11 @@ export default function Template({
               className="blog-post-content"
               dangerouslySetInnerHTML={{ __html: post.html }}
             />
+            <div className="subscribe subscribe--centered">
+              <SubscribeWidget />
+            </div>
           </div>
         </div>
-        
       </div>
     </Layout>
   )
@@ -63,7 +70,7 @@ export const pageQuery = graphql`
         blurb
         tags
         cover_image {
-          childImageSharp{
+          childImageSharp {
             fluid(maxWidth: 880) {
               ...GatsbyImageSharpFluid
             }
@@ -71,7 +78,6 @@ export const pageQuery = graphql`
               ...GatsbyImageSharpFixed
             }
           }
-          
         }
         authors {
           id
@@ -86,4 +92,5 @@ export const pageQuery = graphql`
         }
       }
     }
-  }`;
+  }
+`

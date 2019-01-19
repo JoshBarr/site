@@ -19,30 +19,39 @@ const Layout = ({ children, theme = 'theme--light' }) => (
     `}
     render={data => (
       <>
-        <link href="https://fonts.googleapis.com/css?family=Merriweather:300,400,400i,700|Lato:400,400i,700" rel="stylesheet" />
+        <link
+          href="https://fonts.googleapis.com/css?family=Merriweather:300,400,400i,700|Lato:400,400i,700"
+          rel="stylesheet"
+        />
         <Helmet
-            bodyAttributes={{
-                class: `${theme} theme-body`
-            }}
+          bodyAttributes={{
+            class: `${theme} theme-body`,
+          }}
         />
         <div>
           <div>
             <Header theme={theme} siteTitle={data.site.siteMetadata.title} />
           </div>
           <div className={`children`}>
-            <div className="theme-background">
-              {children}
-            </div>
+            <div className="theme-background">{children}</div>
           </div>
           <div className="theme--footer">
             <footer className="footer theme-background theme-text">
               <div className="container container--secondary small">
                 <ul className="list-inline">
                   <li>
-                    © 2019, built with <a href="https://www.gatsbyjs.org" className="theme-link">Gatsby</a>
+                    © 2019, built with{' '}
+                    <a href="https://www.gatsbyjs.org" className="theme-link">
+                      Gatsby
+                    </a>
                   </li>
                   <li>
-                    <a className="theme-link" href="https://github.com/joshbarr/joshbarr.github.io">Source code on Github</a>
+                    <a
+                      className="theme-link"
+                      href="https://github.com/joshbarr/joshbarr.github.io"
+                    >
+                      Source code on Github
+                    </a>
                   </li>
                 </ul>
               </div>

@@ -8,8 +8,10 @@ function SEO({ description, lang, meta, keywords, title, thumbnail }) {
     <StaticQuery
       query={detailsQuery}
       render={data => {
-        const metaDescription = description || data.site.siteMetadata.description;
-        const coverImage = thumbnail || data.placeholderImage.childImageSharp.fixed;
+        const metaDescription =
+          description || data.site.siteMetadata.description
+        const coverImage =
+          thumbnail || data.placeholderImage.childImageSharp.fixed
 
         return (
           <Helmet
@@ -56,8 +58,8 @@ function SEO({ description, lang, meta, keywords, title, thumbnail }) {
                 content: coverImage && coverImage.src,
               },
               {
-                  property: 'og:image:secure_url',
-                  content: coverImage && coverImage.src,
+                property: 'og:image:secure_url',
+                content: coverImage && coverImage.src,
               },
               {
                 property: 'og:image:width',

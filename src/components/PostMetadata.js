@@ -1,16 +1,19 @@
 import React from 'react'
-import Tag from './Tag';
-
+import Tag from './Tag'
 
 const PostMetadata = ({ post, stacked = false }) => (
-  <ul className={`small font-primary ${stacked ? 'list-unstyled' : 'list-inline'}`}>
+  <ul
+    className={`small font-primary ${
+      stacked ? 'list-unstyled' : 'list-inline'
+    }`}
+  >
     <li>{post.frontmatter.date}</li>
-    {post.frontmatter.tags.map((tag => (
+    {post.frontmatter.tags.map(tag => (
       <li key={tag}>
         <Tag tag={tag} />
       </li>
-    )))}
+    ))}
   </ul>
-);
-    
-export default PostMetadata;
+)
+
+export default PostMetadata
