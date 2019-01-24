@@ -402,3 +402,9 @@
   description: We are seeing a resurgence of the humble personal blog
   favourite: false
   date: '2019-01-16T19:57:59.092Z'
+- title: C4 Architecture framework
+  url: 'https://c4model.com/'
+  category: Software architecture
+  description: A pragmatic framework for designing software systems.
+  favourite: false
+  date: '2019-01-24T00:56:15.157Z'
