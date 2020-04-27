@@ -44,7 +44,7 @@
   "devDependencies": {
     "dotenv": "^6.2.0",
     "gh-pages": "^2.0.1",
-    "lodash": "^4.17.11",
+    "lodash": "^4.17.13",
     "netlify-lambda": "^1.1.1",
     "prettier": "^1.15.2",
     "request": "^2.88.0",
