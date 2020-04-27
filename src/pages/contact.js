@@ -52,12 +52,6 @@ class Contact extends React.Component {
                 josh@joshbarr.com
               </a>
             </li>
-            <li>
-              Phone:{' '}
-              <a className="theme-link" href="tel:+64 21 056 7120">
-                +64 21 056 7120
-              </a>
-            </li>
           </ul>
 
           <div className="hero__article theme-text">
