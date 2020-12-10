@@ -71,6 +71,12 @@
     overflow: hidden;
 }
 
+.cv-body .date {
+    font-size: 0.875em;
+    color: #444;
+    margin-bottom: .75em;
+}
+
 
 @media only screen and (min-width: 48em) {
     .cv-body {
@@ -86,14 +92,12 @@
     }
 }
 
-.date {
-    color: #888;
-    margin-bottom: .75em;
-}
 
 .nav {
     list-style: none;
     padding-left: 0;
+    margin-left: 0;
+    margin-bottom: 1rem;
 }
 
 .nav > li {
@@ -136,5 +140,9 @@
 
     ul {
         padding-left: 0;
+    }
+
+    ul.nav {
+        margin-left: 0;
     }
 }
