@@ -5,7 +5,7 @@ import logo from '../images/logo.svg'
 import logoWhite from '../images/logo-white.svg'
 
 const Header = ({ siteTitle, theme }) => (
-  <div className={'header theme-color'}>
+  <div className={'header  theme-header theme-color'}>
     <div className="container container--secondary header__flex">
       <h2 className={'header__title'}>
         <Link

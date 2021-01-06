@@ -58,7 +58,7 @@ class SubscribeWidget extends React.Component {
           target="_blank" 
           noValidate
         >
-          <div id="mc_embed_signup_scroll">
+          {/* <div id="mc_embed_signup_scroll">
             <h2>Subscribe to my mailing list</h2>
             <p>
               New articles, straight to your inbox. No spam. <br />
@@ -80,7 +80,7 @@ class SubscribeWidget extends React.Component {
             <div className="font-primary">
               <button type="submit" name="subscribe" id="mc-embedded-subscribe" className="btn btn-primary btn--block">Subscribe</button>
             </div>
-            </div>
+            </div> */}
         </form>
       </div>
     )

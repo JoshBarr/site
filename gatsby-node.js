@@ -41,6 +41,12 @@ exports.createPages = ({ actions, graphql }) => {
     const posts = result.data.allMarkdownRemark.edges;
 
     posts.forEach(({ node }) => {
+
+      if (!node.frontmatter || !node.frontmatter.path) {
+        console.warn('no frontmatter');
+        return;
+      }
+
       createPage({
         path: node.frontmatter.path,
         component: blogPostTemplate,

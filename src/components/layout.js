@@ -40,7 +40,7 @@ const Layout = ({ children, theme = 'theme--light' }) => (
               <div className="container container--secondary small">
                 <ul className="list-inline">
                   <li>
-                    © 2019, built with{' '}
+                    © 2021, built with{' '}
                     <a href="https://www.gatsbyjs.org" className="theme-link">
                       Gatsby
                     </a>
