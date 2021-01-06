@@ -660,6 +660,8 @@ h1 {
   body {
     font-size: 17px;
     line-height: 1.8;
+    border-left: solid 5px #ff7912;
+
   }
 
   .intro {
