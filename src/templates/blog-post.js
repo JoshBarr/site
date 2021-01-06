@@ -49,6 +49,12 @@ export default function Template({
               className="blog-post-content"
               dangerouslySetInnerHTML={{ __html: post.html }}
             />
+            {/* {post.frontmatter.attachments && 
+              post.frontmatter.attachments.map((fileObj) => {
+                console.log(fileObj);
+                return <a href={fileObj.publicURL}>Download</a>
+              })
+            } */}
             <div className="subscribe subscribe--centered">
               <SubscribeWidget />
             </div>
@@ -78,6 +84,9 @@ export const pageQuery = graphql`
               ...GatsbyImageSharpFixed
             }
           }
+        }
+        attachments {
+          publicURL
         }
         authors {
           id
