@@ -11,7 +11,7 @@ authors: [josh_barr]
 
 In 2011, a group of students from Massey’s College of Creative Arts came up with an idea to help educate young people about what party policies they most align with. They built a website called On The Fence in six days (on the seventh, they rested). In the days before the 2011 General Election, it netted 30,000 views and propelled the quintet to New Zealand–scale internet stardom. You can read about it [over here](http://www.stuff.co.nz/national/politics/campaign-trail/6017937/On-the-fence-about-voting). 
 
-Karl Kane, the head of Massey’s Design and Democracy project, approached Springload earlier this year to collaborate on a new, improved version of On the Fence before this year's election. We jumped at the chance to work with this great research organisation on a project that matters to New Zealanders.
+Karl Kane, the head of Massey’s [Design and Democracy project](http://designdemocracy.ac.nz/initiatives/on-the-fence), approached Springload earlier this year to collaborate on a new, improved version of On the Fence before this year's election. We jumped at the chance to work with this great research organisation on a project that matters to New Zealanders.
 
 
 ### Scaling down
