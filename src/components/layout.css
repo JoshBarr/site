@@ -609,15 +609,15 @@ pre tt:after {
   }
 }
 
-/* 
+/*
   =================================================================
   Typography
-  ================================================================= 
+  =================================================================
 */
 
-h1, 
-h2, 
-h3, 
+h1,
+h2,
+h3,
 h4,
 .article,
 .font-display {
@@ -630,7 +630,7 @@ html,
   font-family: 'Lato', sans-serif;
 }
 
-body { 
+body {
   font-size: 15px;
   line-height: 1.7;
 }
@@ -653,7 +653,7 @@ h1 {
 }
 
 .hero__subtitle {
-  font-size: calc(1em + .25vw); /* 19px */
+  font-size: calc(1em + 0.25vw); /* 19px */
 }
 
 @media only screen and (min-width: 700px) {
@@ -661,7 +661,6 @@ h1 {
     font-size: 17px;
     line-height: 1.8;
     border-left: solid 5px #ff7912;
-
   }
 
   .intro {
@@ -685,10 +684,10 @@ h1 {
   }
 }
 
-/* 
+/*
   =================================================================
   Structure
-  ================================================================= 
+  =================================================================
 */
 
 .split {
@@ -728,7 +727,7 @@ h1 {
 }
 
 .sidebar {
-  padding-top: .5rem;
+  padding-top: 0.5rem;
   width: 12rem;
   margin-right: 5vw;
 }
@@ -739,9 +738,7 @@ h1 {
   max-width: 80em;
 }
 
-
 @media only screen and (min-width: 1000px) {
-
   .container {
     margin-left: 10vw;
     margin-right: 10vw;
@@ -761,12 +758,10 @@ h1 {
   }
 }
 
-
-
-/* 
+/*
   =================================================================
   Spacing
-  ================================================================= 
+  =================================================================
 */
 
 .space {
@@ -782,13 +777,13 @@ h1 {
 }
 
 .space--tight {
-  margin-bottom: .75rem;
+  margin-bottom: 0.75rem;
 }
 
-/* 
+/*
   =================================================================
   Components
-  ================================================================= 
+  =================================================================
 */
 
 .list-inline {
@@ -814,14 +809,14 @@ h1 {
 
 .pill {
   border-radius: 3px;
-  padding: .375rem .5rem;
+  padding: 0.375rem 0.5rem;
   border: solid 1px transparent;
   display: inline-block;
   line-height: 1;
 }
 
 .pill--large {
-  padding: .5rem .75rem;
+  padding: 0.5rem 0.75rem;
   border-radius: 4px;
 }
 
@@ -830,18 +825,18 @@ h1 {
 }
 
 .panel {
-  box-shadow: 0 3px 3px hsla(0, 0%, 0%, 0.04), 0px 0px 1px rgba(0,0,0,0.3);
+  box-shadow: 0 3px 3px hsla(0, 0%, 0%, 0.04), 0px 0px 1px rgba(0, 0, 0, 0.3);
   border-radius: 3px;
   padding: 1.75rem 1.75rem 0.25rem;
 }
 
 .counter {
   border-radius: 2px;
-  padding: 0.25rem .5rem;
+  padding: 0.25rem 0.5rem;
   line-height: 1;
   display: inline-block;
   border: solid 1px transparent;
-  margin-left: .5rem;
+  margin-left: 0.5rem;
 }
 
 .media {
@@ -851,7 +846,7 @@ h1 {
 }
 
 .media__image {
-  margin-right: .625rem;
+  margin-right: 0.625rem;
 }
 
 .media__body > :last-child {
@@ -877,11 +872,10 @@ h1 {
   padding-bottom: 1.75rem;
 }
 
-
-/* 
+/*
   =================================================================
   Themes
-  ================================================================= 
+  =================================================================
 */
 .theme-link,
 .theme-link-block {
@@ -913,20 +907,15 @@ h1 {
   border-color: #0038bf;
 }
 
-
-
-
 .theme--hero .theme-header {
-  background: rgb(20, 20, 20); 
+  background: rgb(20, 20, 20);
   border-bottom: solid 1px rgb(48, 48, 48);
-
 }
 
 .theme--light .theme-header {
   background: rgb(247, 248, 249);
   border-bottom: solid 1px rgb(235, 235, 235);
 }
-
 
 .theme--hero .theme-link__brand {
   color: #ff7912;
@@ -937,7 +926,7 @@ h1 {
 }
 
 .theme--hero .theme-border {
-  border-color: rgba(255,255,255,0.3);
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
 .theme--hero.theme-body {
@@ -972,7 +961,7 @@ h1 {
   color: #0038bf;
 }
 
-.theme--light .theme-link-selectable[aria-current="page"] {
+.theme--light .theme-link-selectable[aria-current='page'] {
   color: #222;
 }
 
@@ -980,14 +969,13 @@ h1 {
   color: #fff;
 }
 
-.theme--hero .theme-link-selectable[aria-current="page"] {
+.theme--hero .theme-link-selectable[aria-current='page'] {
   color: #ff7912;
 }
 
 .theme--light .theme-link-secondary {
   color: #555;
 }
-
 
 .theme--footer .theme-background {
   background-color: #222;
@@ -1001,11 +989,10 @@ h1 {
   color: #ccc;
 }
 
-
-/* 
+/*
   =================================================================
   Custom elements
-  ================================================================= 
+  =================================================================
 */
 
 .header {
@@ -1033,10 +1020,10 @@ h1 {
   width: 3.68em;
   height: 2.368em;
   margin-bottom: 0;
-  
+
   vertical-align: middle;
   /* border: solid 1px hsla(0, 0%, 0%, 0.12); */
-  padding: .5rem;
+  padding: 0.5rem;
   background: #ff7912;
   border-radius: 500px;
 }
@@ -1052,12 +1039,12 @@ h1 {
 .logo__wordmark {
   display: none;
   vertical-align: middle;
-  padding-top: .125em;
+  padding-top: 0.125em;
 }
 
 @media only screen and (min-width: 500px) {
   .logo {
-    margin-right: .75rem;
+    margin-right: 0.75rem;
   }
 
   .logo__wordmark {
@@ -1077,7 +1064,7 @@ h1 {
 
 .header__nav > a {
   display: inline-block;
-  margin-left: .75rem;
+  margin-left: 0.75rem;
   text-decoration: none;
 }
 
@@ -1086,7 +1073,6 @@ h1 {
     margin-left: 2rem;
   }
 }
-
 
 .footer {
   padding-top: calc(1.75rem + 1vw);
@@ -1113,7 +1099,7 @@ h1 {
 
 .hero__post-title {
   font-weight: 300;
-  margin-bottom: .75rem;
+  margin-bottom: 0.75rem;
 }
 
 .hero__post-body {
@@ -1129,8 +1115,6 @@ h1 {
   text-decoration: underline;
 }
 
-
-
 .hero__subtitle {
   /* font-weight: 400; */
   max-width: 42rem;
@@ -1141,11 +1125,11 @@ h1 {
 }
 
 .post-listing__heading {
-  margin-bottom: .5rem;
+  margin-bottom: 0.5rem;
 }
 
 .post-listing__blurb {
-  margin-bottom: .75rem;
+  margin-bottom: 0.75rem;
   line-height: 1.6;
 }
 
@@ -1160,7 +1144,6 @@ h1 {
   margin-bottom: 1.75rem;
   padding: 1rem;
 }
-
 
 /*
   Forms
@@ -1178,9 +1161,7 @@ fieldset {
   position: absolute;
 }
 
-
 .field {
-
 }
 
 .field-label {
@@ -1190,7 +1171,7 @@ fieldset {
 .field-input {
   border: none;
   line-height: 1;
-  padding: .75em 1.5em;
+  padding: 0.75em 1.5em;
   margin-bottom: 1.25em;
   border-radius: 3px;
   border: solid 1px hsla(0, 0%, 0%, 0.5);
@@ -1200,7 +1181,6 @@ fieldset {
   display: block;
   width: 100%;
 }
-
 
 .error {
   color: #bf1d00;
@@ -1218,15 +1198,15 @@ fieldset {
   font-size: inherit;
   line-height: 1;
   vertical-align: baseline;
-  padding: .75em 1.5em;
+  padding: 0.75em 1.5em;
   border-radius: 3px;
 }
 
 .btn--block {
   display: block;
   width: 100%;
-  padding-top: .825em;
-  padding-bottom: .825em;
+  padding-top: 0.825em;
+  padding-bottom: 0.825em;
 }
 
 .btn-primary {
@@ -1239,7 +1219,6 @@ fieldset {
   background: #193e96;
   border-color: #193e96;
 }
-
 
 /*
   Subscribe CTA
@@ -1265,7 +1244,6 @@ fieldset {
   color: #0032c6;
 }
 
-
 #mc_embed_signup div.mce_inline_error {
   background-color: transparent !important;
   color: #bf1d00 !important;
@@ -1273,4 +1251,10 @@ fieldset {
 
 #mc_embed_signup input.mce_inline_error {
   border-color: #bf1d00 !important;
+}
+
+@media print {
+  .noprint {
+    display: none;
+  }
 }
