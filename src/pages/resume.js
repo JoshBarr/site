@@ -68,7 +68,7 @@ const Resume = () => (
         <li>
           Experience as an open-source contributor to Wagtail, a{' '}
           <a href="//github.com/torchbox/wagtail.git">
-            popular content management system
+            popular django-based content management system
           </a>
           .
         </li>
