@@ -372,7 +372,7 @@ const Resume = () => (
         <em>References available on request</em>
       </p>
       <p className="noprint">
-        <a href="/static/resume-josh-barr-2023.pdf" title="Josh Barr – 2023">
+        <a href="/resume-josh-barr-2023.pdf" title="Josh Barr – 2023">
           Download this page (PDF)
         </a>
       </p>
