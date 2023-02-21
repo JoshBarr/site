@@ -797,32 +797,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"gatsby-starter-default@workspace:.":
-  version: 0.0.0-use.local
-  resolution: "gatsby-starter-default@workspace:."
-  dependencies:
-    "@next/font": "npm:^13.1.6"
-    "@types/fs-extra": "npm:^11.0.1"
-    "@types/node": "npm:18.13.0"
-    "@types/react": "npm:18.0.28"
-    change-case: "npm:^4.1.2"
-    dotenv: "npm:^8.2.0"
-    fs-extra: "npm:^11.1.0"
-    gray-matter: "npm:^4.0.3"
-    joi: "npm:^17.3.0"
-    next: "npm:^13.1.6"
-    next-mdx-remote: "npm:^4.3.0"
-    prettier: "npm:^2.2.1"
-    react: "npm:18"
-    react-dom: "npm:18"
-    react-wrap-balancer: "npm:^0.4.0"
-    request: "npm:^2.88.0"
-    run.env: "npm:^1.1.0"
-    typescript: "npm:^4.9.5"
-    yaml: "npm:^2.2.1"
-  languageName: unknown
-  linkType: soft
-
 "getpass@npm:^0.1.1":
   version: 0.1.7
   resolution: "getpass@npm:0.1.7"
@@ -1013,6 +987,32 @@ __metadata:
   checksum: daee8be7d094931428bfb6c01d95c1148610b7761eafa53f7dfc0d82e6ad68ee98e1ac13e84d10e16327c8c5c5d3e768b07f71f7501e8c01d406c76b0433e9d1
   languageName: node
   linkType: hard
+
+"joshbarr-site@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "joshbarr-site@workspace:."
+  dependencies:
+    "@next/font": "npm:^13.1.6"
+    "@types/fs-extra": "npm:^11.0.1"
+    "@types/node": "npm:18.13.0"
+    "@types/react": "npm:18.0.28"
+    change-case: "npm:^4.1.2"
+    dotenv: "npm:^8.2.0"
+    fs-extra: "npm:^11.1.0"
+    gray-matter: "npm:^4.0.3"
+    joi: "npm:^17.3.0"
+    next: "npm:^13.1.6"
+    next-mdx-remote: "npm:^4.3.0"
+    prettier: "npm:^2.2.1"
+    react: "npm:18"
+    react-dom: "npm:18"
+    react-wrap-balancer: "npm:^0.4.0"
+    request: "npm:^2.88.0"
+    run.env: "npm:^1.1.0"
+    typescript: "npm:^4.9.5"
+    yaml: "npm:^2.2.1"
+  languageName: unknown
+  linkType: soft
 
 "js-tokens@npm:^3.0.0 || ^4.0.0":
   version: 4.0.0
