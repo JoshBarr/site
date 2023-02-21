@@ -53,15 +53,18 @@ const IndexPage: React.FC<IndexPageProps> = ({
           <h5 className="font-secondary tiny-caps">Work</h5>
           <div className="grid grid-odd hero__grid">
             {allWork.slice(0, 4).map((work) => (
-              <WorkItem work={work} />
+              <WorkItem key={work.title} work={work} />
             ))}
             {allEndorsements.slice(0, 1).map((endorsement) => (
-              <div className="section grid-span-12">
+              <div
+                key={endorsement.author.name}
+                className="section grid-span-12"
+              >
                 <Endorsement endorsement={endorsement} />
               </div>
             ))}
             {allWork.slice(4).map((work) => (
-              <WorkItem work={work} />
+              <WorkItem key={work.title} work={work} />
             ))}
           </div>
         </div>
