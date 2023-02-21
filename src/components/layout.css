@@ -1264,6 +1264,10 @@ h1 {
   grid-column: span 6 / 1;
 }
 
+.hero__endorsement {
+  grid-column: span 6 / 1;
+}
+
 @media only screen and (min-width: 700px) {
   .hero__grid {
     row-gap: 2rem;
@@ -1271,6 +1275,10 @@ h1 {
   }
 
   .hero__post {
+    grid-column: span 8 / 1;
+  }
+
+  .hero__endorsement {
     grid-column: span 8 / 1;
   }
 
@@ -1291,6 +1299,10 @@ h1 {
 
   .hero__post-description {
     grid-column: span 3;
+  }
+
+  .hero__endorsement {
+    grid-column: span 12 / 1;
   }
 }
 

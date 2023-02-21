@@ -58,7 +58,7 @@ const IndexPage: React.FC<IndexPageProps> = ({
             {allEndorsements.slice(0, 1).map((endorsement) => (
               <div
                 key={endorsement.author.name}
-                className="section grid-span-12"
+                className="section hero__endorsement"
               >
                 <Endorsement endorsement={endorsement} />
               </div>
