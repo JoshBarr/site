@@ -4,7 +4,7 @@ import Layout from "../components/layout";
 import SEO from "../components/seo";
 
 const getTime = () => {
-  const options = {
+  const options: Intl.DateTimeFormatOptions = {
     hour12: true,
     timeZone: "Pacific/Auckland",
     hour: "numeric",
@@ -16,7 +16,7 @@ const getTime = () => {
 };
 
 const Contact = () => {
-  const [time, setTime] = useState();
+  const [time, setTime] = useState<string | undefined>();
 
   useEffect(() => {
     const interval = setInterval(() => {
