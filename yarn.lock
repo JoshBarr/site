@@ -2,7 +2,7 @@
 # Manual changes might be lost - proceed with caution!
 
 __metadata:
-  version: 7
+  version: 6
   cacheKey: 9
 
 "@babel/code-frame@npm:^7.10.4, @babel/code-frame@npm:^7.12.11":
@@ -3026,9 +3026,9 @@ __metadata:
   linkType: hard
 
 "decode-uri-component@npm:^0.2.0":
-  version: 0.2.0
-  resolution: "decode-uri-component@npm:0.2.0"
-  checksum: 6944873192e84e58c4fd6483ce8846f2907b4ab1f0170a44bcc259fd976b7f6eecaad2016c9ada00a75155692b443f7970036c60a4d78853d0a0e2bec6f55ec8
+  version: 0.2.2
+  resolution: "decode-uri-component@npm:0.2.2"
+  checksum: 8/95476a7d28f267292ce745eac3524a9079058bbb35767b76e3ee87d42e34cd0275d2eb19d9d08c3e167f97556e8a2872747f5e65cbebcac8b0c98d83e285f139
   languageName: node
   linkType: hard
 
@@ -3871,9 +3871,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"fsevents@patch:fsevents@npm%3A^1.2.7#optional!builtin<compat/fsevents>":
+"fsevents@patch:fsevents@npm%3A^1.2.7#~builtin<compat/fsevents>":
   version: 1.2.13
-  resolution: "fsevents@patch:fsevents@npm%3A1.2.13#optional!builtin<compat/fsevents>::version=1.2.13&hash=d11327"
+  resolution: "fsevents@patch:fsevents@npm%3A1.2.13#~builtin<compat/fsevents>::version=1.2.13&hash=18f3a7"
   dependencies:
     bindings: "npm:^1.5.0"
     nan: "npm:^2.12.1"
@@ -3881,9 +3881,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"fsevents@patch:fsevents@npm%3A~2.1.2#optional!builtin<compat/fsevents>":
+"fsevents@patch:fsevents@npm%3A~2.1.2#~builtin<compat/fsevents>":
   version: 2.1.3
-  resolution: "fsevents@patch:fsevents@npm%3A2.1.3#optional!builtin<compat/fsevents>::version=2.1.3&hash=31d12a"
+  resolution: "fsevents@patch:fsevents@npm%3A2.1.3#~builtin<compat/fsevents>::version=2.1.3&hash=18f3a7"
   dependencies:
     node-gyp: "npm:latest"
   conditions: os=darwin
@@ -3901,27 +3901,27 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "gatsby-starter-default@workspace:."
   dependencies:
-    "@next/font": "npm:^13.1.6"
-    "@types/fs-extra": "npm:^11.0.1"
-    "@types/node": "npm:18.13.0"
-    "@types/react": "npm:18.0.28"
-    change-case: "npm:^4.1.2"
-    dotenv: "npm:^8.2.0"
-    fs-extra: "npm:^11.1.0"
-    gh-pages: "npm:^3.1.0"
-    gray-matter: "npm:^4.0.3"
-    joi: "npm:^17.3.0"
-    netlify-lambda: "npm:^2.0.1"
-    next: "npm:^13.1.6"
-    next-mdx-remote: "npm:^4.3.0"
-    prettier: "npm:^2.2.1"
-    react: "npm:18"
-    react-dom: "npm:18"
-    react-wrap-balancer: "npm:^0.4.0"
-    request: "npm:^2.88.0"
-    run.env: "npm:^1.1.0"
-    typescript: "npm:^4.9.5"
-    yaml: "npm:^2.2.1"
+    "@next/font": ^13.1.6
+    "@types/fs-extra": ^11.0.1
+    "@types/node": 18.13.0
+    "@types/react": 18.0.28
+    change-case: ^4.1.2
+    dotenv: ^8.2.0
+    fs-extra: ^11.1.0
+    gh-pages: ^3.1.0
+    gray-matter: ^4.0.3
+    joi: ^17.3.0
+    netlify-lambda: ^2.0.1
+    next: ^13.1.6
+    next-mdx-remote: ^4.3.0
+    prettier: ^2.2.1
+    react: 18
+    react-dom: 18
+    react-wrap-balancer: ^0.4.0
+    request: ^2.88.0
+    run.env: ^1.1.0
+    typescript: ^4.9.5
+    yaml: ^2.2.1
   languageName: unknown
   linkType: soft
 
@@ -7992,13 +7992,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"typescript@patch:typescript@npm%3A^4.9.5#optional!builtin<compat/typescript>":
+"typescript@patch:typescript@^4.9.5#~builtin<compat/typescript>":
   version: 4.9.5
-  resolution: "typescript@patch:typescript@npm%3A4.9.5#optional!builtin<compat/typescript>::version=4.9.5&hash=23ec76"
+  resolution: "typescript@patch:typescript@npm%3A4.9.5#~builtin<compat/typescript>::version=4.9.5&hash=a1c5e5"
   bin:
     tsc: bin/tsc
     tsserver: bin/tsserver
-  checksum: 09f82f25664c79d5cccc389502175093becf51d691b443c79294303681544a399fb42f8384b535ddeba48cadb64e7d14b42de40d8ade4418bb43174989dd8685
+  checksum: 8/2eee5c37cad4390385db5db5a8e81470e42e8f1401b0358d7390095d6f681b410f2c4a0c496c6ff9ebd775423c7785cdace7bcdad76c7bee283df3d9718c0f20
   languageName: node
   linkType: hard
 
