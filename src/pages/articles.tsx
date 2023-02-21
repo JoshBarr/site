@@ -12,12 +12,14 @@ interface BlogIndexProps {
 }
 
 const BlogIndex: React.FC<BlogIndexProps> = ({ allPosts }: BlogIndexProps) => (
-  <Layout>
+  <Layout theme="theme--hero">
     <SEO title="Blog" thumbnail={undefined} />
     <div className="container generic-page">
-      <h1 className="hero__title section-top space--large">Articles</h1>
+      <h1 className="theme-text hero__title section-top space--large">
+        Articles
+      </h1>
 
-      <div className="theme--light">
+      <div>
         {allPosts.map((post) => {
           return (
             <div key={post.slug}>
@@ -38,36 +40,7 @@ export const getStaticProps: GetStaticProps<BlogIndexProps> = async () => {
   return {
     props: {
       allPosts,
+      isDark: true,
     },
   };
 };
-
-// export const pageQuery = graphql`
-//   query($skip: Int!, $limit: Int!) {
-//     allMarkdownRemark(
-//       sort: { order: DESC, fields: [frontmatter___date] }
-//       skip: $skip
-//       limit: $limit
-//       filter: { frontmatter: { published: { ne: false } } }
-//     ) {
-//       edges {
-//         node {
-//           frontmatter {
-//             path
-//             date(formatString: "MMMM DD, YYYY")
-//             title
-//             blurb
-//             tags
-//             cover_image {
-//               childImageSharp {
-//                 fluid(maxWidth: 450) {
-//                   ...GatsbyImageSharpFluid
-//                 }
-//               }
-//             }
-//           }
-//         }
-//       }
-//     }
-//   }
-// `;

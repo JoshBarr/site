@@ -9,14 +9,16 @@ interface PostListingProps {
 }
 
 const PostListing = ({ post, hideBlurb = false }: PostListingProps) => (
-  <div className="post-listing space">
+  <div className="post-listing space theme-border">
     <h3 className="post-listing__heading">
       <Link className="theme-link" href={post.permalink}>
         {post.title}
       </Link>
     </h3>
     {!hideBlurb && (
-      <p className="post-listing__blurb font-primary">{post.blurb}</p>
+      <p className="post-listing__blurb font-primary theme-body-text">
+        {post.blurb}
+      </p>
     )}
     <PostMetadata post={post} />
   </div>

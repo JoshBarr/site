@@ -6,7 +6,7 @@ interface LayoutProps {
   theme?: string;
 }
 
-const Layout: FC<LayoutProps> = ({ children, theme = "theme--light" }) => (
+const Layout: FC<LayoutProps> = ({ children, theme = "theme--hero" }) => (
   <>
     <div>
       <div>
@@ -17,7 +17,7 @@ const Layout: FC<LayoutProps> = ({ children, theme = "theme--light" }) => (
       </div>
       <div className="theme--footer">
         <footer className="footer theme-background theme-text">
-          <div className="container container--secondary small">
+          <div className="container container--secondary small font-secondary">
             <ul className="list-inline">
               <li>
                 © 2023, built with{" "}

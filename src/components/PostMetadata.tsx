@@ -13,7 +13,7 @@ const PostMetadata: React.FC<PostMetadatProps> = ({
   stacked = false,
 }) => (
   <ul
-    className={`small font-primary ${
+    className={`small font-secondary theme-text ${
       stacked ? "list-unstyled" : "list-inline"
     }`}
   >

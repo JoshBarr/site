@@ -15,7 +15,7 @@ interface TagsPageProps {
 }
 
 const Tags: React.FC<TagsPageProps> = ({ postsByTag }) => (
-  <Layout theme="theme--light">
+  <Layout>
     <SEO title="Tags" thumbnail={undefined} />
     <div className="container generic-page ">
       <h1 className="section-top theme-text theme-display-weight space--large">
@@ -49,6 +49,7 @@ export const getStaticProps: GetStaticProps<TagsPageProps> = async () => {
   return {
     props: {
       postsByTag,
+      isDark: true,
     },
   };
 };

@@ -1,3 +1,4 @@
+import { GetStaticProps } from "next";
 import React, { useEffect, useState } from "react";
 import Layout from "../components/layout";
 import SEO from "../components/seo";
@@ -32,7 +33,7 @@ const Contact = () => {
     <Layout theme="theme--hero">
       <SEO title="Contact" thumbnail={undefined} />
       <div className="container generic-page">
-        <h1 className="hero__title section-top theme-text theme-display-weight">
+        <h1 className="theme-text hero__title section-top theme-text theme-display-weight">
           Contact me
         </h1>
 
@@ -51,6 +52,14 @@ const Contact = () => {
       </div>
     </Layout>
   );
+};
+
+export const getStaticProps: GetStaticProps = () => {
+  return {
+    props: {
+      isDark: true,
+    },
+  };
 };
 
 export default Contact;

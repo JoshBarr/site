@@ -14,14 +14,14 @@ interface TagsPageProps {
 }
 
 const Tags: React.FC<TagsPageProps> = ({ name, slug, count, posts }) => (
-  <Layout theme="theme--light">
+  <Layout>
     <SEO title="Tags" thumbnail={undefined} />
     <div className="container generic-page ">
       <h1 className="section-top theme-text theme-display-weight space--large">
         Tag: {name}
       </h1>
 
-      <div className="theme--light">
+      <div>
         {posts.map((post) => {
           return (
             <div key={post.slug}>
@@ -51,6 +51,7 @@ export const getStaticProps: GetStaticProps<TagsPageProps> = async (req) => {
 
   return {
     props: {
+      isDark: true,
       ...tag,
     },
   };

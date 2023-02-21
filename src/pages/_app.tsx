@@ -1,8 +1,14 @@
 import "../components/layout.css";
-import { Lato } from "@next/font/google";
+import { IBM_Plex_Sans, IBM_Plex_Mono } from "@next/font/google";
 import { useEffect } from "react";
 
-const lato = Lato({
+const plex = IBM_Plex_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "700"],
+  style: ["normal", "italic"],
+});
+
+const plexMono = IBM_Plex_Mono({
   subsets: ["latin"],
   weight: ["400", "700"],
   style: ["normal", "italic"],
@@ -19,7 +25,12 @@ export default function JoshBarrSite({ Component, pageProps }) {
     <>
       <style jsx global>{`
         html {
-          font-family: ${lato.style.fontFamily};
+          font-family: ${plex.style.fontFamily}, sans-serif;
+        }
+
+        .header,
+        .font-secondary {
+          font-family: ${plexMono.style.fontFamily}, sans-serif;
         }
       `}</style>
       <Component {...pageProps} />

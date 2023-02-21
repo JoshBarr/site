@@ -23,14 +23,14 @@ export default function ArticlePage({ source, frontMatter }: ArticleProps) {
     <Layout>
       <SEO title={`${frontMatter.title}`} description={frontMatter.blurb} />
       <div className="container">
-        <div className="section-top">
+        <div className="section-top theme-text">
           <h1 className="">
             <Balancer>{frontMatter.title}</Balancer>
           </h1>
         </div>
 
         <div className="split section-small">
-          <div className="sidebar">
+          <div className="sidebar theme-text">
             <Author
               author={{ name: "Josh Barr", image: "/images/josh.png" }}
               date={frontMatter.date}
@@ -46,9 +46,9 @@ export default function ArticlePage({ source, frontMatter }: ArticleProps) {
               ))}
             </ul>
           </div>
-          <div className="article theme--light">
-            <p className="intro">{frontMatter.blurb}</p>
-            <div className="blog-post-content">
+          <div className="article">
+            <p className="intro theme-text ">{frontMatter.blurb}</p>
+            <div className="blog-post-content theme-prose">
               <MDXRemote {...source} components={components} />
             </div>
           </div>
@@ -86,6 +86,7 @@ export const getStaticProps: GetStaticProps<ArticleProps> = async (req) => {
     props: {
       source: mdxSource,
       frontMatter: data,
+      isDark: true,
     },
   };
 };
