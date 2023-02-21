@@ -1,4 +1,3 @@
 - id: josh_barr
   name: Josh Barr
-  image: "../images/josh.png"
-  
+  image: "/images/josh.png"

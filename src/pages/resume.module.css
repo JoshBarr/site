@@ -1,46 +1,46 @@
-.cv-body {
+.cvBodyElement {
   line-height: 1.75;
-  font-family: 'Merriweather', georgia, serif;
+  font-family: "Merriweather", georgia, serif;
   color: #111;
   font-weight: 100;
   margin: 0;
   letter-spacing: 0.01rem;
 }
 
-.cv-body h1,
-.cv-body h2,
-.cv-body h3,
-.cv-body h4 {
+.cvBodyElement h1,
+.cvBodyElement h2,
+.cvBodyElement h3,
+.cvBodyElement h4 {
   font-weight: 600;
 }
 
-.cv-body h1 {
+.cvBodyElement h1 {
   font-size: 1.5em;
 }
 
-.cv-body h2 {
+.cvBodyElement h2 {
   font-size: 1.125em;
 }
 
-.cv-body h4 {
+.cvBodyElement h4 {
   margin-bottom: 0.25em;
 }
 
-.cv-body p,
-.cv-body ul {
+.cvBodyElement p,
+.cvBodyElement ul {
   margin-top: 0;
   margin-bottom: 3em;
 }
 
-.cv-body ul {
+.cvBodyElement ul {
   padding-left: 1em;
 }
 
-.cv-body ul > li {
+.cvBodyElement ul > li {
   margin-bottom: 0.25em;
 }
 
-.cv-body hr {
+.cvBodyElement hr {
   height: 0;
   width: 100%;
   border: none;
@@ -49,12 +49,12 @@
   margin-top: 1.5em;
 }
 
-.cv-body a {
+.cvBodyElement a {
   color: #444;
   text-decoration: none;
 }
 
-.cv-body a:hover {
+.cvBodyElement a:hover {
   /* color: red; */
   text-decoration: underline;
 }
@@ -70,14 +70,14 @@
   overflow: hidden;
 }
 
-.cv-body .date {
+.cvBodyElement .date {
   font-size: 0.875em;
   color: #444;
   margin-bottom: 0.75em;
 }
 
 @media only screen and (min-width: 48em) {
-  .cv-body {
+  .cvBodyElement {
     font-size: 1.0625em;
     border: solid 1em #f4f4f4;
   }
@@ -85,7 +85,7 @@
     margin-left: auto;
     margin-right: auto;
   }
-  .cv-body ul {
+  .cvBodyElement ul {
     padding-left: 0;
   }
 }
@@ -109,31 +109,4 @@
 
 .print-break-before {
   page-break-before: always;
-}
-
-@media print {
-  @page {
-    margin: 2cm;
-  }
-
-  body {
-    font-family: 'Merriweather', 'georgia', serif;
-    font-size: 7pt;
-  }
-
-  .cv {
-    max-width: 100%;
-  }
-
-  ul.nav {
-    margin-left: 0;
-  }
-
-  a {
-    text-decoration: none;
-  }
-
-  ul {
-    padding-left: 0;
-  }
 }
