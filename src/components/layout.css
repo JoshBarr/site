@@ -1248,13 +1248,12 @@ h1 {
 }
 
 .hero__grid {
-  align-items: end;
-  row-gap: 4rem;
+  column-gap: 0;
 }
 
 .hero__post {
   margin-bottom: 0;
-  grid-column: span 6;
+  grid-column: span 6 / 1;
 }
 
 .hero__post--square {
@@ -1262,11 +1261,31 @@ h1 {
 }
 
 .hero__post-description {
+  grid-column: span 6 / 1;
 }
 
 @media only screen and (min-width: 700px) {
+  .hero__grid {
+    row-gap: 2rem;
+    align-items: start;
+  }
+
   .hero__post {
-    /* margin-bottom: 3rem; */
+    grid-column: span 8 / 1;
+  }
+
+  .hero__post-description {
+    grid-column: span 8 / 1;
+  }
+}
+
+@media only screen and (min-width: 1000px) {
+  .hero__grid {
+    align-items: end;
+    row-gap: 4rem;
+    column-gap: 2rem;
+  }
+  .hero__post {
     grid-column: span 8;
   }
 
