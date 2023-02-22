@@ -1302,7 +1302,7 @@ h1 {
   }
 
   .hero__endorsement {
-    grid-column: span 12 / 1;
+    grid-column: span 12;
   }
 }
 
