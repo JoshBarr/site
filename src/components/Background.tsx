@@ -208,15 +208,7 @@ export const Background: React.FC<{}> = () => {
         <pointLight position={[10, 10, 10]} />
         <Terrain position={[0, 0, 0]} />
       </Canvas>
-      <div
-        style={{
-          position: "absolute",
-          bottom: 0,
-          width: "100%",
-          height: "30vh",
-          backgroundImage: "linear-gradient(to top, #141414 30%, transparent)",
-        }}
-      ></div>
+      <div className="fade-mask"></div>
     </div>
   );
 };

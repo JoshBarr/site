@@ -19,10 +19,13 @@ const Contact = () => {
   const [time, setTime] = useState<string | undefined>();
 
   useEffect(() => {
-    const interval = setInterval(() => {
+    function timeCallback() {
       const time = getTime();
       setTime(time);
-    }, 30 * 1000);
+    }
+
+    const interval = setInterval(timeCallback, 30 * 1000);
+    timeCallback();
 
     return () => {
       clearInterval(interval);
@@ -45,9 +48,8 @@ const Contact = () => {
             </a>
           </li>
         </ul>
-
         <div className="hero__article theme-text">
-          {Intl && time && <p>Right now, it's {time} in New Zealand</p>}
+          {time ? <p>Right now, it's {time} in New Zealand</p> : null}
         </div>
       </div>
     </Layout>

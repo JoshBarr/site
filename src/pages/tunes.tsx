@@ -60,6 +60,7 @@ const Chuuuunes: React.FC<TunesProps> = ({ discography, equipment }) => {
           src="/images/tunes.jpeg"
           priority
         />
+        <div className="fade-mask"></div>
       </div>
       <SEO title="Contact" thumbnail={undefined} />
 
