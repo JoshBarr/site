@@ -25,11 +25,17 @@ type SongCredit = {
   contribution: string;
 };
 
-type TunesProps = {
-  discography: SongCredit[];
+type Equipment = {
+  category: string;
+  items: string[];
 };
 
-const Chuuuunes: React.FC<TunesProps> = ({ discography }) => {
+type TunesProps = {
+  discography: SongCredit[];
+  equipment: Equipment[];
+};
+
+const Chuuuunes: React.FC<TunesProps> = ({ discography, equipment }) => {
   const [time, setTime] = useState<string | undefined>();
 
   useEffect(() => {
@@ -52,6 +58,7 @@ const Chuuuunes: React.FC<TunesProps> = ({ discography }) => {
           height={2267}
           alt=""
           src="/images/tunes.jpeg"
+          priority
         />
       </div>
       <SEO title="Contact" thumbnail={undefined} />
@@ -104,6 +111,28 @@ const Chuuuunes: React.FC<TunesProps> = ({ discography }) => {
             loading="lazy"
           ></iframe>
         </div>
+
+        <h2 className="theme-text tiny-caps section-small font-book">
+          Equipment
+        </h2>
+        <p className="theme-text">
+          If you'd like to collaborate on a project, I can provide the
+          following:
+        </p>
+        <div className="grid section-small">
+          {equipment.map((list) => {
+            return (
+              <div className="theme-text" key={list.category}>
+                <h4 className="font-book tiny-caps mb2">{list.category}</h4>
+                <ul className="small">
+                  {list.items.map((item) => {
+                    return <li key={item}>{item}</li>;
+                  })}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </Layout>
   );
@@ -150,10 +179,53 @@ export const getStaticProps: GetStaticProps<TunesProps> = () => {
     },
   ];
 
+  const equipment: Equipment[] = [
+    {
+      category: "Guitars",
+      items: [
+        "Fender American Special Telecaster",
+        "Epiphone Les Paul Standard (hot-rodded)",
+        "Cole Clarke FL2",
+        "Fender Player Series P-Bass",
+      ],
+    },
+    {
+      category: "Amplifiers",
+      items: ["Vox AC30 CC combo", "Ampeg BA112 combo"],
+    },
+    {
+      category: "Effects",
+      items: [
+        "Boss DD500",
+        "Boss DD20",
+        "Blackstar HT-Dist Tube preamp",
+        "Crowther Hotcake",
+        "Korg Pitchblack+",
+        "Line 6 DL4",
+        "Line 6 Helix Floor",
+        "Line 6 Pod X3",
+      ],
+    },
+    {
+      category: "Microphones",
+      items: [
+        "Vanguard v13 tube mic",
+        "Beesneez BU87ic (u87 clone)",
+        "Austrian Audio OC818",
+        "Austrian Audio OC18",
+        "Austrian Audio CC8 (pair)",
+        "Telefunken M80-SH",
+        "Beyerdynamic TG D70",
+        "Beyerdynamic TG D71c",
+      ],
+    },
+  ];
+
   return {
     props: {
       isDark: true,
       discography,
+      equipment,
     },
   };
 };

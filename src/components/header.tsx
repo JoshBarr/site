@@ -99,6 +99,7 @@ const Header = ({ siteTitle, theme }: HeaderProps) => (
               alt={"Josh Barr"}
               width={"142"}
               height={"107"}
+              priority
             />
             <span className="logo__wordmark">{siteTitle}</span>
           </Link>
