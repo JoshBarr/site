@@ -83,7 +83,22 @@ const Chuuuunes: React.FC<TunesProps> = ({ discography, equipment }) => {
           </figcaption>
         </div>
 
-        <h2 className="theme-text tiny-caps font-book">Discography</h2>
+        <h2 className="theme-text tiny-caps font-book">Latest</h2>
+
+        <div className="measure">
+          <iframe
+            width="100%"
+            height="300"
+            scrolling="no"
+            frameBorder="no"
+            allow="autoplay"
+            src="https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/765088174&color=%23ff5500&auto_play=false&hide_related=false&show_comments=true&show_user=true&show_reposts=false&show_teaser=true&visual=true"
+          ></iframe>
+        </div>
+
+        <h2 className="theme-text tiny-caps font-book section-small">
+          Discography
+        </h2>
 
         <div className="grid grid-three">
           {discography.map((disco) => {
