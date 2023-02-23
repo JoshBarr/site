@@ -19,7 +19,7 @@ export default function JoshBarrSite({ Component, pageProps }) {
     document.body.className = `theme-body theme--${
       pageProps.isDark ? "hero" : "light"
     }`;
-  });
+  }, [pageProps]);
 
   return (
     <>

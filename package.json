@@ -6,7 +6,11 @@
   "author": "Josh Barr <josh@joshbarr.com>",
   "dependencies": {
     "@next/font": "^13.1.6",
+    "@react-spring/web": "^9.6.1",
+    "@react-three/drei": "^9.56.25",
+    "@react-three/fiber": "^8.11.2",
     "@types/fs-extra": "^11.0.1",
+    "@types/three": "^0.149.0",
     "change-case": "^4.1.2",
     "fs-extra": "^11.1.0",
     "gray-matter": "^4.0.3",
@@ -16,6 +20,7 @@
     "react": "18",
     "react-dom": "18",
     "react-wrap-balancer": "^0.4.0",
+    "three": "^0.149.0",
     "typescript": "^4.9.5",
     "yaml": "^2.2.1"
   },

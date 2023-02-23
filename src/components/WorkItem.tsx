@@ -13,7 +13,7 @@ export interface WorkItemType {
   year?: number;
   link?: string;
   technologies?: string[];
-  isSquare?: boolean;
+  className?: string;
 }
 
 export const IMG_HEIGHT = 472;
@@ -21,7 +21,7 @@ export const IMG_WIDTH = 830;
 
 const WorkBody = ({ work }: { work: WorkItemType }) => {
   return (
-    <div className={`${styles.workItem} mb2`}>
+    <div className={`${styles.workItem} mb2 ${work.className}`}>
       <Image
         src={work.image}
         alt={work.imageAlt}

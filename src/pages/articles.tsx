@@ -3,7 +3,6 @@ import PostListing from "../components/PostListing";
 
 import Layout from "../components/layout";
 import SEO from "../components/seo";
-import Link from "next/link";
 import { GetStaticProps } from "next";
 import { getAllPosts, PostMetaWithFrontMatter } from "../lib/blog";
 

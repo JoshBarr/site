@@ -1167,11 +1167,31 @@ h1 {
   }
 }
 
-.logo {
-  width: 48px;
-  height: 32px;
-  margin-bottom: 0;
+.logo-container {
+  display: inline-block;
+}
 
+.jump-to-top {
+  display: none;
+}
+@media only screen and (min-width: 1000px) {
+  .jump-to-top {
+    display: block;
+  }
+
+  .logo-container {
+    position: fixed;
+    left: 42px;
+    top: calc(1vw + 5px);
+    /* top: 16px; */
+    z-index: 2;
+  }
+}
+
+.logo {
+  width: 36px;
+  height: 24px;
+  margin-bottom: 0;
   vertical-align: middle;
   /* border: solid 1px hsla(0, 0%, 0%, 0.12); */
   /* padding: 0.5rem; */
@@ -1190,7 +1210,9 @@ h1 {
 .logo__wordmark {
   display: none;
   vertical-align: middle;
-  padding-top: 0.125em;
+  padding-top: 0.5em;
+  padding-bottom: 0.5em;
+  /* padding-left: 56px; */
 }
 
 @media only screen and (min-width: 700px) {
@@ -1465,13 +1487,12 @@ fieldset {
   color: #0032c6;
 }
 
-#mc_embed_signup div.mce_inline_error {
-  background-color: transparent !important;
-  color: #bf1d00 !important;
+.relative {
+  position: relative;
 }
 
-#mc_embed_signup input.mce_inline_error {
-  border-color: #bf1d00 !important;
+.z-1 {
+  z-index: 1;
 }
 
 @media print {

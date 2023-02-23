@@ -28,7 +28,10 @@ const Bookmarks: React.FC<BookmarksPageProps> = ({ bookmarks }) => (
       <div>
         {bookmarks.map((group, index) => {
           return (
-            <div className={` theme-border ${index > 0 ? "keyline--top" : ""}`}>
+            <div
+              key={group.name}
+              className={` theme-border ${index > 0 ? "keyline--top" : ""}`}
+            >
               <h2>{group.name}</h2>
               <div className="grid grid-three">
                 {group.bookmarks.map((bookmark) => (
