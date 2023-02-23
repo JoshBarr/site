@@ -621,7 +621,7 @@ pre tt:after {
   font-size: 11px;
 }
 
-body {
+. body {
   font-size: 15px;
   line-height: calc(21 / 15);
 }
@@ -714,10 +714,6 @@ h1 {
   grid-template-columns: repeat(6, [col-start] 1fr);
 }
 
-.grid.grid-three {
-  grid-template-columns: 1fr 1fr 1fr;
-}
-
 .grid-span-12 {
   grid-column: span 12;
 }
@@ -747,6 +743,10 @@ h1 {
 }
 
 @media only screen and (min-width: 700px) {
+  .grid.grid-three {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+
   .grid.grid-odd {
     grid-template-columns: repeat(8, [col-start] 1fr);
   }
@@ -1168,7 +1168,7 @@ h1 {
 }
 
 .logo-container {
-  display: inline-block;
+  position: fixed;
 }
 
 .jump-to-top {
@@ -1180,7 +1180,6 @@ h1 {
   }
 
   .logo-container {
-    position: fixed;
     left: 42px;
     top: calc(1vw + 5px);
     /* top: 16px; */
@@ -1265,6 +1264,9 @@ h1 {
   font-weight: 400;
 }
 
+.font-book {
+  font-weight: 400;
+}
 .hero__social {
   margin-bottom: 0;
 }

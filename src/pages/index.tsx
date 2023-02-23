@@ -39,7 +39,11 @@ const IndexPage: React.FC<IndexPageProps> = ({
     <div className="hero theme-text relative">
       <div className="container">
         <h1 className="hero__title section-top theme-display-weight ">
-          Code. Pixels. Tunes.
+          Code. Pixels.{" "}
+          <Link href="/tunes" className="theme-link">
+            Tunes
+          </Link>
+          .
         </h1>
         <p className="hero__subtitle font-display theme-display-weight">
           I'm a UX Engineer, designer, guitarist and live audio engineer, from

@@ -1,0 +1,27 @@
+.tunesBackground {
+  position: absolute;
+  top: -5vw;
+}
+
+.tunesBackground > img {
+  max-width: 100%;
+  height: auto;
+  margin-bottom: 0;
+}
+
+.tunesPhotoCredit {
+}
+
+.tunesHero {
+  min-height: 60vw;
+}
+
+@media screen and (min-width: 1000px) {
+  .tunesBackground {
+    top: -30vh;
+  }
+
+  .tunesHero {
+    min-height: 100vh;
+  }
+}

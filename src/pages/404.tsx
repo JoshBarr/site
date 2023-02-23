@@ -9,7 +9,7 @@ const NotFoundPage = () => (
     <SEO title="404: Not found" />
     <div className="container generic-page">
       <h1 className="theme-text hero__title section-top">Not found.</h1>
-      <p className="hero__subtitle">Palpable sadness.</p>
+      <p className="hero__subtitle theme-body-text">Palpable sadness.</p>
     </div>
   </Layout>
 );
