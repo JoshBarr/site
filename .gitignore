@@ -69,3 +69,5 @@ yarn-error.log
 
 # next.js
 .next
+.env
+.env.local

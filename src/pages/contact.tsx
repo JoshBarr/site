@@ -1,7 +1,10 @@
-import { GetStaticProps } from "next";
+import { GetServerSideProps, GetStaticProps } from "next";
 import React, { useEffect, useState } from "react";
+import { Forecast } from "../components/Forecast";
 import Layout from "../components/layout";
 import SEO from "../components/seo";
+import { MetserviceForecast } from "../lib/types/metservice";
+import { getForecast, kelvinToCelcius, humanTemp } from "../lib/weather";
 
 const getTime = () => {
   const options: Intl.DateTimeFormatOptions = {
@@ -15,7 +18,11 @@ const getTime = () => {
   return formatter.format(new Date());
 };
 
-const Contact = () => {
+type ContactProps = {
+  forecast: MetserviceForecast | null;
+};
+
+const Contact: React.FC<ContactProps> = ({ forecast }) => {
   const [time, setTime] = useState<string | undefined>();
 
   useEffect(() => {
@@ -30,7 +37,7 @@ const Contact = () => {
     return () => {
       clearInterval(interval);
     };
-  }, []);
+  }, [setTime]);
 
   return (
     <Layout theme="theme--hero">
@@ -51,16 +58,30 @@ const Contact = () => {
         <div className="hero__article theme-text">
           {time ? <p>Right now, it's {time} in New Zealand</p> : null}
         </div>
+        {forecast ? <Forecast forecast={forecast} /> : null}
       </div>
     </Layout>
   );
 };
 
-export const getStaticProps: GetStaticProps = () => {
+export const getStaticProps: GetStaticProps<ContactProps> = async () => {
+  const forecastResponse = await getForecast();
+
+  let forecast: MetserviceForecast | null = null;
+
+  if ("error" in forecastResponse) {
+    // skip showing the forecast
+  } else {
+    forecast = forecastResponse;
+  }
+
   return {
     props: {
       isDark: true,
+      forecast,
     },
+    // metservice rate limit is 50,000/month
+    revalidate: 120,
   };
 };
 
