@@ -1,21 +1,9 @@
 import { GetStaticProps } from "next";
-import React, { useEffect, useState } from "react";
+import React from "react";
 import Image from "next/image";
 import Layout from "../components/layout";
 import SEO from "../components/seo";
 import styles from "../components/Tunes.module.css";
-
-const getTime = () => {
-  const options: Intl.DateTimeFormatOptions = {
-    hour12: true,
-    timeZone: "Pacific/Auckland",
-    hour: "numeric",
-    minute: "numeric",
-  };
-
-  const formatter = new Intl.DateTimeFormat([], options);
-  return formatter.format(new Date());
-};
 
 type SongCredit = {
   track: string;
@@ -36,19 +24,6 @@ type TunesProps = {
 };
 
 const Chuuuunes: React.FC<TunesProps> = ({ discography, equipment }) => {
-  const [time, setTime] = useState<string | undefined>();
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const time = getTime();
-      setTime(time);
-    }, 30 * 1000);
-
-    return () => {
-      clearInterval(interval);
-    };
-  }, []);
-
   return (
     <Layout theme="theme--hero">
       <div className={styles.tunesBackground}>
@@ -62,7 +37,7 @@ const Chuuuunes: React.FC<TunesProps> = ({ discography, equipment }) => {
         />
         <div className="fade-mask"></div>
       </div>
-      <SEO title="Contact" thumbnail={undefined} />
+      <SEO title="Tunes" thumbnail={undefined} />
 
       <div className="container generic-page relative">
         <div className={styles.tunesHero}>
