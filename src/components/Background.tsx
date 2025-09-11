@@ -134,7 +134,7 @@ function Terrain(props: { position: number[] }) {
 
     noise.randomSeed(Math.random());
     let pos = geometry.getAttribute("position");
-    const pa = (pos as BufferAttribute).array as Array<number>;
+    const pa = (pos as BufferAttribute).array;
     const hVerts = (geometry as any).parameters.heightSegments + 1;
     const wVerts = (geometry as any).parameters.widthSegments + 1;
     for (let j = 0; j < hVerts; j++) {
