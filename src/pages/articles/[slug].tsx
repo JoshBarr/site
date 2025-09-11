@@ -1,5 +1,4 @@
 import React from "react";
-import Balancer from "react-wrap-balancer";
 
 import SEO from "../../components/seo";
 import Layout from "../../components/layout";
@@ -24,9 +23,7 @@ export default function ArticlePage({ source, frontMatter }: ArticleProps) {
       <SEO title={`${frontMatter.title}`} description={frontMatter.blurb} />
       <div className="container">
         <div className="section-top theme-text">
-          <h1 className="">
-            <Balancer>{frontMatter.title}</Balancer>
-          </h1>
+          <h1 className="">{frontMatter.title}</h1>
         </div>
 
         <div className="split section-small">

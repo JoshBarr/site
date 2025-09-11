@@ -1,5 +1,5 @@
 import "../components/layout.css";
-import { IBM_Plex_Sans, IBM_Plex_Mono } from "@next/font/google";
+import { IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import { useEffect } from "react";
 
 const plex = IBM_Plex_Sans({

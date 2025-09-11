@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { useLayoutEffect, useMemo, useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { BufferAttribute, MathUtils, Mesh, ShaderMaterial } from "three";
 import * as noise from "../lib/perlin";
@@ -127,7 +127,7 @@ void main() {
 
 function Terrain(props: { position: number[] }) {
   // This reference gives us direct access to the THREE.Mesh object
-  const ref = useRef<Mesh>();
+  const ref = useRef<Mesh>(null);
 
   useLayoutEffect(() => {
     const { geometry } = ref.current;

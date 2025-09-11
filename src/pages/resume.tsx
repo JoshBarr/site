@@ -2,7 +2,7 @@ import React from "react";
 
 import SEO from "../components/seo";
 import styles from "./resume.module.css";
-import { Merriweather } from "@next/font/google";
+import { Merriweather } from "next/font/google";
 
 const merriweather = Merriweather({
   subsets: ["latin"],

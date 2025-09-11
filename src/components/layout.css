@@ -621,7 +621,7 @@ pre tt:after {
   font-size: 11px;
 }
 
-. body {
+.body {
   font-size: 15px;
   line-height: calc(21 / 15);
 }
@@ -934,7 +934,9 @@ h1 {
 }
 
 .panel {
-  box-shadow: 0 3px 3px hsla(0, 0%, 0%, 0.04), 0px 0px 1px rgba(0, 0, 0, 0.3);
+  box-shadow:
+    0 3px 3px hsla(0, 0%, 0%, 0.04),
+    0px 0px 1px rgba(0, 0, 0, 0.3);
   border-radius: 3px;
   padding: 1.75rem 1.75rem 0.25rem;
 }

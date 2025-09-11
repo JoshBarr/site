@@ -2,7 +2,7 @@ import path from "path";
 import matter from "gray-matter";
 import fs from "fs/promises";
 import fsExtra from "fs-extra";
-import { paramCase } from "change-case";
+import { kebabCase } from "change-case";
 
 export const POSTS_PATH = path.join(process.cwd(), "src", "blog");
 
@@ -43,7 +43,7 @@ function sortByDate(a: FrontMatter, b: FrontMatter) {
 }
 
 function getSlug(filePath: string) {
-  return paramCase(filePath.replace(MDX_REGEX, ""));
+  return kebabCase(filePath.replace(MDX_REGEX, ""));
 }
 
 export async function getPostSlugs() {
@@ -117,11 +117,11 @@ export async function getAllPostsByTag() {
   }
 
   return Object.entries(tags).map(([tagName, posts]) => {
-    const slug = paramCase(tagName);
+    const slug = kebabCase(tagName);
 
     return {
       name: tagName,
-      slug: paramCase(tagName),
+      slug: kebabCase(tagName),
       posts,
       count: posts.length,
       permalink: `/tags/${slug}`,

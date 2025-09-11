@@ -5,48 +5,43 @@
   "version": "0.1.0",
   "author": "Josh Barr <josh@joshbarr.com>",
   "dependencies": {
-    "@next/font": "^13.1.6",
-    "@react-spring/web": "^9.6.1",
-    "@react-three/drei": "^9.56.25",
-    "@react-three/fiber": "^8.11.2",
-    "@types/fs-extra": "^11.0.1",
-    "@types/three": "^0.149.0",
-    "change-case": "^4.1.2",
-    "fs-extra": "^11.1.0",
-    "gray-matter": "^4.0.3",
-    "joi": "^17.3.0",
-    "next": "^13.1.6",
-    "next-mdx-remote": "^4.3.0",
-    "react": "18",
-    "react-dom": "18",
-    "react-wrap-balancer": "^0.4.0",
-    "three": "^0.149.0",
-    "typescript": "^4.9.5",
-    "yaml": "^2.2.2"
+    "@react-three/fiber": "9.3.0",
+    "@react-spring/web": "10.0.2",
+    "change-case": "5.4.4",
+    "fs-extra": "^11.3.0",
+    "next": "15.5.3",
+    "gray-matter": "4.0.3",
+    "next-mdx-remote": "^5.0.0",
+    "react": "19.1.1",
+    "react-dom": "19.1.1",
+    "three": "0.180.0",
+    "typescript": "^5.9.2",
+    "yaml": "^2.8.1"
   },
-  "keywords": [
-    "gatsby"
-  ],
+  "keywords": [],
   "license": "MIT",
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
     "format": "prettier --write \"src/**/*.js\""
   },
   "devDependencies": {
     "@types/node": "18.13.0",
-    "@types/react": "18.0.28",
+    "@types/react": "19.1.12",
+    "@types/three": "0.180.0",
     "dotenv": "^8.2.0",
-    "prettier": "^2.2.1",
-    "request": "^2.88.0",
+    "prettier": "^3.6.2",
     "run.env": "^1.1.0"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/gatsbyjs/gatsby-starter-default"
+    "url": "https://github.com/joshbarr/site"
   },
   "bugs": {
-    "url": "https://github.com/gatsbyjs/gatsby/issues"
+    "url": "https://github.com/joshbarr/site/issues"
+  },
+  "resolutions": {
+    "@types/react": "19.1.12"
   }
 }
