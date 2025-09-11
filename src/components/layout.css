@@ -644,7 +644,8 @@ h1 {
 }
 
 .hero__subtitle {
-  font-size: calc(1em + 0.25vw); /* 19px */
+  margin-top: 2rem;
+  font-size: calc(1em + 0.75vw); /* 19px */
   /* line-height: 1.4; */
 }
 

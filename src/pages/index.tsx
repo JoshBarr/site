@@ -38,30 +38,22 @@ const IndexPage: React.FC<IndexPageProps> = ({
 
     <div className="hero theme-text relative">
       <div className="container">
-        <h1 className="hero__title section-top theme-display-weight ">
-          Code. Pixels.{" "}
-          <Link href="/tunes" className="theme-link">
-            Tunes
-          </Link>
-          .
-        </h1>
         <p className="hero__subtitle font-display theme-display-weight">
-          I'm a UX Engineer, designer, guitarist and live audio engineer, from
-          Wellington, New Zealand. I help companies build scalable, secure web
-          applications and beautiful user experiences.
+          I'm a Principal Software Engineer and guitarist, from Wellington, New
+          Zealand. I solve gnarly software challenges at scale 🤙
         </p>
         <ul className="list-inline hero__social">
-          <li>
-            <a className="theme-link" href="https://twitter.com/joshbarrnz">
-              Twitter ⟶
-            </a>
-          </li>
           <li>
             <a
               className="theme-link"
               href="https://www.linkedin.com/in/josh-barr-1291572a/"
             >
               LinkedIn ⟶
+            </a>
+          </li>
+          <li>
+            <a className="theme-link" href="https://twitter.com/joshbarrnz">
+              X ⟶
             </a>
           </li>
         </ul>
