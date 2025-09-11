@@ -201,7 +201,7 @@ export const getStaticProps: GetStaticProps<TunesProps> = () => {
       category: "Microphones",
       items: [
         "Vanguard v13 tube mic",
-        "Beesneez BU87ic (u87 clone)",
+        "Beesneez BU87ic (pair)",
         "Austrian Audio OC818",
         "Austrian Audio OC18",
         "Austrian Audio CC8 (pair)",
