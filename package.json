@@ -9,7 +9,7 @@
     "@react-spring/web": "10.0.2",
     "change-case": "5.4.4",
     "fs-extra": "^11.3.0",
-    "next": "15.5.3",
+    "next": "15.5.8",
     "gray-matter": "4.0.3",
     "next-mdx-remote": "^5.0.0",
     "react": "19.1.1",
