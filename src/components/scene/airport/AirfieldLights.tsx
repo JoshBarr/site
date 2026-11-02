@@ -9,9 +9,6 @@ import {
 import {
   atan,
   cameraPosition,
-  clamp,
-  cross,
-  exp,
   float,
   instancedBufferAttribute,
   max,
@@ -20,11 +17,11 @@ import {
   sqrt,
   step,
   uniform,
-  uv,
   vec2,
   vec3,
 } from "three/tsl";
 import { hazeTransmittance } from "../haze";
+import { distantDim, lampGlow, rowShare } from "../lamps";
 import { pixelAngle } from "../landmarks/common";
 import { nztmToWorld, TileIndex } from "../terrain/manifest";
 import { verticalScale } from "../terrain/Terrain";
@@ -43,12 +40,6 @@ const LAMP_HEIGHT = 0.4;
 
 /** Glow size, metres, and never smaller than this many pixels. */
 const SIZE = 2;
-
-/** Of a sprite's width, what its core covers: where neighbours stack up. */
-const CORE = 0.5;
-
-/** Beyond this, metres, lights dim with distance as well. */
-const NEAR = 4000;
 
 // The buildings' warm white, so the airport sits in with the city.
 const WHITE: Colour = [1, 0.96, 0.9];
@@ -220,26 +211,16 @@ export function AirfieldLights({
     const scale = max(float(SIZE), distance.mul(pixelAngle).mul(a.w));
     material.scaleNode = scale;
 
-    // Drawn bigger than life, a row's lights pile up on screen, more so seen
-    // end on: each gives its share, so the row reads as one light's worth
-    // per core's width, not a bar of glare. Taxiway lights stand in no
-    // straight row; theirs is taken as square on.
-    const row = vec3(d.x, 0, d.y);
-
-    const square = mix(
-      float(1),
-      cross(toCamera.div(distance), row).length(),
-      row.length()
-    );
-
-    const share = clamp(
-      d.z.mul(square).div(scale.mul(CORE)),
-      float(1).div(d.w),
-      1
-    );
-
-    // Far off, they're points, not lamps.
-    const far = clamp(float(NEAR).div(distance), 0, 1);
+    // Taxiway lights stand in no straight row; a row never dims below one
+    // light's worth.
+    const share = rowShare({
+      toCamera,
+      distance,
+      row: vec3(d.x, 0, d.y),
+      spacing: d.z,
+      size: scale,
+      least: float(1).div(d.w),
+    });
 
     // Directed lights fade out as the view swings round behind them.
     const level = vec2(toCamera.x, toCamera.z);
@@ -257,12 +238,14 @@ export function AirfieldLights({
       papi.mul(c.w.sign())
     );
 
-    const r = uv().sub(0.5).length().mul(2);
-    // A hot core in a soft halo.
-    const glow = exp(r.mul(r).mul(-40)).add(exp(r.mul(-4.5)).mul(0.3));
-    const fade = float(1).sub(smoothstep(0.85, 1, r));
     material.colorNode = colour
-      .mul(glow.mul(fade).mul(shown).mul(step(b.w, on)).mul(share).mul(far))
+      .mul(
+        lampGlow(0.3)
+          .mul(shown)
+          .mul(step(b.w, on))
+          .mul(share)
+          .mul(distantDim(distance))
+      )
       .mul(sqrt(hazeTransmittance(cameraPosition, position)));
 
     const object = new Sprite(material);
