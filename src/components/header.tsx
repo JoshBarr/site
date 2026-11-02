@@ -119,12 +119,12 @@ const Header = ({ siteTitle, theme }: HeaderProps) => (
           >
             Bookmarks
           </Link>
-          <Link
+          <a
             className="theme-link-selectable theme-link-secondary"
-            href="/contact"
+            href="mailto:josh@joshbarr.com"
           >
-            Contact
-          </Link>
+            josh@joshbarr.com
+          </a>
         </nav>
       </div>
     </div>

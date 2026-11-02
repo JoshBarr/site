@@ -71,3 +71,9 @@ yarn-error.log
 .next
 .env
 .env.local
+# terrain pipeline
+.venv-terrain/
+.cache/
+tsconfig.tsbuildinfo
+.neon
+__pycache__/

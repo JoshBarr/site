@@ -4,7 +4,7 @@ import { useEffect } from "react";
 
 const plex = IBM_Plex_Sans({
   subsets: ["latin"],
-  weight: ["400", "500", "700"],
+  weight: ["300", "400", "500", "700", "600"],
   style: ["normal", "italic"],
 });
 
@@ -31,6 +31,11 @@ export default function JoshBarrSite({ Component, pageProps }) {
         .header,
         .font-secondary {
           font-family: ${plexMono.style.fontFamily}, sans-serif;
+        }
+
+        .font-secondary-italic {
+          font-family: ${plexMono.style.fontFamily}, sans-serif;
+          font-style: italic;
         }
       `}</style>
       <Component {...pageProps} />
