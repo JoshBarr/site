@@ -110,3 +110,15 @@ export const KAUKAU: Site = [1749122.1, 5433792.4, 426.3];
 
 /** The lattice communications tower by the Mt Victoria lookout. */
 export const MT_VICTORIA: Site = [1750424.4, 5426825.0, 187.7];
+
+/** The first Pencarrow lighthouse (1859), on the head; dark since 1935. */
+export const PENCARROW: Site = [1754747.3, 5419748.9, 90.4];
+
+/** Pencarrow's lower light (1906), by the shore below it. */
+export const PENCARROW_LOWER: Site = [1754568.5, 5419702.5, 2.9];
+
+/** Baring Head lighthouse (1935), the harbour's landfall light. */
+export const BARING_HEAD: Site = [1756394.9, 5414250.4, 80.4];
+
+/** Point Halswell light, at the tip of the Miramar peninsula. */
+export const POINT_HALSWELL: Site = [1752922.6, 5428124.8, 0.1];

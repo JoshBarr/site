@@ -346,7 +346,7 @@ export function Ocean({
 
   return (
     <>
-      <primitive object={mesh} />
+      <primitive object={mesh} name="ocean" />
       <primitive object={mirror.target} />
     </>
   );

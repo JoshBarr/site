@@ -28,6 +28,8 @@ export interface ObstructionLight {
   position: [number, number, number];
   /** Medium-intensity lights on turbines flash, each on its own clock. */
   flashing?: boolean;
+  /** Low-intensity, like the cranes': drawn smaller than towers' lights. */
+  low?: boolean;
 }
 
 /** Flashes per minute for flashing lights, as seen at Wellington's farms. */
@@ -53,6 +55,9 @@ function hash(i: number, salt: number) {
 const MIN_PIXELS = 14;
 const SIZE = 6;
 
+/** Low-intensity lights' size against the rest. */
+const LOW_SCALE = 0.4;
+
 /** Aviation red lights: steady on towers, flashing on turbines. Off by day. */
 export function ObstructionLights({ lights }: { lights: ObstructionLight[] }) {
   const sprite = useMemo(() => {
@@ -60,12 +65,14 @@ export function ObstructionLights({ lights }: { lights: ObstructionLight[] }) {
     // Phase (0..1 of a cycle), rate (× FLASHES_PER_MINUTE) and how far
     // through lighting-up it comes on, per light: each has its own photocell.
     const timing = new Float32Array(lights.length * 3);
-    lights.forEach(({ position, flashing }, i) => {
+    const scales = new Float32Array(lights.length);
+    lights.forEach(({ position, flashing, low }, i) => {
       data.set([...position, flashing ? 1 : 0], i * 4);
       timing.set(
         [hash(i, 1), 1 + (hash(i, 2) * 2 - 1) * RATE_SPREAD, hash(i, 3)],
         i * 3
       );
+      scales[i] = low ? LOW_SCALE : 1;
     });
 
     const light = instancedBufferAttribute<"vec4">(
@@ -76,6 +83,11 @@ export function ObstructionLights({ lights }: { lights: ObstructionLight[] }) {
     const clock = instancedBufferAttribute<"vec3">(
       new InstancedBufferAttribute(timing, 3),
       "vec3"
+    );
+
+    const scale = instancedBufferAttribute<"float">(
+      new InstancedBufferAttribute(scales, 1),
+      "float"
     );
 
     const position = light.xyz;
@@ -94,7 +106,7 @@ export function ObstructionLights({ lights }: { lights: ObstructionLight[] }) {
     material.scaleNode = max(
       float(SIZE),
       distance.mul(pixelAngle).mul(MIN_PIXELS)
-    );
+    ).mul(scale);
 
     const period = 60 / FLASHES_PER_MINUTE;
     // Seconds into this light's cycle.
@@ -131,5 +143,5 @@ export function ObstructionLights({ lights }: { lights: ObstructionLight[] }) {
     sprite.visible = obstructionLights.value > 0;
   });
 
-  return <primitive object={sprite} />;
+  return <primitive object={sprite} name="obstruction lights" />;
 }

@@ -94,6 +94,7 @@ export function createLights(data: Float32Array, material: SpriteNodeMaterial) {
   );
 
   const sprite = new Sprite(material);
+  sprite.name = "window lights";
   sprite.geometry = geometry;
   sprite.count = data.length / STRIDE;
   sprite.frustumCulled = false;

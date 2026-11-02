@@ -101,6 +101,12 @@ const LIGHT_SIZE = 1;
 /** Small: a couple of bright pixels at range. */
 const LIGHT_PIXELS = 8;
 
+/**
+ * A moored boat's all-round light is a dim one, and marinas are full of
+ * them: at full strength they piled up into blooms bigger than any house.
+ */
+const ANCHOR_LIGHT = 0.15;
+
 /** Sidelights show from dead ahead to 22.5° abaft the beam; the stern the rest. */
 const SIDELIGHT_ARC = (112.5 * Math.PI) / 180;
 
@@ -976,7 +982,7 @@ export function Vessels({
             on * (1 - inArc(bearing, -SIDELIGHT_ARC, SIDELIGHT_ARC))
           );
         } else {
-          show(at.anchor, NAV_WHITE, on);
+          show(at.anchor, NAV_WHITE, on * ANCHOR_LIGHT);
         }
       }
 
@@ -1012,12 +1018,12 @@ export function Vessels({
 
   return (
     <>
-      <primitive object={meshes.hulls} />
+      <primitive object={meshes.hulls} name="ships" />
       <primitive object={meshes.parts} />
       <primitive object={meshes.wakes} />
-      <primitive object={trails.past.lines} />
+      <primitive object={trails.past.lines} name="ship trails" />
       <primitive object={trails.heads.lines} />
-      <primitive object={sprites.sprite} />
+      <primitive object={sprites.sprite} name="ship lights" />
     </>
   );
 }

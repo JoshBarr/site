@@ -17,6 +17,16 @@ import { nztmToWorld, TileIndex } from "../terrain/manifest";
 import { verticalScale } from "../terrain/Terrain";
 import { obstructionLights, usePixelAngle } from "./common";
 import { LatticeTower, towerLights } from "./LatticeTower";
+import { Lighthouses, PlacedLighthouse } from "./Lighthouses";
+import {
+  BARING_HEAD,
+  LighthouseSpec,
+  lighthouseHeight,
+  lighthouseRadius,
+  PENCARROW,
+  PENCARROW_LOWER,
+  POINT_HALSWELL,
+} from "./lighthouseGeometry";
 import { useNearShadow } from "./nearShadow";
 import {
   KAUKAU_TOWER,
@@ -26,6 +36,7 @@ import {
   widthAt,
 } from "./latticeGeometry";
 import { ObstructionLights } from "./ObstructionLights";
+import * as sites from "./sites";
 import {
   BROOKLYN,
   KAUKAU,
@@ -73,6 +84,24 @@ function turbineSubjects(
   ];
 }
 
+/** What autofocus sees of a lighthouse: its tower. */
+function lighthouseSubject({ spec, position }: PlacedLighthouse): FocusSubject {
+  return {
+    kind: "post",
+    base: position,
+    height: lighthouseHeight(spec),
+    radius: (height) => lighthouseRadius(spec, height),
+  };
+}
+
+/** Each lighthouse and where it stands. */
+const LIGHTHOUSES: [LighthouseSpec, Site][] = [
+  [PENCARROW, sites.PENCARROW],
+  [PENCARROW_LOWER, sites.PENCARROW_LOWER],
+  [BARING_HEAD, sites.BARING_HEAD],
+  [POINT_HALSWELL, sites.POINT_HALSWELL],
+];
+
 /** What autofocus sees of a container crane: a fat post as tall as it. */
 function craneSubject(spec: CraneSpec, crane: PlacedCrane): FocusSubject {
   return {
@@ -94,9 +123,9 @@ const CRANE_POSES: CranePose[] = [
 
 /**
  * Wellington's wind turbines and transmitter towers, CentrePort's cranes
- * and container stacks, standing on the
+ * and container stacks, and the harbour's lighthouses, standing on the
  * terrain and casting shadows on it. `lights` (0..1) turns on their aviation
- * lights, for night.
+ * lights and the lighthouses, for night.
  */
 export function Landmarks({
   index,
@@ -139,12 +168,18 @@ export function Landmarks({
       pose: CRANE_POSES[i % CRANE_POSES.length],
     }));
 
+    const lighthouses: PlacedLighthouse[] = LIGHTHOUSES.map(([spec, site]) => ({
+      spec,
+      position: place(site),
+    }));
+
     return {
       siemens: [...westWind, ...millCreek],
       brooklyn,
       kaukau,
       mtVictoria,
       cranes,
+      lighthouses,
       lights: [
         ...turbineLights(SWT_2_3_82, westWind),
         ...turbineLights(SWT_2_3_82, millCreek),
@@ -160,6 +195,7 @@ export function Landmarks({
         towerSubject(KAUKAU_TOWER, kaukau),
         towerSubject(MT_VICTORIA_TOWER, mtVictoria),
         ...cranes.map((crane) => craneSubject(CENTREPORT_CRANE, crane)),
+        ...lighthouses.map(lighthouseSubject),
       ],
     };
   }, [index]);
@@ -174,6 +210,7 @@ export function Landmarks({
       <LatticeTower spec={MT_VICTORIA_TOWER} position={placed.mtVictoria} />
       <ContainerCranes spec={CENTREPORT_CRANE} cranes={placed.cranes} />
       <ContainerYard index={index} yard={YARD} wharfBearing={WHARF_BEARING} />
+      <Lighthouses lighthouses={placed.lighthouses} />
       <ObstructionLights lights={placed.lights} />
     </>
   );

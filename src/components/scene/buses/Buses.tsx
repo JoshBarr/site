@@ -307,9 +307,9 @@ function Fleet({
 
   return (
     <>
-      <primitive object={fleet.mesh} />
-      <primitive object={trails.lines} />
-      <primitive object={sprites.sprite} />
+      <primitive object={fleet.mesh} name="buses" />
+      <primitive object={trails.lines} name="bus trails" />
+      <primitive object={sprites.sprite} name="bus lights" />
     </>
   );
 }

@@ -263,5 +263,5 @@ export function AirfieldLights({
     sprite.visible = on.value > 0;
   });
 
-  return <primitive object={sprite} />;
+  return <primitive object={sprite} name="airfield lights" />;
 }

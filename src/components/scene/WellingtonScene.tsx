@@ -374,10 +374,12 @@ function Controls({
     if (camera.position.y !== allowed) {
       const { x, z } = camera.position;
 
-      if (shot) {
-        camera.position.y = allowed;
-        camera.lookAt(shot.target);
-      } else c.setPosition(x, allowed, z, false);
+      // The controls only move the camera when they update, and they've
+      // already done that this frame: without lifting it here too, every
+      // frame of a drag into a hillside renders from under the ground.
+      if (!shot) c.setPosition(x, allowed, z, false);
+      camera.position.y = allowed;
+      camera.lookAt(shot?.target ?? c.getTarget(orbit));
     }
 
     // Pull the near plane in when low so nearby waves and ground aren't cut
@@ -566,6 +568,7 @@ function Sun({
   return (
     <primitive
       object={environment.sunLight}
+      name="sun"
       position={[sunX, sunY, sunZ]}
       intensity={lit}
     />
@@ -597,13 +600,103 @@ function useIsMobile() {
   return mobile;
 }
 
+/** Everything in the Canvas: Wellington at `time`, under `conditions`. */
+export function Scene({
+  index,
+  conditions,
+  time,
+  mobile,
+}: {
+  index: TileIndex;
+  conditions: Conditions;
+  time: Date;
+  mobile: boolean;
+}) {
+  const heightAt = useRef<HeightQuery | null>(null);
+  const sun = useMemo(() => sunPosition(time), [time]);
+  const sea = useMemo(() => seaConditions(conditions), [conditions]);
+  const lights = nightFor(sun.altitude);
+
+  const setHeightQuery = useCallback((query: HeightQuery | null) => {
+    heightAt.current = query;
+  }, []);
+
+  return (
+    <>
+      <ambientLight
+        ref={litForReflections}
+        intensity={0.25 + 0.3 * environment.overcastFor(conditions.cloudCover)}
+      />
+      <Atmosphere
+        rootSize={index.manifest.rootSize}
+        conditions={conditions}
+        night={lights > 0}
+      />
+      <Sun
+        index={index}
+        mobile={mobile}
+        cloudCover={conditions.cloudCover}
+        position={sun}
+      />
+      <Terrain
+        onHeightQuery={setHeightQuery}
+        index={index}
+        quality={mobile ? TERRAIN_MOBILE : TERRAIN_DESKTOP}
+      />
+      <Suspense fallback={null}>
+        <Ocean
+          conditions={sea}
+          index={index}
+          quality={mobile ? OCEAN_MOBILE : OCEAN_DESKTOP}
+        />
+      </Suspense>
+      <Landmarks
+        index={index}
+        wind={conditions.wind}
+        lights={lights}
+        shadowMapSize={mobile ? 2048 : 4096}
+      />
+      <Buildings
+        terrain={index}
+        quality={mobile ? BUILDINGS_MOBILE : BUILDINGS_DESKTOP}
+        lights={lights}
+        occupancy={windowsLitAt(time)}
+      />
+      <Trees
+        terrain={index}
+        quality={mobile ? TREES_MOBILE : TREES_DESKTOP}
+        wind={conditions.wind}
+      />
+      <AirfieldLights index={index} lights={lights} />
+      <Vessels index={index} sea={sea} lights={lights} />
+      <Railway index={index} lights={lights} />
+      <Traffic index={index} lights={lights} time={time} />
+      <Buses index={index} heightAt={heightAt} lights={lights} />
+      <Flights
+        index={index}
+        heightAt={heightAt}
+        lights={lights}
+        windFrom={conditions.wind.direction}
+      />
+      <Clouds
+        conditions={conditions}
+        quality={mobile ? CLOUDS_MOBILE : CLOUDS_DESKTOP}
+        night={lights}
+      />
+      <Controls index={index} heightAt={heightAt} sea={sea} />
+    </>
+  );
+}
+
+/** The Canvas's camera; the controls move its near plane with height. */
+export const CAMERA = { fov: DEFAULT_FOV, near: 5, far: 80000 };
+
 export const WellingtonScene: React.FC<{
   /** False clears the sky (and its rain) whatever the forecast says. */
   clouds?: boolean;
 }> = ({ clouds = true }) => {
   const [index, setIndex] = useState<TileIndex | null>(null);
   const mobile = useIsMobile();
-  const heightAt = useRef<HeightQuery | null>(null);
   const forecast = useConditions();
 
   const conditions = useMemo(
@@ -613,12 +706,6 @@ export const WellingtonScene: React.FC<{
   );
 
   const time = useSceneTime();
-  const sun = useMemo(() => sunPosition(time), [time]);
-  const sea = useMemo(() => seaConditions(conditions), [conditions]);
-
-  const setHeightQuery = useCallback((query: HeightQuery | null) => {
-    heightAt.current = query;
-  }, []);
 
   useEffect(() => {
     loadManifest().then(setIndex, (e) => console.error(e));
@@ -643,77 +730,15 @@ export const WellingtonScene: React.FC<{
 
         return renderer;
       }}
-      camera={{ fov: DEFAULT_FOV, near: 5, far: 80000 }}
+      camera={CAMERA}
     >
-      <ambientLight
-        ref={litForReflections}
-        intensity={0.25 + 0.3 * environment.overcastFor(conditions.cloudCover)}
-      />
-
       {index && (
-        <>
-          <Atmosphere
-            rootSize={index.manifest.rootSize}
-            conditions={conditions}
-            night={nightFor(sun.altitude) > 0}
-          />
-          <Sun
-            index={index}
-            mobile={mobile}
-            cloudCover={conditions.cloudCover}
-            position={sun}
-          />
-          <Terrain
-            onHeightQuery={setHeightQuery}
-            index={index}
-            quality={mobile ? TERRAIN_MOBILE : TERRAIN_DESKTOP}
-          />
-          <Suspense fallback={null}>
-            <Ocean
-              conditions={sea}
-              index={index}
-              quality={mobile ? OCEAN_MOBILE : OCEAN_DESKTOP}
-            />
-          </Suspense>
-          <Landmarks
-            index={index}
-            wind={conditions.wind}
-            lights={nightFor(sun.altitude)}
-            shadowMapSize={mobile ? 2048 : 4096}
-          />
-          <Buildings
-            terrain={index}
-            quality={mobile ? BUILDINGS_MOBILE : BUILDINGS_DESKTOP}
-            lights={nightFor(sun.altitude)}
-            occupancy={windowsLitAt(time)}
-          />
-          <Trees
-            terrain={index}
-            quality={mobile ? TREES_MOBILE : TREES_DESKTOP}
-            wind={conditions.wind}
-          />
-          <AirfieldLights index={index} lights={nightFor(sun.altitude)} />
-          <Vessels index={index} sea={sea} lights={nightFor(sun.altitude)} />
-          <Railway index={index} lights={nightFor(sun.altitude)} />
-          <Traffic index={index} lights={nightFor(sun.altitude)} time={time} />
-          <Buses
-            index={index}
-            heightAt={heightAt}
-            lights={nightFor(sun.altitude)}
-          />
-          <Flights
-            index={index}
-            heightAt={heightAt}
-            lights={nightFor(sun.altitude)}
-            windFrom={conditions.wind.direction}
-          />
-          <Clouds
-            conditions={conditions}
-            quality={mobile ? CLOUDS_MOBILE : CLOUDS_DESKTOP}
-            night={nightFor(sun.altitude)}
-          />
-          <Controls index={index} heightAt={heightAt} sea={sea} />
-        </>
+        <Scene
+          index={index}
+          conditions={conditions}
+          time={time}
+          mobile={mobile}
+        />
       )}
     </Canvas>
   );

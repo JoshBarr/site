@@ -178,5 +178,5 @@ export function ContainerYard({
     [mesh]
   );
 
-  return <primitive object={mesh} />;
+  return <primitive object={mesh} name="container yard" />;
 }

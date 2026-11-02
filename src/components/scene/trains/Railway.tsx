@@ -84,7 +84,7 @@ function Tracks({ network }: { network: RailNetwork }) {
     }
   });
 
-  return <primitive object={group} />;
+  return <primitive object={group} name="railway track" />;
 }
 
 /**
