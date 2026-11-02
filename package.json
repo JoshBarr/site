@@ -43,10 +43,12 @@
   },
   "devDependencies": {
     "@oxlint/plugins": "1.90.0",
+    "@react-three/test-renderer": "9.1.1",
     "@types/node": "24.19.2",
     "@types/react": "19.3.0",
     "@types/three": "0.186.0",
     "draco3d": "1.5.9",
+    "happy-dom": "21.0.4",
     "knip": "6.44.1",
     "meshoptimizer": "1.1.1",
     "msw": "3.0.3",
