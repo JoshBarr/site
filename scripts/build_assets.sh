@@ -10,6 +10,7 @@
 #   trees      public/trees: lidar-found trees (needs terrain's caches)
 #   landcover  public/terrain/landcover.png, with the trees' canopy folded in
 #   buildings  public/buildings (WCC I3S)
+#   heroes     src/components/scene/buildings/heroes.ts: floodlit landmarks (OSM)
 #   airport    public/airport + src/components/scene/airport/airfield.ts
 #   buses      public/buses/routes.json (Metlink GTFS)
 #   landmarks  src/components/scene/landmarks/sites.ts
@@ -26,7 +27,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-ALL=(terrain trees landcover buildings airport buses landmarks port traffic trains)
+ALL=(terrain trees landcover buildings heroes airport buses landmarks port traffic trains)
 VENV=.venv-terrain
 PY="$VENV/bin/python"
 
@@ -68,6 +69,7 @@ wants terrain && run terrain "$PY" -I scripts/terrain/build_tiles.py
 wants trees && run trees "$PY" -I scripts/trees/build_trees.py
 wants landcover && run landcover "$PY" -I scripts/terrain/build_tiles.py landcover
 wants buildings && run buildings node scripts/buildings/build_tiles.mjs
+wants heroes && run heroes node scripts/buildings/build_heroes.mjs
 wants airport && run airport node scripts/airport/build_airfield.mjs
 wants buses && run buses node scripts/buses/build_routes.mjs
 wants landmarks && run landmarks node scripts/landmarks/build_sites.mjs
