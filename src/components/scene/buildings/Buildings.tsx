@@ -119,7 +119,7 @@ function BuildingTiles({
   const camera = useThree((state) => state.camera);
 
   const { cache, material, lightsMaterial } = useMemo(() => {
-    const material = createBuildingMaterial(index.manifest.encoding);
+    const material = createBuildingMaterial(index.manifest);
     const lightsMaterial = createLightsMaterial();
 
     const cache = new BuildingCache(index, material, lightsMaterial, {

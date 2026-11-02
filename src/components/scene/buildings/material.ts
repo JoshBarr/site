@@ -4,6 +4,7 @@ import {
   attribute,
   cameraPosition,
   dot,
+  exp,
   float,
   floor,
   fract,
@@ -23,6 +24,7 @@ import {
   vec3,
 } from "three/tsl";
 import { verticalScale } from "../terrain/Terrain";
+import { createFloodlights } from "./floodlights";
 import type { BuildingsManifest, EncodedRange } from "./manifest";
 
 // Buildings in the scene's greys: one tone per building, roofs from black
@@ -91,6 +93,14 @@ const LAMP_HEIGHT = [3.6, 4.2];
 const LAMP_WIDTH = 0.7;
 const LAMPS_LIT = 0.5;
 const LAMP_BRIGHTNESS = 2;
+
+/**
+ * Uplights at a landmark's foot: this far apart, metres, each a pool this
+ * wide at the ground and widening by this much per metre up.
+ */
+const UPLIGHT_SPACING = 6;
+const UPLIGHT_WIDTH = 0.8;
+const UPLIGHT_SPREAD = 0.35;
 
 /** More windows lit at street level, times. */
 export const STREET_BUSIER = 1.6;
@@ -170,9 +180,10 @@ const band = (x, [lo, hi]: number[], w) =>
  * derivatives, which also means stray back faces light like front faces:
  * it's drawn double-sided rather than trusting every wall's winding.
  */
-export function createBuildingMaterial(
-  encoding: BuildingsManifest["encoding"]
-) {
+export function createBuildingMaterial({
+  encoding,
+  origin,
+}: BuildingsManifest) {
   // x, z (0..1 over the tile), rel, delta
   const quantised = attribute("quantised", "vec4");
   // ground, seed
@@ -263,7 +274,16 @@ export function createBuildingMaterial(
   );
 
   // Busier at street level: shops, lobbies, front rooms.
-  const share = windowShare(seed, mix(STREET_BUSIER, 1, step(1, level)));
+  const street = mix(STREET_BUSIER, 1, step(1, level));
+  // Landmarks keep theirs on late.
+  const floodlights = createFloodlights(origin);
+  const hero = floodlights.lookup(p);
+
+  const share = max(
+    windowShare(seed, street),
+    min(hero.windows.mul(street), 1)
+  );
+
   // The lowest ids switch on first, so the lit ones only ever add to.
   const lit = step(id, share.mul(windowLights));
   const colour = mix(WARM, COOL, step(1 - COOL_SHARE, hash(id.mul(1e6))));
@@ -307,9 +327,38 @@ export function createBuildingMaterial(
   // Only truly vertical faces: steep roofs don't get windows.
   const upright = float(1).sub(smoothstep(0.1, 0.25, abs(normalWorld.y)));
 
+  // Uplights along a landmark's walls, each a pool of light spreading as it
+  // climbs. Far off, where the pools blur together, their average.
+  const along = dot(p.xz, across)
+    .div(max(across.length(), 1e-4))
+    .div(UPLIGHT_SPACING);
+
+  const spread = aboveGround.mul(UPLIGHT_SPREAD).add(UPLIGHT_WIDTH);
+  const offset = fract(along).sub(0.5).mul(UPLIGHT_SPACING).div(spread);
+
+  const pools = mix(
+    exp(offset.mul(offset).negate()),
+    min(spread.mul(Math.sqrt(Math.PI) / UPLIGHT_SPACING), 1),
+    smoothstep(0.15, 0.4, fwidth(along))
+  );
+
+  const flood = hero.flood
+    .mul(pools)
+    .mul(exp(max(aboveGround, 0).div(hero.reach).negate()))
+    .mul(upright)
+    .add(hero.crown.mul(roof));
+
+  // Floodlights come on at dusk, ahead of most windows.
   material.emissiveNode = mix(windows, lamps, windowless)
     .mul(upright)
-    .mul(WINDOW_BRIGHTNESS);
+    .mul(WINDOW_BRIGHTNESS)
+    .add(
+      WARM.mul(albedo)
+        .mul(flood)
+        .mul(smoothstep(0, 0.2, windowLights))
+    );
+
+  material.addEventListener("dispose", () => floodlights.map.dispose());
 
   return material;
 }
