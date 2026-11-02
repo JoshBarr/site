@@ -27,6 +27,7 @@ const cameraPosition = new Vector3();
  */
 function Tracks({ network }: { network: RailNetwork }) {
   const camera = useThree((state) => state.camera);
+
   const { group, material, chunks } = useMemo(
     () => ({
       group: new Group(),
@@ -35,10 +36,12 @@ function Tracks({ network }: { network: RailNetwork }) {
         roughness: 0.9,
         side: DoubleSide,
       }),
-      chunks: createTrackChunks(network).map((chunk) => ({
-        ...chunk,
-        mesh: null as Mesh | null,
-      })),
+      chunks: createTrackChunks(network).map(
+        (chunk): typeof chunk & { mesh: Mesh | null } => ({
+          ...chunk,
+          mesh: null,
+        })
+      ),
     }),
     [network]
   );
@@ -56,10 +59,13 @@ function Tracks({ network }: { network: RailNetwork }) {
     camera.getWorldPosition(cameraPosition);
     let next: (typeof chunks)[number] | null = null;
     let nearest = TRACK_RANGE;
+
     for (const chunk of chunks) {
       const distance = chunk.box.distanceToPoint(cameraPosition);
+
       if (chunk.mesh) {
         chunk.mesh.visible = distance < TRACK_RANGE;
+
         if (distance > TRACK_RANGE * 2) {
           group.remove(chunk.mesh);
           chunk.mesh.geometry.dispose();
@@ -70,6 +76,7 @@ function Tracks({ network }: { network: RailNetwork }) {
         next = chunk;
       }
     }
+
     if (next) {
       next.mesh = new Mesh(next.build(), material);
       next.mesh.receiveShadow = true;
@@ -99,6 +106,7 @@ export function Railway({
   }, [index]);
 
   if (!network) return null;
+
   return (
     <>
       <Tracks network={network} />

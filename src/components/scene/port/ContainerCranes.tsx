@@ -36,6 +36,7 @@ function createCraneMaterial(spec: CraneSpec) {
     roughness: 0.6,
     metalness: 0,
   });
+
   const spread = attribute("spread", "vec3");
   const thickness = attribute("thickness", "float");
   const world = modelWorldMatrix.mul(vec4(positionGeometry, 1)).xyz;
@@ -44,6 +45,7 @@ function createCraneMaterial(spec: CraneSpec) {
   material.positionNode = positionGeometry.add(spread.mul(widen.sub(1)));
   // The shadow pass sees the crane from the sun: true size.
   material.castShadowPositionNode = positionGeometry;
+
   return material;
 }
 
@@ -57,9 +59,11 @@ export function ContainerCranes({
 }) {
   const meshes = useMemo(() => {
     const material = createCraneMaterial(spec);
+
     return cranes.map(({ pose }) => {
       const mesh = new Mesh(createCraneGeometry(spec, pose), material);
       castsNearShadow(mesh);
+
       return mesh;
     });
   }, [spec, cranes]);
@@ -67,7 +71,7 @@ export function ContainerCranes({
   useEffect(
     () => () => {
       meshes.forEach((mesh) => mesh.geometry.dispose());
-      (meshes[0]?.material as MeshStandardNodeMaterial)?.dispose();
+      meshes[0]?.material.dispose();
     },
     [meshes]
   );
@@ -94,6 +98,7 @@ export function craneLights(
   { position, rotation, pose }: PlacedCrane
 ): ObstructionLight[] {
   const base = new Vector3(...position);
+
   return craneLightPoints(spec, pose).map((point) => ({
     position: point.applyAxisAngle(UP, rotation).add(base).toArray(),
   }));

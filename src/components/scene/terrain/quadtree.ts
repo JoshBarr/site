@@ -51,11 +51,14 @@ function pushNode(
 ) {
   let source: TileInfo | undefined = data;
   let slot = cache.use(source);
+
   while (slot === undefined && source.level > 0) {
     source = index.get(source.level - 1, source.x >> 1, source.y >> 1);
+
     if (!source) return;
     slot = cache.use(source);
   }
+
   if (slot === undefined) return;
 
   const f = 2 ** (level - source.level);
@@ -83,11 +86,13 @@ export function selectLevel(
   out: DrawNode[]
 ) {
   out.length = 0;
+
   for (const tile of index.tilesAt(level)) {
     // After everything the camera needs.
     cache.request(tile, 1e9 + level);
     pushNode(index, cache, level, tile.x, tile.y, tile, out);
   }
+
   return out;
 }
 
@@ -144,12 +149,15 @@ export function selectNodes(
    */
   const visit = (level: number, x: number, y: number, borrowed?: TileInfo) => {
     const tile = borrowed ?? index.get(level, x, y);
+
     if (!tile) return;
 
     setBox(level, x, y, tile);
+
     if (frustumCulled && !frustum.intersectsBox(box)) return;
 
     const distance = box.distanceToPoint(cameraPosition);
+
     if (request && !borrowed) {
       // Coarse levels first, then nearest first.
       cache.request(tile, level * 1e6 + distance);
@@ -157,16 +165,19 @@ export function selectNodes(
 
     if (level >= maxLevel || distance > index.tileSize(level) * lodFactor) {
       draw(level, x, y, tile);
+
       return;
     }
 
     const next = level + 1;
+
     const children = [
       [x * 2, y * 2],
       [x * 2 + 1, y * 2],
       [x * 2, y * 2 + 1],
       [x * 2 + 1, y * 2 + 1],
     ];
+
     const finerData =
       !borrowed &&
       next <= index.maxLevel &&
@@ -174,6 +185,7 @@ export function selectNodes(
 
     if (!finerData && level >= tile.level + extraLevels) {
       draw(level, x, y, tile);
+
       return;
     }
 
@@ -188,5 +200,6 @@ export function selectNodes(
   };
 
   visit(0, 0, 0);
+
   return out;
 }

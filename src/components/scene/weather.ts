@@ -4,7 +4,7 @@ import type { Conditions } from "../../lib/weather";
 export type { Conditions };
 
 /** Used until (or if never) the forecast arrives: a fair-weather northerly. */
-export const DEFAULT_CONDITIONS: Conditions = {
+const DEFAULT_CONDITIONS: Conditions = {
   time: new Date(0).toISOString(),
   cloudCover: 0.35,
   cloudBase: 900,
@@ -38,21 +38,29 @@ function withoutTrace(conditions: Conditions): Conditions {
  */
 function withOverrides(conditions: Conditions): Conditions {
   const params = new URLSearchParams(location.search);
+
   const number = (name: string) => {
     const value = Number(params.get(name));
+
     return params.has(name) && Number.isFinite(value) ? value : undefined;
   };
+
   const next = { ...conditions };
 
   const cloud = number("cloud");
+
   if (cloud !== undefined) next.cloudCover = cloud / 100;
   const base = number("base");
+
   if (base !== undefined) next.cloudBase = base;
   const visibility = number("vis");
+
   if (visibility !== undefined) next.visibility = visibility;
   const rain = number("rain");
+
   if (rain !== undefined) {
     next.precipitation = Math.max(rain, 0);
+
     // Rain only falls from cloud.
     if (rain > 0 && cloud === undefined) {
       next.cloudCover = Math.max(next.cloudCover, 0.6);
@@ -60,6 +68,7 @@ function withOverrides(conditions: Conditions): Conditions {
   }
 
   const [speed, direction] = (params.get("wind") ?? "").split(",").map(Number);
+
   if (
     Number.isFinite(speed) &&
     Number.isFinite(direction) &&
@@ -68,6 +77,7 @@ function withOverrides(conditions: Conditions): Conditions {
     next.wind = { speed, direction };
     next.windAloft = { speed: speed * 1.4, direction };
   }
+
   return next;
 }
 
@@ -86,6 +96,7 @@ export function useConditions(): Conditions {
         }
       })
       .catch(() => {});
+
     return () => {
       cancelled = true;
     };
@@ -97,11 +108,13 @@ export function useConditions(): Conditions {
 /** Base of the low cloud, in metres: reported, or guessed from the cover. */
 export function lowCloudBase({ cloudCover, cloudBase }: Conditions) {
   const cover = Math.min(Math.max(cloudCover, 0), 1);
+
   return Math.min(Math.max(cloudBase ?? 1400 - 700 * cover, 200), 2500);
 }
 
 /** Wind as a velocity (x east, z south) from speed and "from" direction. */
 export function windVector(speed: number, from: number) {
   const toward = ((from + 180) * Math.PI) / 180;
+
   return [Math.sin(toward) * speed, -Math.cos(toward) * speed];
 }

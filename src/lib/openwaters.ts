@@ -1,4 +1,6 @@
+import { z } from "zod";
 import { toNztm } from "./nztm";
+import { readJson } from "./schemas";
 import type { Vessel } from "./vessels";
 
 // Ships around Wellington Harbour from Open Waters AIS
@@ -22,41 +24,61 @@ export type TrackPoint = Pick<
   "position" | "speed" | "course" | "heading" | "time"
 >;
 
-interface Feature {
-  geometry: { coordinates: [number, number] };
-  properties: {
-    mmsi: number;
-    name?: string;
-    type?: number;
-    /** Knots. */
-    sog?: number;
-    cog?: number;
-    heading?: number;
-    to_bow?: number;
-    to_stern?: number;
-    to_port?: number;
-    to_starboard?: number;
-    /** When the last message about it, of any kind, was heard. */
-    seen: string;
-  };
-}
+/** [lon, lat]. */
+const lonLat = z.tuple([z.number(), z.number()]);
 
-interface Track {
-  /** [lon, lat] for a LineString, one of them for a Point, or none. */
-  geometry: {
-    type: "LineString" | "Point";
-    coordinates: [number, number][] | [number, number];
-  } | null;
-  properties: {
-    times: string[];
-    sog: (number | null)[];
-    cog: (number | null)[];
-    heading: (number | null)[];
-  };
-}
+const harbour = z.object({
+  features: z.array(
+    z.object({
+      geometry: z.object({ coordinates: lonLat }),
+      properties: z.object({
+        mmsi: z.number(),
+        name: z.string().optional(),
+        type: z.number().optional(),
+        /** Knots. */
+        sog: z.number().optional(),
+        cog: z.number().optional(),
+        heading: z.number().optional(),
+        to_bow: z.number().optional(),
+        to_stern: z.number().optional(),
+        to_port: z.number().optional(),
+        to_starboard: z.number().optional(),
+        /** When the last message about it, of any kind, was heard. */
+        seen: z.string(),
+      }),
+    })
+  ),
+});
 
-async function get<T>(path: string, params: Record<string, string>) {
+type Properties = z.infer<typeof harbour>["features"][number]["properties"];
+
+const track = z.object({
+  /** The positions, oldest first: a LineString's, a Point's one, or none. */
+  geometry: z
+    .discriminatedUnion("type", [
+      z.object({ type: z.literal("LineString"), coordinates: z.array(lonLat) }),
+      z.object({
+        type: z.literal("Point"),
+        coordinates: lonLat.transform((at) => [at]),
+      }),
+    ])
+    .nullable(),
+  /** One of each for every position. */
+  properties: z.object({
+    times: z.array(z.string()),
+    sog: z.array(z.number().nullable()),
+    cog: z.array(z.number().nullable()),
+    heading: z.array(z.number().nullable()),
+  }),
+});
+
+async function get<T>(
+  path: string,
+  params: Record<string, string>,
+  schema: z.ZodType<T>
+) {
   const token = process.env.OPENWATERS_TOKEN;
+
   const response = await fetch(`${API}${path}?${new URLSearchParams(params)}`, {
     headers: {
       "User-Agent": "joshbarr.com scene",
@@ -64,21 +86,28 @@ async function get<T>(path: string, params: Record<string, string>) {
     },
     signal: AbortSignal.timeout(TIMEOUT),
   });
+
   if (!response.ok) {
     throw new Error(`openwaters ${path}: HTTP ${response.status}`);
   }
-  return (await response.json()) as T;
+
+  return readJson(response, schema, `openwaters ${path}`);
 }
 
 /** NZTM2000, to the decimetre: finer than AIS places a ship. */
 function nztm([lon, lat]: [number, number]): [number, number] {
   const [easting, northing] = toNztm(lat, lon);
+
   return [Math.round(easting * 10) / 10, Math.round(northing * 10) / 10];
 }
 
-function dimension(p: Feature["properties"]): Vessel["dimension"] {
+function dimension(p: Properties): Vessel["dimension"] {
   const { to_bow: a, to_stern: b, to_port: c, to_starboard: d } = p;
-  if (a === undefined || c === undefined) return null;
+
+  if (a === undefined || b === undefined) return null;
+
+  if (c === undefined || d === undefined) return null;
+
   return a + b > 0 && c + d > 0 ? [a, b, c, d] : null;
 }
 
@@ -88,26 +117,29 @@ function dimension(p: Feature["properties"]): Vessel["dimension"] {
  * is when it was last heard at all, which may be after its position.
  */
 export async function fetchHarbour(maxAge: number, maxAgeMoving: number) {
-  const { features } = await get<{ features: Feature[] }>("/vessels", {
-    bbox: HARBOUR,
-    kind: "vessel",
-    max_age: String(Math.round(maxAge / 1000)),
-    max_age_moving: String(Math.round(maxAgeMoving / 1000)),
-  });
-  return features.map(
-    ({ geometry, properties: p }): Vessel => ({
-      mmsi: p.mmsi,
-      name: p.name?.trim() || null,
-      type: p.type ?? 0,
-      position: nztm(geometry.coordinates),
-      speed: (p.sog ?? 0) * KNOTS,
-      course: p.cog ?? null,
-      heading: p.heading ?? null,
-      dimension: dimension(p),
-      time: Date.parse(p.seen),
-      trail: [],
-    })
+  const { features } = await get(
+    "/vessels",
+    {
+      bbox: HARBOUR,
+      kind: "vessel",
+      max_age: String(Math.round(maxAge / 1000)),
+      max_age_moving: String(Math.round(maxAgeMoving / 1000)),
+    },
+    harbour
   );
+
+  return features.map(({ geometry, properties: p }): Vessel => ({
+    mmsi: p.mmsi,
+    name: p.name?.trim() || null,
+    type: p.type ?? 0,
+    position: nztm(geometry.coordinates),
+    speed: (p.sog ?? 0) * KNOTS,
+    course: p.cog ?? null,
+    heading: p.heading ?? null,
+    dimension: dimension(p),
+    time: Date.parse(p.seen),
+    trail: [],
+  }));
 }
 
 /** Every position heard from a ship since `since` (epoch ms), oldest first. */
@@ -115,16 +147,15 @@ export async function fetchTrack(
   mmsi: number,
   since: number
 ): Promise<TrackPoint[]> {
-  const { geometry, properties: p } = await get<Track>(
+  const { geometry, properties: p } = await get(
     `/vessels/${mmsi}/track`,
-    { from: new Date(since).toISOString(), interval: "0" }
+    { from: new Date(since).toISOString(), interval: "0" },
+    track
   );
+
   if (!geometry) return [];
-  const coordinates =
-    geometry.type === "Point"
-      ? [geometry.coordinates as [number, number]]
-      : (geometry.coordinates as [number, number][]);
-  return coordinates.map((at, i) => ({
+
+  return geometry.coordinates.map((at, i) => ({
     position: nztm(at),
     time: Date.parse(p.times[i]),
     speed: (p.sog[i] ?? 0) * KNOTS,

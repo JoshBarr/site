@@ -13,7 +13,6 @@ import {
   DynamicDrawUsage,
   InstancedBufferAttribute,
   InstancedBufferGeometry,
-  Camera,
   Mesh,
   MeshLambertNodeMaterial,
   MeshStandardNodeMaterial,
@@ -109,18 +108,21 @@ function bspline(f) {
   const f2 = f.mul(f);
   const f3 = f2.mul(f);
   const g = float(1).sub(f);
+
   const weights = vec4(
     g.mul(g).mul(g),
     f3.mul(3).sub(f2.mul(6)).add(4),
     f3.mul(-3).add(f2.mul(3)).add(f.mul(3)).add(1),
     f3
   ).div(6);
+
   const derivatives = vec4(
     g.mul(g).negate(),
     f2.mul(3).sub(f.mul(4)),
     f2.mul(-3).add(f.mul(2)).add(1),
     f2
   ).div(2);
+
   return { weights, derivatives };
 }
 
@@ -138,6 +140,7 @@ function createPatchGeometry(n: number) {
       positions.push(i / n, 0, j / n);
     }
   }
+
   for (let j = 0; j < n; j++) {
     for (let i = 0; i < n; i++) {
       const a = j * row + i;
@@ -147,16 +150,22 @@ function createPatchGeometry(n: number) {
 
   // Walk the perimeter clockwise from above so skirts face outward.
   const perimeter: number[] = [];
+
   for (let i = 0; i < n; i++) perimeter.push(i);
+
   for (let j = 0; j < n; j++) perimeter.push(j * row + n);
+
   for (let i = n; i > 0; i--) perimeter.push(n * row + i);
+
   for (let j = n; j > 0; j--) perimeter.push(j * row);
   perimeter.push(0);
 
   const skirtStart = positions.length / 3;
+
   for (const top of perimeter) {
     positions.push(positions[top * 3], -1, positions[top * 3 + 2]);
   }
+
   for (let k = 0; k < perimeter.length - 1; k++) {
     const a = perimeter[k];
     const b = perimeter[k + 1];
@@ -171,6 +180,7 @@ function createPatchGeometry(n: number) {
     new BufferAttribute(new Float32Array(positions), 3)
   );
   geometry.setIndex(indices);
+
   return geometry;
 }
 
@@ -230,6 +240,7 @@ function createMaterial(
     let height: any = float(0);
     let gradientX: any = float(0);
     let gradientZ: any = float(0);
+
     for (let j = 0; j < 4; j++) {
       const at = (k: number) => load(i.add(vec2(k, j - 1)));
       const row = vec4(at(-1), at(0), at(1), at(2));
@@ -239,6 +250,7 @@ function createMaterial(
       gradientX = gradientX.add(dot(row, x.derivatives).mul(wz));
       gradientZ = gradientZ.add(across.mul(z.derivatives[COMPONENTS[j]]));
     }
+
     return { height, gradientX, gradientZ };
   };
 
@@ -249,6 +261,7 @@ function createMaterial(
     const h10 = load(i.add(vec2(1, 0)));
     const h01 = load(i.add(vec2(0, 1)));
     const h11 = load(i.add(vec2(1, 1)));
+
     return {
       height: mix(mix(h00, h10, f.x), mix(h01, h11, f.x), f.y),
       gradientX: mix(h10.sub(h00), h11.sub(h01), f.y),
@@ -257,9 +270,11 @@ function createMaterial(
   };
 
   const size = tileA.z;
+
   const { height, gradientX, gradientZ } = smooth
     ? sample(texel)
     : sampleBilinear(texel);
+
   // Skirts drop a little below the patch to hide cracks.
   const skirt = positionGeometry.y.mul(size).mul(0.05);
 
@@ -287,6 +302,7 @@ function createMaterial(
     vec3(0.02),
     smoothstep(0, 20, height.negate())
   );
+
   const onLand = smoothstep(-0.5, 0.5, height);
 
   if (!surface) {
@@ -294,16 +310,19 @@ function createMaterial(
     // Flat tones, lighter with altitude.
     const land = mix(vec3(0.16), vec3(0.3), smoothstep(0, 600, height));
     material.colorNode = mix(seabed, land, onLand);
+
     return material;
   }
 
   // Relief and buildings, bilinear: smooth enough at the data's spacing.
   const loadGround = (t) =>
-    textureLoad(surface.ground, ivec2(clamp(t, vec2(0), vec2(last))))
-      .depth(slot)
-      .xy;
+    textureLoad(surface.ground, ivec2(clamp(t, vec2(0), vec2(last)))).depth(
+      slot
+    ).xy;
+
   const base = floor(texel);
   const f = texel.sub(base);
+
   const ground = mix(
     mix(loadGround(base), loadGround(base.add(vec2(1, 0))), f.x),
     mix(
@@ -315,24 +334,18 @@ function createMaterial(
   );
 
   const shaded = shadeSurface(surface, {
-    world: vec2(
-      tileA.x.add(local.x.mul(size)),
-      tileA.y.add(local.y.mul(size))
-    ),
+    world: vec2(tileA.x.add(local.x.mul(size)), tileA.y.add(local.y.mul(size))),
     height,
     normal,
     relief: ground.x,
     building: ground.y,
   });
+
   material.normalNode = transformNormalToView(
     normalize(mix(normal, shaded.normal, onLand))
   );
   material.colorNode = mix(seabed, shaded.color, onLand);
-  (material as MeshStandardNodeMaterial).aoNode = mix(
-    float(1),
-    shaded.occlusion,
-    onLand
-  );
+  material.aoNode = mix(float(1), shaded.occlusion, onLand);
 
   return material;
 }
@@ -359,8 +372,8 @@ function createPatches(
   /** Refill from a selection that writes into the given list. */
   const update = (select: (out: DrawNode[]) => void) => {
     select(nodes);
-    const a = tileA.array as Float32Array;
-    const b = tileB.array as Float32Array;
+    const a = tileA.array;
+    const b = tileB.array;
     nodes.forEach((node, i) => {
       a.set([node.originX, node.originZ, node.size, node.slot], i * 4);
       b.set([node.u0, node.v0, node.uvScale, node.level], i * 4);
@@ -387,6 +400,7 @@ function useSurfaceMaps(index: TileIndex): SurfaceMaps {
     const landcoverBounds = createLandcoverBounds();
     const info = index.manifest.landcover;
     let landcover: Texture;
+
     if (info) {
       const [west, south, east, north] = info.bounds;
       const [x, z] = nztmToWorld(index.manifest, west, north);
@@ -397,6 +411,7 @@ function useSurfaceMaps(index: TileIndex): SurfaceMaps {
       landcover = new DataTexture(new Uint8Array(4), 1, 1, RGBAFormat);
       landcover.needsUpdate = true;
     }
+
     landcover.colorSpace = NoColorSpace;
     landcover.flipY = false;
     landcover.minFilter = LinearMipmapLinearFilter;
@@ -408,6 +423,7 @@ function useSurfaceMaps(index: TileIndex): SurfaceMaps {
       DETAIL_SIZE,
       RGBAFormat
     );
+
     detail.wrapS = detail.wrapT = RepeatWrapping;
     detail.minFilter = LinearMipmapLinearFilter;
     detail.magFilter = LinearFilter;
@@ -427,7 +443,9 @@ function useSurfaceMaps(index: TileIndex): SurfaceMaps {
       maps.detail.needsUpdate = true;
       worker.terminate();
     };
+
     worker.postMessage({ size: DETAIL_SIZE });
+
     return () => {
       worker.terminate();
       maps.landcover.dispose();
@@ -467,6 +485,7 @@ export function Terrain({
         surface: { ...surface, ground: cache.ground },
       })
     );
+
     main.mesh.receiveShadow = true;
 
     const reflection = createPatches(
@@ -477,6 +496,7 @@ export function Terrain({
         gridSize: REFLECTION.gridSize,
       })
     );
+
     reflection.mesh.layers.set(REFLECTION_LAYER);
 
     const caster = createPatches(
@@ -488,6 +508,7 @@ export function Terrain({
         sink: 0.3,
       })
     );
+
     caster.mesh.layers.set(SHADOW_LAYER);
     caster.mesh.castShadow = true;
 
@@ -497,10 +518,12 @@ export function Terrain({
   useEffect(() => {
     onHeightQuery?.((x, z) => {
       const height = cache.heightAt(x, z);
+
       return height === undefined
         ? undefined
         : Math.max(height, 0) * verticalScale.value;
     });
+
     return () => onHeightQuery?.(null);
   }, [cache, onHeightQuery]);
 
@@ -541,6 +564,7 @@ export function Terrain({
     caster.update((out) => {
       selectLevel(index, cache, SHADOW_CASTER.level, out);
       const signature = out.map((n) => `${n.slot}:${n.uvScale}`).join();
+
       if (signature !== casterSignature.current) {
         casterSignature.current = signature;
         shadowCasters.version++;

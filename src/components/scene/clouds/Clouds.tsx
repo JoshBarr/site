@@ -1,11 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import {
-  HalfFloatType,
-  RenderPipeline,
-  Scene,
-  WebGPURenderer,
-} from "three/webgpu";
+import { HalfFloatType, RenderPipeline, Scene } from "three/webgpu";
 import { pass, rtt, uniform, vec4 } from "three/tsl";
 import { gaussianBlur } from "three/addons/tsl/display/GaussianBlurNode.js";
 import { cloudShadowMap, overcast, overcastFor } from "../environment";
@@ -28,16 +23,19 @@ import {
   rainfallAt,
 } from "./rain";
 import { lensWetness, updateLensWetness, wetLens } from "./wetLens";
+import { useRenderer } from "../renderer";
 
 /**
  * Clouds drift at the real wind speed times this. Real time reads as
  * almost still from a distance.
  */
 const DRIFT_SPEED = 2;
+
 /** Wind picks up and veers with height. */
 const MID_SPEED = 1.6;
 const CIRRUS_SPEED = 3;
 const CIRRUS_VEER = 25;
+
 /** Water on the lens in rain. Off until it looks like water. */
 const WET_LENS = false;
 
@@ -51,15 +49,17 @@ function useCloudNoise() {
   useEffect(() => {
     const worker = new Worker(new URL("./noiseWorker.ts", import.meta.url));
     worker.onmessage = ({ data }) => {
-      const { shape, weather } = cloudNoise;
-      (shape.image.data as Uint8Array).set(data.shape);
+      const { shape, weather, shapeData, weatherData } = cloudNoise;
+      shapeData.set(data.shape);
       shape.needsUpdate = true;
-      (weather.image.data as Uint8Array).set(data.weather);
+      weatherData.set(data.weather);
       weather.needsUpdate = true;
       setReady(true);
       worker.terminate();
     };
+
     worker.postMessage({ size: NOISE_SIZE, weatherSize: WEATHER_SIZE });
+
     return () => worker.terminate();
   }, []);
 
@@ -106,7 +106,7 @@ export function Clouds({
   quality: CloudQuality;
   night?: number;
 }) {
-  const renderer = useThree((state) => state.gl) as unknown as WebGPURenderer;
+  const renderer = useRenderer();
   const scene = useThree((state) => state.scene);
   const camera = useThree((state) => state.camera);
   const noiseReady = useCloudNoise();
@@ -136,6 +136,7 @@ export function Clouds({
 
     if (!noiseReady) {
       pipeline.outputNode = depthOfField(color, viewZ);
+
       return { pipeline, glow, drops: null };
     }
 
@@ -150,6 +151,7 @@ export function Clouds({
       quality,
       night: dark,
     });
+
     // Relative to CSS pixels: on a 2x display the march would otherwise do
     // four times the work for detail the softness of clouds doesn't need.
     const clouds = rtt(cloudNode, null, null, {
@@ -159,12 +161,15 @@ export function Clouds({
 
     // Just enough blur to dissolve the march's jitter grain.
     const soft = gaussianBlur(clouds, 1, 0.4);
+
     const composite: any = depthOfField(
       vec4(color.rgb.mul(soft.a).add(soft.rgb), 1),
       viewZ
     );
+
     if (!raining) {
       pipeline.outputNode = composite;
+
       return { pipeline, glow, drops: null };
     }
 
@@ -176,26 +181,32 @@ export function Clouds({
       sceneDepth: scenePass.getTextureNode("depth"),
       count: quality.drops,
     });
+
     const rainScene = new Scene();
     rainScene.add(drops);
     const streaks = pass(rainScene, camera).getTextureNode("output");
     // And water on the lens over everything. What it bends into view is
     // blurred anyway, so it goes without the depth of field (and glow).
     const over = (under, layer) => under.mul(layer.a.oneMinus()).add(layer.rgb);
+
     if (!WET_LENS) {
       pipeline.outputNode = vec4(over(composite.rgb, streaks), 1);
+
       return { pipeline, glow, drops };
     }
+
     pipeline.outputNode = wetLens(
       vec4(over(composite.rgb, streaks), 1),
       (uv) => {
         const sky = clouds.sample(uv);
+
         return over(
           output.sample(uv).rgb.mul(sky.a).add(sky.rgb),
           streaks.sample(uv)
         );
       }
     );
+
     return { pipeline, glow, drops };
   }, [renderer, scene, camera, noiseReady, rain, quality, dark, raining]);
 
@@ -218,12 +229,14 @@ export function Clouds({
 
   useFrame((_, delta) => {
     const { speed, direction } = conditions.windAloft;
+
     const drift = (layer: CloudLayerUniforms, factor: number, veer = 0) => {
       const [vx, vz] = windVector(speed * factor, direction + veer);
       // Sampling at p + offset moves the pattern along -offset.
       layer.offset.value.x -= vx * delta * DRIFT_SPEED;
       layer.offset.value.y -= vz * delta * DRIFT_SPEED;
     };
+
     drift(layers.low, 1);
     drift(layers.mid, MID_SPEED);
     drift(layers.cirrus, CIRRUS_SPEED, CIRRUS_VEER);
@@ -231,12 +244,14 @@ export function Clouds({
     // Far enough above the cloud base there are no drops to see.
     if (drops) {
       drops.visible = camera.position.y - DROP_REACH < layers.low.shape.value.x;
+
       const onCamera = rainfallAt(
         cloudNoise.weather,
         layers.low,
         rain,
         camera.position
       );
+
       if (WET_LENS)
         updateLensWetness(
           camera,

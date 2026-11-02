@@ -24,10 +24,12 @@ export function nacelleTop(model: TurbineModel) {
 /** Tapered tube from below ground to the yaw bearing. */
 export function createTowerGeometry(model: TurbineModel) {
   const height = towerTop(model);
+
   // Keep the taper going below ground.
   const below =
     model.towerBaseRadius +
     ((model.towerBaseRadius - model.towerTopRadius) * FOOTING) / height;
+
   const geometry = new CylinderGeometry(
     model.towerTopRadius,
     below,
@@ -36,7 +38,9 @@ export function createTowerGeometry(model: TurbineModel) {
     1,
     true
   );
+
   geometry.translate(0, (height - FOOTING) / 2, 0);
+
   return geometry;
 }
 
@@ -46,6 +50,7 @@ function revolve(profile: [number, number][], segments = 32) {
     profile.map(([r, z]) => new Vector2(r, z)),
     segments
   );
+
   // Lathe turns about +y; lay it along +z.
   return geometry.rotateX(Math.PI / 2);
 }
@@ -59,6 +64,7 @@ export function createNacelleGeometry(model: TurbineModel) {
 
   let body: BufferGeometry;
   let spinner: BufferGeometry;
+
   if (model.nacelle === "box") {
     // Siemens: long rounded box, rotor out ahead of the tower.
     body = new RoundedBoxGeometry(3.6, 3.9, 10, 2, 0.5);
@@ -95,17 +101,21 @@ export function createNacelleGeometry(model: TurbineModel) {
       [0, 1.95],
     ]);
   }
+
   // Same placement the blades get in the shader.
   spinner.translate(0, 0, overhang).rotateX(-tilt).translate(0, hubAbove, 0);
 
   // Lathe and box carry different attributes; positions and normals suffice.
   const parts = [body, spinner].map((part) => {
     const g = part.index ? part.toNonIndexed() : part;
+
     for (const name of Object.keys(g.attributes)) {
       if (name !== "position" && name !== "normal") g.deleteAttribute(name);
     }
+
     return g;
   });
+
   return mergeGeometries(parts);
 }
 
@@ -124,6 +134,7 @@ function halfThickness(x: number, ratio: number) {
 
 const smoothstep = (a: number, b: number, x: number) => {
   const t = Math.min(Math.max((x - a) / (b - a), 0), 1);
+
   return t * t * (3 - 2 * t);
 };
 
@@ -140,21 +151,26 @@ export function createBladeGeometry(model: TurbineModel, around = 20) {
 
   // Stations along the span, as fractions of the radius.
   const stations = [x0, rootEnd, x0 + (xm - x0) * 0.6, xm];
+
   for (const x of [0.28, 0.38, 0.5, 0.62, 0.74, 0.84, 0.92, 0.97, 1]) {
     if (x > xm + 0.02) stations.push(x);
   }
 
   const positions: number[] = [];
+
   for (const x of stations) {
     // Round root flaring into the widest chord, then tapering roughly as 1/r.
     const out = smoothstep(rootEnd, xm, x);
     const tipRound = x > 0.97 ? 0.45 : 1;
+
     const chord =
       (x <= xm
         ? rootDiameter + (maxChord - rootDiameter) * out
         : maxChord * (xm / x) ** 0.85) * tipRound;
+
     const ratio = 0.4 - 0.22 * smoothstep(xm, 0.7, x);
     const round = 1 - out;
+
     const twist =
       ((12 * Math.PI) / 180) * Math.max((1 - x) / (1 - xm), 0) ** 1.6;
 
@@ -176,13 +192,16 @@ export function createBladeGeometry(model: TurbineModel, around = 20) {
       );
     }
   }
+
   // Tip point closes the last section.
   const tip = positions.length / 3;
   positions.push(0, R + 0.05, 0);
 
   const indices: number[] = [];
+
   const at = (k: number, j: number) =>
     k === stations.length ? tip : k * around + (j % around);
+
   for (let k = 0; k < stations.length; k++) {
     for (let j = 0; j < around; j++) {
       if (k === stations.length - 1) {
@@ -198,6 +217,7 @@ export function createBladeGeometry(model: TurbineModel, around = 20) {
   geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
+
   return geometry;
 }
 

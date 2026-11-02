@@ -7,6 +7,7 @@ import { bloom } from "three/addons/tsl/display/BloomNode.js";
 /** Linear luminance a light must pass to glow. */
 const THRESHOLD = 0.5;
 const STRENGTH = 1.1;
+
 /** 0..1: how far the glow spreads. */
 const RADIUS = 0.5;
 
@@ -24,5 +25,6 @@ export function setNightGlow(night: number) {
  */
 export function nightGlow(color, night: boolean) {
   if (!night) return null;
+
   return bloom(color, strength, RADIUS, THRESHOLD);
 }

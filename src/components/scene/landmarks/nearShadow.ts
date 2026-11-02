@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useFrame, useThree } from "@react-three/fiber";
+import { type RootState, useFrame, useThree } from "@react-three/fiber";
 import { Matrix4, Object3D, Vector3 } from "three/webgpu";
 import {
   NEAR_SHADOW_LAYER,
@@ -11,6 +11,7 @@ import {
 const SPAN = 2.5;
 const MIN_EXTENT = 1200;
 const MAX_EXTENT = 16000;
+
 /** Extents snap to steps of this ratio, so the map doesn't swim on zoom. */
 const EXTENT_STEP = 2 ** 0.25;
 
@@ -36,10 +37,21 @@ const UP = new Vector3(0, 1, 0);
  * it every frame: its casters move (rotors spin, nacelles yaw), and there
  * are few of them.
  */
+/** Whether the default controls orbit a target, as CameraControls do. */
+function orbits(controls: RootState["controls"]): controls is NonNullable<
+  RootState["controls"]
+> & {
+  getTarget(out: Vector3): Vector3;
+} {
+  return (
+    !!controls &&
+    "getTarget" in controls &&
+    controls.getTarget instanceof Function
+  );
+}
+
 export function useNearShadow(mapSize: number) {
-  const controls = useThree((state) => state.controls) as {
-    getTarget?: (out: Vector3) => Vector3;
-  } | null;
+  const controls = useThree((state) => state.controls);
 
   // The shadow node sizes its target from this on each render.
   useEffect(() => {
@@ -47,7 +59,7 @@ export function useNearShadow(mapSize: number) {
   }, [mapSize]);
 
   useFrame(({ camera }) => {
-    if (controls?.getTarget) {
+    if (orbits(controls)) {
       controls.getTarget(target);
     } else {
       camera.getWorldDirection(target).multiplyScalar(1000);
@@ -56,8 +68,10 @@ export function useNearShadow(mapSize: number) {
 
     const distance = camera.position.distanceTo(target);
     const wanted = Math.min(Math.max(distance * SPAN, MIN_EXTENT), MAX_EXTENT);
+
     const extent =
       EXTENT_STEP ** Math.ceil(Math.log(wanted) / Math.log(EXTENT_STEP));
+
     const texel = extent / mapSize;
 
     // Snap the centre to whole texels across the light's view, so the

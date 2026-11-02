@@ -5,6 +5,7 @@ import type { Aircraft, FlightsResponse } from "../../../lib/flights";
 export type { Aircraft };
 
 const POLL = 10_000;
+
 /**
  * Wellington Airport's curfew, NZ time: [hour, minute] from and to. Nothing
  * scheduled flies, so polls slow down, but they don't stop: medevac and
@@ -23,8 +24,10 @@ function inCurfew(date = new Date()) {
     .format(date)
     .split(":")
     .map(Number);
+
   const now = hour * 60 + minute;
   const minutes = ([h, m]: number[]) => h * 60 + m;
+
   return now >= minutes(CURFEW.from) && now < minutes(CURFEW.to);
 }
 
@@ -55,14 +58,18 @@ export function useFlights(): Flights {
           const response = await fetch(
             history ? "/api/flights?history" : "/api/flights"
           );
+
           if (response.ok) {
             const body: FlightsResponse = await response.json();
             skew = Date.now() - body.time;
+
             for (const { fixes, ...details } of body.aircraft) {
               const before = known.get(details.hex);
+
               const merged = new Map(
                 (before?.fixes ?? []).map((f) => [f[3], f])
               );
+
               for (const fix of fixes) merged.set(fix[3], fix);
               known.set(details.hex, {
                 ...details,
@@ -72,24 +79,31 @@ export function useFlights(): Flights {
                 fixes: [...merged.values()].sort((a, b) => a[3] - b[3]),
               });
             }
+
             history = false;
           }
         } catch (e) {
           console.error("[flights]", e);
         }
+
         const oldest = Date.now() - skew - HISTORY;
+
         for (const [hex, plane] of known) {
           plane.fixes = plane.fixes.filter((fix) => fix[3] > oldest);
+
           if (!plane.fixes.length) known.delete(hex);
         }
+
         if (stopped) return;
         setFlights({ aircraft: [...known.values()], skew });
       } else {
         // Back from a hidden tab: catch up on what was missed.
         history = true;
       }
+
       timer = setTimeout(poll, inCurfew() ? CURFEW_POLL : POLL);
     };
+
     poll();
 
     return () => {

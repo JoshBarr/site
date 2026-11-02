@@ -61,6 +61,7 @@ export const CLOUDS_DESKTOP: CloudQuality = {
   rainSteps: 24,
   drops: 24000,
 };
+
 export const CLOUDS_MOBILE: CloudQuality = {
   steps: 64,
   lightSteps: 3,
@@ -71,12 +72,16 @@ export const CLOUDS_MOBILE: CloudQuality = {
 
 const MAX_DISTANCE = 60000;
 const MIN_STEP = 40;
+
 /** Cloud fades out within this many metres of the camera. */
 const NEAR_FADE = 600;
+
 /** Step length as a fraction of distance from the camera. */
 const STEP_GROWTH = 0.035;
+
 /** Rain is marched this far; haze hides it beyond. */
 const RAIN_DISTANCE = 25000;
+
 /**
  * Rain shafts are lit by what gets under the cloud: a little darker than the
  * haze around them, so they read against a bright sky and lighter than hills.
@@ -134,10 +139,12 @@ export function createCloudNode({
     // Clip the ray to the slab holding the volumetric layers.
     const bottom = min(low.shape.x, mid.shape.x);
     const top = max(low.shape.y, mid.shape.y);
+
     const safeY = direction.y
       .abs()
       .lessThan(1e-4)
       .select(float(1e-4), direction.y);
+
     const tBottom = bottom.sub(cameraPosition.y).div(safeY);
     const tTop = top.sub(cameraPosition.y).div(safeY);
     const tNear = max(min(tBottom, tTop), 0);
@@ -173,6 +180,7 @@ export function createCloudNode({
         });
 
         const p = cameraPosition.add(direction.mul(t));
+
         // Thin out right around the camera so it never sits in a white wall,
         // and toward the end of the march so the layer has no hard horizon.
         const d = density(p)
@@ -187,22 +195,27 @@ export function createCloudNode({
           // Optical depth toward the sun, in growing steps.
           const toSun = float(0).toVar();
           let stride = 40;
+
           for (let i = 0; i < quality.lightSteps; i++) {
             const q = p.add(sunDirection.mul(stride * (i + 0.5)));
             toSun.addAssign(density(q, true).mul(stride));
             stride *= 2;
           }
+
           const sunTransmittance = exp(toSun.mul(-EXTINCTION));
           // Dark edges on the sunny side of dense cloud ("powder").
           const powder = float(1).sub(exp(toSun.mul(-EXTINCTION * 2)));
+
           const direct = sunTransmittance
             .mul(mix(1, powder, 0.5))
             .mul(cloudPhase)
             .mul(sunLight);
+
           // Sky light, brighter toward the tops.
           const height = saturate(p.y.sub(bottom).div(top.sub(bottom)));
           const ambient = mix(skyHorizon, skyZenith.mul(3), height).mul(1.4);
           let luminance: any = vec3(direct).add(ambient);
+
           if (night) {
             // The city lights the base; it's spent a little way in.
             const below = float(1).sub(height);
@@ -234,6 +247,7 @@ export function createCloudNode({
         const uv = pc.xz.add(cirrus.offset).div(vec2(70000, 22000));
         const streaks = texture(weather, uv).g;
         const wisps = texture(weather, uv.mul(5.3)).r;
+
         const amount = saturate(
           remap(
             streaks.mul(0.7).add(wisps.mul(0.3)),
@@ -243,9 +257,11 @@ export function createCloudNode({
             float(1)
           )
         ).mul(0.55);
+
         const lum = vec3(phase(cosine, 0.5).mul(sunLight).mul(0.5)).add(
           skyHorizon.mul(1.6)
         );
+
         // Fade toward the horizon, where the sheet is very far away.
         const fadeOut = smoothstep(0.01, 0.15, direction.y);
         const alpha = amount.mul(fadeOut);
@@ -257,12 +273,15 @@ export function createCloudNode({
     // Haze between the camera and the clouds.
     If(firstHit.greaterThan(0), () => {
       const hit = cameraPosition.add(direction.mul(firstHit));
+
       // The boundary-layer haze is thin at cloud height, but distant cloud
       // still melts into the horizon glow, softening the deck's eye-level edge.
       const clear = hazeTransmittance(cameraPosition, hit).mul(
         float(1).sub(smoothstep(15000, 85000, firstHit).mul(0.8))
       );
+
       let haze: any = hazeColor(direction);
+
       if (night) haze = haze.add(hazeGlow(cameraPosition, hit));
       scattered.assign(
         scattered
@@ -285,9 +304,11 @@ export function createCloudNode({
         Loop(quality.rainSteps, ({ i }) => {
           // t = r0 + span·u², so dt = 2·span·u·du.
           const u = float(i).add(jitter).div(quality.rainSteps);
+
           const p = cameraPosition.add(
             direction.mul(r0.add(span.mul(u.mul(u))))
           );
+
           const dt = span.mul(u).mul(2 / quality.rainSteps);
           // Haze hides far-off rain: count what shows through it.
           depth.addAssign(
@@ -299,11 +320,13 @@ export function createCloudNode({
         const through = exp(depth.mul(rain.extinction).negate());
 
         let light: any = hazeColor(direction);
+
         if (night) {
           light = light.add(
             hazeGlow(cameraPosition, cameraPosition.add(direction.mul(r1)))
           );
         }
+
         const shaft = light.mul(RAIN_SHADE).mul(float(1).sub(through));
 
         // From under the cloud the rain is in front of it; from above,

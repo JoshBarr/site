@@ -29,15 +29,17 @@ import { AIRFIELD_TEXTURES, RUNWAY } from "./airfield";
 // close; taxiways and aprons come from textures baked by
 // scripts/airport/build_airfield.mjs.
 
-export const AIRFIELD_URL = "/airport";
+const AIRFIELD_URL = "/airport";
 
 /** Albedos, in the scene's greys. */
 const ASPHALT = 0.075;
 const CONCRETE = 0.2;
 const RUBBER = 0.035;
 const PAINT = 0.5;
+
 /** Taxiway yellow, as a grey. */
 const TAXI_PAINT = 0.3;
+
 /** Mowing stripes across the grass, metres per pair, and their contrast. */
 const MOWING = 18;
 const MOWING_CONTRAST = 0.07;
@@ -45,22 +47,27 @@ const MOWING_CONTRAST = 0.07;
 // Runway markings, ICAO Annex 14, in metres from the threshold (t) and from
 // the centreline (s), for a 45 m precision runway landing under 2400 m.
 const THRESHOLD_STRIPES = { from: 6, length: 30, count: 6 };
+
 /** Stripes stop this far short of the runway's edge. */
 const THRESHOLD_EDGE_CLEAR = 3;
 const THRESHOLD_BAR = 1.8;
 const DESIGNATOR = { from: 48, height: 9, width: 7.5 };
 const AIMING_POINT = { from: 300, length: 45, inner: 9, width: 6 };
+
 /** Touchdown zone: [from, stripes per side]. */
 const TOUCHDOWN: [number, number][] = [
   [150, 3],
   [450, 2],
   [600, 2],
 ];
+
 const TOUCHDOWN_STRIPE = { length: 22.5, width: 1.8, gap: 1.5 };
 const CENTRELINE = { from: 69, dash: 30, gap: 20, width: 0.45 };
 const SIDE_STRIPE = 0.9;
+
 /** Arrows down the displaced part of the runway, pointing to the threshold. */
 const ARROW = { tip: 12, head: 10, headWidth: 5, shaft: 20, spacing: 50 };
+
 /** Chevrons on the stopways. */
 const CHEVRON = { spacing: 15, width: 1 };
 const TAXI_LINE = 0.15;
@@ -86,6 +93,7 @@ function loadTexture(name: string, mipmaps = true) {
   map.minFilter = mipmaps ? LinearMipmapLinearFilter : LinearFilter;
   map.magFilter = LinearFilter;
   map.anisotropy = 8;
+
   return map;
 }
 
@@ -96,11 +104,14 @@ function createDesignators() {
   canvas.width = cell[0] * 2;
   canvas.height = cell[1];
   const context = canvas.getContext("2d");
+
   if (!context) {
     const empty = new DataTexture(new Uint8Array(4), 1, 1);
     empty.needsUpdate = true;
+
     return empty;
   }
+
   context.fillStyle = "#000";
   context.fillRect(0, 0, canvas.width, canvas.height);
   context.fillStyle = "#fff";
@@ -132,12 +143,14 @@ function createDesignators() {
   map.minFilter = LinearMipmapLinearFilter;
   map.magFilter = LinearFilter;
   map.anisotropy = 8;
+
   return map;
 }
 
 export function createAirfieldMaps(manifest: TerrainManifest): AirfieldMaps {
   const [west, south, east, north] = AIRFIELD_TEXTURES.bounds;
   const [originE, originN] = manifest.origin;
+
   return {
     lines: loadTexture("lines.png"),
     ground: loadTexture("ground.png"),
@@ -159,6 +172,7 @@ export function disposeAirfieldMaps(maps: AirfieldMaps) {
 /** Share of [x - w/2, x + w/2] inside [lo, hi]. */
 function box(x, lo, hi, w) {
   const h = w.mul(0.5);
+
   return max(min(x.add(h), hi).sub(max(x.sub(h), lo)), 0).div(w);
 }
 
@@ -170,10 +184,15 @@ function stripes(x, period: number, lo: number, hi: number, count: number, w) {
   const integral = (v) => {
     const c = clamp(v, 0, period * count);
     const k = floor(c.div(period));
+
     return k.mul(hi - lo).add(clamp(c.sub(k.mul(period)).sub(lo), 0, hi - lo));
   };
+
   const h = w.mul(0.5);
-  return integral(x.add(h)).sub(integral(x.sub(h))).div(w);
+
+  return integral(x.add(h))
+    .sub(integral(x.sub(h)))
+    .div(w);
 }
 
 /** A line along a distance field, at least a pixel wide but no brighter. */
@@ -181,6 +200,7 @@ function line(distance, halfWidth: number) {
   const w = max(fwidth(distance), 0.0001);
   const drawn = max(float(halfWidth), w.mul(0.5));
   const cover = clamp(drawn.sub(distance).div(w).add(0.5), 0, 1);
+
   return cover.mul(float(halfWidth).div(drawn));
 }
 
@@ -197,7 +217,9 @@ function endMarkings(
   const side = abs(s);
   const halfWidth = RUNWAY.width / 2;
 
-  const unit = (halfWidth - THRESHOLD_EDGE_CLEAR) / (THRESHOLD_STRIPES.count * 2);
+  const unit =
+    (halfWidth - THRESHOLD_EDGE_CLEAR) / (THRESHOLD_STRIPES.count * 2);
+
   const threshold = box(
     t,
     THRESHOLD_STRIPES.from,
@@ -214,10 +236,13 @@ function endMarkings(
     AIMING_POINT.from,
     AIMING_POINT.from + AIMING_POINT.length,
     wt
-  ).mul(box(side, AIMING_POINT.inner, AIMING_POINT.inner + AIMING_POINT.width, ws));
+  ).mul(
+    box(side, AIMING_POINT.inner, AIMING_POINT.inner + AIMING_POINT.width, ws)
+  );
 
   const { length, width, gap } = TOUCHDOWN_STRIPE;
   let touchdown: any = float(0);
+
   for (const [from, count] of TOUCHDOWN) {
     touchdown = touchdown.add(
       box(t, from, from + length, wt).mul(
@@ -231,28 +256,34 @@ function endMarkings(
   const u = s.div(DESIGNATOR.width).add(0.5);
   const v = float(top).sub(t).div(DESIGNATOR.height);
   const inCell = box(u, 0, 1, float(0.001)).mul(box(v, 0, 1, float(0.001)));
+
   const number = texture(designators, vec2(u.add(cell).mul(0.5), v)).r.mul(
     inCell
   );
 
   // Arrows down the displaced length, each a shaft and a head.
   let arrows: any = float(0);
+
   for (
     let tip = -ARROW.tip;
     tip - ARROW.head - ARROW.shaft > -displaced;
     tip -= ARROW.spacing
   ) {
     const back = tip - ARROW.head;
+
     const headHalf = float(tip)
       .sub(t)
       .div(ARROW.head)
       .mul(ARROW.headWidth / 2);
+
     const head = box(t, back, tip, wt).mul(
       clamp(headHalf.sub(side).div(ws).add(0.5), 0, 1)
     );
+
     const shaft = box(t, back - ARROW.shaft, back, wt).mul(
       box(s, -CENTRELINE.width, CENTRELINE.width, ws)
     );
+
     arrows = arrows.add(head).add(shaft);
   }
 
@@ -290,6 +321,7 @@ export function shadeAirfield(
   const runway = box(a, -stopSouth, RUNWAY.length + stopNorth, wa).mul(
     box(c, -halfWidth, halfWidth, wc)
   );
+
   const depth = ground.r.sub(0.5).mul(2 * paveRange);
   const taxi = clamp(depth.div(max(fwidth(depth), 0.0001)).add(0.5), 0, 1);
   const paved = max(runway, taxi);
@@ -302,36 +334,50 @@ export function shadeAirfield(
 
   // Tyre rubber where wheels touch down, in streaks along the runway.
   const streaks = texture(detail, vec2(c.div(5), a.div(170))).a;
+
   const touchdownZone = (t) =>
     smoothstep(60, 250, t).mul(smoothstep(950, 400, t));
+
   const tracks = smoothstep(9, 2, abs(c)).mul(
     max(
       touchdownZone(a.sub(RUNWAY.threshold34)),
       touchdownZone(float(RUNWAY.threshold16).sub(a))
     )
   );
+
   albedo = mix(
     albedo,
     float(RUBBER),
-    tracks.mul(smoothstep(0.3, 0.7, streaks)).mul(runway).mul(0.85)
+    tracks
+      .mul(smoothstep(0.3, 0.7, streaks))
+      .mul(runway)
+      .mul(0.85)
   );
 
   // Runway paint.
   const sideStripes = box(a, 0, RUNWAY.length, wa).mul(
     box(abs(c), halfWidth - SIDE_STRIPE, halfWidth, wc)
   );
+
   // Whole dashes, centred between the numbers.
   const period = CENTRELINE.dash + CENTRELINE.gap;
-  const span =
-    RUNWAY.threshold16 - RUNWAY.threshold34 - 2 * CENTRELINE.from;
+
+  const span = RUNWAY.threshold16 - RUNWAY.threshold34 - 2 * CENTRELINE.from;
+
   const dashes = Math.floor((span + CENTRELINE.gap) / period);
+
   const firstDash =
     RUNWAY.threshold34 +
     CENTRELINE.from +
     (span - (dashes * period - CENTRELINE.gap)) / 2;
-  const centreline = box(c, -CENTRELINE.width / 2, CENTRELINE.width / 2, wc).mul(
-    stripes(a.sub(firstDash), period, 0, CENTRELINE.dash, dashes, wa)
-  );
+
+  const centreline = box(
+    c,
+    -CENTRELINE.width / 2,
+    CENTRELINE.width / 2,
+    wc
+  ).mul(stripes(a.sub(firstDash), period, 0, CENTRELINE.dash, dashes, wa));
+
   const ends = max(
     endMarkings(
       { t: a.sub(RUNWAY.threshold34), s: c, wt: wa, ws: wc },
@@ -346,14 +392,17 @@ export function shadeAirfield(
       1
     )
   );
+
   // Worn where the tyres run.
   const paint = max(max(sideStripes, centreline), ends).mul(
     float(1).sub(tracks.mul(0.4))
   );
+
   albedo = mix(albedo, float(PAINT), clamp(paint, 0, 1).mul(runway));
 
   // Chevrons on the stopways, pointing at the runway.
   const beyond = max(a.negate(), a.sub(RUNWAY.length));
+
   const chevrons = stripes(
     beyond.sub(abs(c).mul(0.5)).add(CHEVRON.spacing * 4),
     CHEVRON.spacing,
@@ -364,11 +413,16 @@ export function shadeAirfield(
   ).mul(smoothstep(0, 0.5, beyond));
 
   // Taxiway centrelines and runway-holding bars, off the runway.
-  const toLine = lines.rg.sub(0.5).mul(2 * lineRange).length();
+  const toLine = lines.rg
+    .sub(0.5)
+    .mul(2 * lineRange)
+    .length();
+
   const taxiMarks = max(
     line(toLine, TAXI_LINE / 2),
     line(lines.b.mul(lineRange), holdingDepth / 2)
   ).mul(taxi);
+
   albedo = mix(
     albedo,
     float(TAXI_PAINT),

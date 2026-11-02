@@ -42,7 +42,7 @@ import { pixelAngle } from "./common";
 // thinner than a pixel become partial coverage (alpha to coverage) instead
 // of shimmering, the way a lattice tower greys into the haze.
 
-export interface LatticeSection {
+interface LatticeSection {
   /** Height of this section's top above the base, m. */
   top: number;
   /** Face width at that height, m. */
@@ -137,13 +137,17 @@ export function towerHeight(spec: LatticeTowerSpec) {
 /** Face width at a height. */
 export function widthAt(spec: LatticeTowerSpec, height: number) {
   let below = { top: 0, width: spec.baseWidth };
+
   for (const section of spec.sections) {
     if (height <= section.top) {
       const t = (height - below.top) / (section.top - below.top);
+
       return below.width + (section.width - below.width) * t;
     }
+
     below = section;
   }
+
   return below.width;
 }
 
@@ -164,6 +168,7 @@ function createFaces(spec: LatticeTowerSpec) {
 
   let foot = { top: -FOOTING, width: widthAt(spec, -FOOTING) };
   const sections = [{ top: 0, width: spec.baseWidth }, ...spec.sections];
+
   for (const section of sections) {
     const h = section.top - foot.top;
     const w0 = foot.width / 2;
@@ -182,13 +187,16 @@ function createFaces(spec: LatticeTowerSpec) {
       const ax = nz;
       const az = -nx;
       const base = positions.length / 3;
+
       const corners: [number, number, number][] = [
         [-1, 0, w0],
         [1, 0, w0],
         [1, h, w1],
         [-1, h, w1],
       ];
+
       const normalLength = Math.hypot(1, lean);
+
       for (const [side, y, w] of corners) {
         positions.push(
           nx * w + ax * side * w,
@@ -199,8 +207,10 @@ function createFaces(spec: LatticeTowerSpec) {
         lattice.push(side * w, y);
         frame.push(w0, w1, h, panels);
       }
+
       indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
     }
+
     foot = section;
   }
 
@@ -210,6 +220,7 @@ function createFaces(spec: LatticeTowerSpec) {
   geometry.setAttribute("lattice", new Float32BufferAttribute(lattice, 2));
   geometry.setAttribute("frame", new Float32BufferAttribute(frame, 4));
   geometry.setIndex(indices);
+
   return geometry;
 }
 
@@ -218,11 +229,13 @@ function line(d, width: number, pixel) {
   const half = float(width).mul(0.5);
   // Thinner than a pixel: drawn a pixel wide, but proportionally fainter.
   const drawn = max(half, pixel.mul(0.5));
+
   return clamp(drawn.sub(d).div(pixel).add(0.5), 0, 1).mul(half.div(drawn));
 }
 
 /** Faces are kept at least this many pixels wide, fading to compensate. */
 const MIN_PIXELS = 1.2;
+
 /**
  * Ladders, feeder cables and mounts add to the steelwork, so a distant tower
  * reads more solid than its members alone.
@@ -246,10 +259,12 @@ function createLatticeMaterial(spec: LatticeTowerSpec, msaa: boolean) {
   // samples) and spread their coverage thinner to match.
   const world = modelWorldMatrix.mul(vec4(positionGeometry, 1)).xyz;
   const metresPerPixel = cameraPosition.distance(world).mul(pixelAngle);
+
   const widen = max(
     float(1),
     metresPerPixel.mul(MIN_PIXELS).div(halfWidth.mul(2))
   );
+
   material.positionNode = positionGeometry.mul(vec3(widen, 1, widen));
   // The shadow pass sees the tower from the sun: true size.
   material.castShadowPositionNode = positionGeometry;
@@ -265,6 +280,7 @@ function createLatticeMaterial(spec: LatticeTowerSpec, msaa: boolean) {
 
   const panelHeight = frame.z.div(frame.w);
   const f = fract(y.div(panelHeight));
+
   const horizontals = line(
     min(f, float(1).sub(f)).mul(panelHeight),
     spec.brace,
@@ -274,15 +290,19 @@ function createLatticeMaterial(spec: LatticeTowerSpec, msaa: boolean) {
   // X-bracing corner to corner across each panel.
   const u = s.div(halfWidth);
   const across = f.mul(2).sub(1);
+
   const diagonalLength = sqrt(
     panelHeight.mul(panelHeight).add(halfWidth.mul(halfWidth).mul(4))
   );
+
   const slant = panelHeight.div(diagonalLength);
   const diagonal = (d) => line(d.mul(halfWidth).mul(slant), spec.brace, pixel);
+
   const bracing = max(
     diagonal(abs(u.sub(across))),
     diagonal(abs(u.add(across)))
   );
+
   const pattern = max(max(legs, horizontals), bracing);
 
   // Once panels are a few pixels tall the pattern can't be resolved: use the
@@ -297,6 +317,7 @@ function createLatticeMaterial(spec: LatticeTowerSpec, msaa: boolean) {
       .mul(CLUTTER),
     1
   );
+
   const unresolved = smoothstep(0.12, 0.5, pixel.div(panelHeight));
   const steel = mix(pattern, solidity, unresolved);
   const coverage = steel.div(widen);
@@ -319,6 +340,7 @@ function createLatticeMaterial(spec: LatticeTowerSpec, msaa: boolean) {
   // In the shadow map, keep each texel's share of steel; filtering averages
   // that back into a partial shadow.
   material.maskShadowNode = steel.greaterThan(noise);
+
   if (msaa) {
     // A few samples a pixel quantise coverage; dither across the steps so
     // faint coverage doesn't round away to nothing.
@@ -329,6 +351,7 @@ function createLatticeMaterial(spec: LatticeTowerSpec, msaa: boolean) {
     material.opacityNode = coverage;
     material.alphaTestNode = noise.mul(0.98).add(0.01);
   }
+
   return material;
 }
 
@@ -347,6 +370,7 @@ function createFittings(spec: LatticeTowerSpec) {
   for (const { from, to, perFace, depth } of spec.antennas) {
     const width = widthAt(spec, (from + to) / 2);
     const panel = (width / perFace) * 0.8;
+
     for (const [nx, nz] of [
       [0, 1],
       [1, 0],
@@ -356,11 +380,13 @@ function createFittings(spec: LatticeTowerSpec) {
       for (let k = 0; k < perFace; k++) {
         const offset = ((k + 0.5) / perFace - 0.5) * width;
         const out = width / 2 + depth / 2 + 0.3;
+
         const box = new BoxGeometry(
           nx === 0 ? panel : depth,
           to - from,
           nx === 0 ? depth : panel
         );
+
         box.translate(
           nx * out + nz * offset,
           (from + to) / 2,
@@ -387,6 +413,7 @@ function createFittings(spec: LatticeTowerSpec) {
     parts.map((part) => {
       const g = part.index ? part.toNonIndexed() : part;
       g.deleteAttribute("uv");
+
       return g;
     })
   );
@@ -398,6 +425,7 @@ function createFittings(spec: LatticeTowerSpec) {
  */
 export function createLatticeTower(spec: LatticeTowerSpec, msaa: boolean) {
   const faces = new Mesh(createFaces(spec), createLatticeMaterial(spec, msaa));
+
   const fittings = new Mesh(
     createFittings(spec),
     new MeshStandardNodeMaterial({
@@ -406,12 +434,13 @@ export function createLatticeTower(spec: LatticeTowerSpec, msaa: boolean) {
       metalness: 0,
     })
   );
+
   return {
     meshes: [faces, fittings],
     dispose() {
       for (const mesh of [faces, fittings]) {
         mesh.geometry.dispose();
-        (mesh.material as MeshStandardNodeMaterial).dispose();
+        mesh.material.dispose();
       }
     },
   };

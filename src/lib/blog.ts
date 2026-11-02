@@ -3,22 +3,26 @@ import matter from "gray-matter";
 import fs from "fs/promises";
 import fsExtra from "fs-extra";
 import { kebabCase } from "change-case";
+import { z } from "zod";
 
 export const POSTS_PATH = path.join(process.cwd(), "src", "blog");
 
 const MDX_REGEX = /index\.mdx?$/;
 
-export type FrontMatter = {
-  tags: string[];
-  title: string;
-  blurb: string;
-  date: string;
-  cover_image?: string;
-  published: boolean;
-  authors: string[];
-} & Record<string, any>;
+const frontMatter = z.object({
+  tags: z.array(z.string()),
+  title: z.string(),
+  blurb: z.string(),
+  /** ISO 8601, quoted so YAML leaves it a string. */
+  date: z.string(),
+  cover_image: z.string().optional(),
+  published: z.boolean(),
+  authors: z.array(z.string()),
+});
 
-export async function getPostFilePaths() {
+export type FrontMatter = z.infer<typeof frontMatter>;
+
+async function getPostFilePaths() {
   const paths = await fs.readdir(POSTS_PATH);
 
   const dirs: string[] = [];
@@ -39,6 +43,7 @@ export async function getPostFilePaths() {
 function sortByDate(a: FrontMatter, b: FrontMatter) {
   const dateA = new Date(a.date);
   const dateB = new Date(b.date);
+
   return dateB > dateA ? 1 : -1;
 }
 
@@ -69,12 +74,10 @@ export async function getAllPosts(): Promise<PostMetaWithFrontMatter[]> {
     );
 
     const { data } = matter(fileContents);
-    const frontmatter = data as FrontMatter;
-
     const slug = getSlug(filename);
 
     posts.push({
-      ...frontmatter,
+      ...frontMatter.parse(data),
       slug,
       permalink: `/articles/${slug}`,
     });
@@ -96,8 +99,8 @@ export async function getPostBySlug(slug: string | string[]) {
 
     const { data, content } = matter(fileContents);
 
-    return { data: data as FrontMatter, content };
-  } catch (e) {
+    return { data: frontMatter.parse(data), content };
+  } catch {
     return undefined;
   }
 }
@@ -112,6 +115,7 @@ export async function getAllPostsByTag() {
       if (!tags[tag]) {
         tags[tag] = [];
       }
+
       tags[tag].push(post);
     });
   }

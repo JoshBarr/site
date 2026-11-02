@@ -78,11 +78,13 @@ const MAX_PER_SHAPE = 64;
  * and the edge cache can add another 15s.
  */
 const DELAY = 30_000;
+
 /**
  * Never shorter on screen than this many pixels. Real size, a regional
  * turboprop is a pixel or two from across the harbour.
  */
 const MIN_PIXELS = 10;
+
 /** Fuselage centre above the wheels, in lengths. */
 const RIDE_HEIGHT = 0.08;
 
@@ -91,38 +93,50 @@ const RIDE_HEIGHT = 0.08;
  * view.
  */
 const TRAIL_COLOR = new Color(1, 0.8, 0.1);
+
 /** Where a plane has been. */
 const BEHIND_OPACITY = 0.35;
+
 /** Where it's going: what's known, then the way to its destination. */
 const AHEAD_OPACITY = 0.14;
+
 /** Pixels. */
 const TRAIL_WIDTH = 2;
 const MAX_TRAIL_SEGMENTS = 40_000;
+
 /** Ahead of a plane, its trail is dashed: dash and gap lengths, metres. */
 const DASH = 120;
 const GAP = 200;
+
 /**
  * Behind a plane, its trail is whole for this many seconds, then fades out
  * over the next TAIL_FADE, the oldest first.
  */
 const TAIL_HOLD = 20;
 const TAIL_FADE = 40;
+
 /**
  * The way on goes with its aircraft, which is drawn for EXTRAPOLATE seconds
  * past its last fix in the air: coming in to land, it's often lost close to
  * the ground. It fades out over the last FADE_OUT.
  */
 const FADE_OUT = 10;
+
 /** Slowest an aircraft is taken to have flown in from its origin, m/s. */
 const MIN_INBOUND_SPEED = 50;
+
 /** On the ground this close to an airport, metres, it's at it. */
 const AT_AIRPORT = 5000;
+
 /** Without a route, a trail fades in over this distance, metres. */
 const FADE_IN = 3000;
+
 /** Fades out between these distances from the camera, metres (far is 80 km). */
 const TRAIL_FAR: [number, number] = [35_000, 75_000];
+
 /** Time of a route's way on, seconds: always ahead. */
 const FUTURE = 1e9;
+
 /** Cruising altitudes, metres, for drawing routes off the map. */
 const CRUISE: Record<Shape, number> = {
   jet: 10_500,
@@ -132,15 +146,19 @@ const CRUISE: Record<Shape, number> = {
 
 /** Faster than this, m/s, on the ground, an aircraft is worth following. */
 const TAXIING = 3;
+
 /** Seconds apart that a followed aircraft's speed is sampled. */
 const SAMPLE = 1;
 
 /** Landing lights are on below this, metres above the ground (10,000 ft). */
 const LANDING_LIGHTS_BELOW = 3000;
+
 /** Anti-collision beacon flashes per second. */
 const BEACON_RATE = 1;
+
 /** Seconds between strobe double-flashes. */
 const STROBE_PERIOD = 1.2;
+
 /** Smallest light, metres; most are bigger on screen, see `minPixels`. */
 const LIGHT_SIZE = 3;
 
@@ -176,6 +194,7 @@ function lightsFor(
     wingY,
     wingZ,
   ];
+
   return [
     { at: beacon, color: RED, pattern: Pattern.Beacon, minPixels: 9 },
     { at: tip(-1), color: RED, pattern: Pattern.Steady, minPixels: 6 },
@@ -204,6 +223,7 @@ const LIGHTS: Record<Shape, LightSpec[]> = {
   prop: lightsFor(0.55, 0.05, -0.06, [0, 0.215, 0.45], [0, 0.0, -0.35]),
   helicopter: lightsFor(0.1, 0, -0.1, [0, 0.13, 0.1], [0, -0.1, -0.38]),
 };
+
 const LIGHTS_PER_AIRCRAFT = 7;
 const MAX_LIGHTS = SHAPES.length * MAX_PER_SHAPE * LIGHTS_PER_AIRCRAFT;
 
@@ -215,17 +235,21 @@ function colorAttribute(count: number) {
     new Float32Array(count * 3),
     3
   );
+
   attribute.setUsage(DynamicDrawUsage);
+
   return attribute;
 }
 
 function createPlaneMesh(geometry: BufferGeometry) {
   const body = colorAttribute(MAX_PER_SHAPE);
   const tail = colorAttribute(MAX_PER_SHAPE);
+
   const material = new MeshStandardNodeMaterial({
     roughness: 0.45,
     metalness: 0.1,
   });
+
   material.colorNode = mix(
     instancedBufferAttribute<"vec3">(body, "vec3"),
     instancedBufferAttribute<"vec3">(tail, "vec3"),
@@ -236,6 +260,7 @@ function createPlaneMesh(geometry: BufferGeometry) {
   // Instances move every frame; their bounds would always be stale.
   mesh.frustumCulled = false;
   mesh.count = 0;
+
   return { mesh, body, tail };
 }
 
@@ -255,11 +280,13 @@ function createPlanes(): Record<Shape, ReturnType<typeof createPlaneMesh>> {
  */
 function createTrails() {
   const geometry = new LineSegmentsGeometry();
+
   const segments = new InstancedInterleavedBuffer(
     new Float32Array(MAX_TRAIL_SEGMENTS * 6),
     6,
     1
   );
+
   segments.setUsage(DynamicDrawUsage);
   geometry.setAttribute(
     "instanceStart",
@@ -269,11 +296,13 @@ function createTrails() {
     "instanceEnd",
     new InterleavedBufferAttribute(segments, 3, 3)
   );
+
   const times = new InstancedInterleavedBuffer(
     new Float32Array(MAX_TRAIL_SEGMENTS * 7),
     7,
     1
   );
+
   times.setUsage(DynamicDrawUsage);
   geometry.setAttribute(
     "instanceTimeStart",
@@ -312,10 +341,12 @@ function createTrails() {
     transparent: true,
     depthWrite: false,
   });
+
   material.blending = NormalBlending;
   material.alphaToCoverage = false;
   // Its fog would be the template quad's, not the line's: hazed below.
   material.fog = false;
+
   // The template quad's y is below 0.5 at a segment's start, above at its end.
   const end = <T extends "float" | "vec3">(
     type: T,
@@ -327,21 +358,28 @@ function createTrails() {
       attribute<T>(start, type),
       attribute<T>(end, type)
     );
+
   const at = varying(end("float", "instanceTimeStart", "instanceTimeEnd"));
+
   const weight = varying(
     end("float", "instanceWeightStart", "instanceWeightEnd")
   );
+
   const until = varying(attribute<"float">("instanceUntil", "float"));
+
   const along = varying(
     end("float", "instanceDistanceStart", "instanceDistanceEnd")
   );
+
   const dash = step(fract(along.div(DASH + GAP)), float(DASH / (DASH + GAP)));
   const where = end("vec3", "instanceStart", "instanceEnd");
+
   const seen = varying(
     hazeTransmittance(cameraPosition, where).mul(
       float(1).sub(smoothstep(...TRAIL_FAR, cameraPosition.distance(where)))
     )
   );
+
   const age = trailNow.sub(at);
   const tail = float(1).sub(smoothstep(TAIL_HOLD, TAIL_HOLD + TAIL_FADE, age));
   const linger = until.sub(trailNow).div(FADE_OUT).clamp(0, 1);
@@ -357,6 +395,7 @@ function createTrails() {
   lines.frustumCulled = false;
   // After the sea (1) and wakes (2).
   lines.renderOrder = 3;
+
   return { lines, segments, times };
 }
 
@@ -366,14 +405,17 @@ function createLights() {
     new Float32Array(MAX_LIGHTS * 4),
     4
   );
+
   const style = new InstancedBufferAttribute(
     new Float32Array(MAX_LIGHTS * 4),
     4
   );
+
   const extra = new InstancedBufferAttribute(
     new Float32Array(MAX_LIGHTS * 2),
     2
   );
+
   for (const a of [light, style, extra]) a.setUsage(DynamicDrawUsage);
 
   const at = instancedBufferAttribute<"vec4">(light, "vec4");
@@ -386,6 +428,7 @@ function createLights() {
     depthWrite: false,
     blending: AdditiveBlending,
   });
+
   material.fog = false;
   material.positionNode = position;
   const distance = cameraPosition.distance(position);
@@ -395,15 +438,20 @@ function createLights() {
   );
 
   const beat = fract(time.mul(BEACON_RATE).add(more.x));
+
   const beacon = smoothstep(0, 0.03, beat).mul(
     float(1).sub(smoothstep(0.1, 0.2, beat))
   );
+
   const blink = fract(time.div(STROBE_PERIOD).add(more.x));
+
   const pulse = (start: number) =>
     smoothstep(start, start + 0.01, blink).mul(
       float(1).sub(smoothstep(start + 0.03, start + 0.05, blink))
     );
+
   const strobe = pulse(0).add(pulse(0.12));
+
   const on = select(
     look.w.lessThan(0.5),
     float(1),
@@ -422,6 +470,7 @@ function createLights() {
   sprite.count = 0;
   sprite.frustumCulled = false;
   sprite.renderOrder = 10;
+
   return { sprite, light, style, extra };
 }
 
@@ -446,9 +495,12 @@ interface Plane {
 function trailOf(aircraft: Aircraft, path: Path, epoch: number) {
   const { fixes } = aircraft;
   let airborne = fixes.length - 1;
+
   while (airborne >= 0 && fixes[airborne][2] === null) airborne--;
+
   if (airborne < 0) return null;
   const time = (fix: Fix) => (fix[3] - epoch) / 1000;
+
   return {
     last: pointBefore(path, time(fixes[fixes.length - 1])),
     // As long as it's drawn in the air.
@@ -465,16 +517,20 @@ function trailOf(aircraft: Aircraft, path: Path, epoch: number) {
  */
 function routeUse({ fixes, route }: Aircraft) {
   if (!route) return { back: false, on: false };
+
   const tookOff = fixes.some(
     (fix, i) => i > 0 && fixes[i - 1][2] === null && fix[2] !== null
   );
+
   if (tookOff) return { back: false, on: true };
   const [e, n] = route.from.at;
   const away = (fix: Fix) => Math.hypot(fix[0] - e, fix[1] - n);
   const last = fixes[fixes.length - 1];
+
   const next =
     route.from.elevation !== null &&
     (last[2] === null ? away(last) < AT_AIRPORT : away(last) < away(fixes[0]));
+
   return { back: !next, on: !next };
 }
 
@@ -487,6 +543,7 @@ const offset = new Vector3();
 const forward = new Vector3();
 const toCamera = new Vector3();
 const color = new Color();
+
 const pose: Pose = {
   x: 0,
   y: 0,
@@ -497,6 +554,7 @@ const pose: Pose = {
   ground: false,
   height: 0,
 };
+
 const HIDDEN = new Matrix4().makeScale(0, 0, 0);
 const before: Pose = { ...pose };
 const earlier: Pose = { ...pose };
@@ -505,19 +563,24 @@ const earlier: Pose = { ...pose };
 function motionAt(path: Path, now: number, at: Pose) {
   const speedBetween = (a: Pose, b: Pose) =>
     Math.hypot(b.x - a.x, b.z - a.z) / SAMPLE;
+
   if (!poseAt(path, now - SAMPLE, before)) {
     return { speed: 0, climb: 0, accel: 0 };
   }
+
   const speed = speedBetween(before, at);
+
   const accel = poseAt(path, now - 2 * SAMPLE, earlier)
     ? (speed - speedBetween(earlier, before)) / SAMPLE
     : 0;
+
   return { speed, climb: (at.y - before.y) / SAMPLE, accel };
 }
 
 /** What a flight's called, and where it's going if that's known. */
 function labelFor({ callsign, registration, hex, route }: Aircraft) {
   const name = callsign?.trim() || registration || hex.toUpperCase();
+
   return route ? `${name} · ${route.from.code} → ${route.to.code}` : name;
 }
 
@@ -557,9 +620,12 @@ export function Flights({
 
   const flying = useMemo(() => {
     const counts: Record<Shape, number> = { jet: 0, prop: 0, helicopter: 0 };
+
     return aircraft.flatMap((a): Plane[] => {
       const airframe = airframeFor(a);
+
       if (counts[airframe.shape] >= MAX_PER_SHAPE) return [];
+
       return [
         {
           aircraft: a,
@@ -579,6 +645,7 @@ export function Flights({
       () =>
         flying.map(({ aircraft }): Candidate => {
           const last = aircraft.fixes[aircraft.fixes.length - 1];
+
           return {
             id: aircraft.hex,
             label: labelFor(aircraft),
@@ -591,6 +658,7 @@ export function Flights({
 
   useEffect(() => {
     for (const shape of SHAPES) planes[shape].mesh.count = 0;
+
     for (const { airframe, slot } of flying) {
       const { mesh, body, tail } = planes[airframe.shape];
       color.setHex(airframe.body).toArray(body.array, slot * 3);
@@ -600,11 +668,12 @@ export function Flights({
     }
 
     const { lines, segments, times } = trails;
-    const positions = segments.array as Float32Array;
-    const stamps = times.array as Float32Array;
+    const positions = segments.array;
+    const stamps = times.array;
     let n = 0;
     /** Distance along the current trail, metres. */
     let along = 0;
+
     const add = (
       a: ArrayLike<number>,
       b: ArrayLike<number>,
@@ -619,6 +688,7 @@ export function Flights({
       along += length;
       n++;
     };
+
     const line = (
       points: ArrayLike<number>[],
       time: (i: number) => number,
@@ -633,11 +703,13 @@ export function Flights({
       flying.map(({ aircraft }) => aircraft.fixes),
       windFrom
     );
+
     const arriving = landing(direction, toWorld);
     const departing = takingOff(direction, toWorld);
 
     for (const { aircraft, airframe, path } of flying) {
       const trail = trailOf(aircraft, path, epoch);
+
       if (!trail) continue;
       along = 0;
       const { last, until } = trail;
@@ -665,21 +737,25 @@ export function Flights({
               route.from.code === HOME ? departing : undefined
             ).reverse()
           : [];
+
       // Timed as if flown at its first seen speed, so it fades from the
       // far end like the rest of the trail.
       const inbound = Math.max(aircraft.fixes[0][4], MIN_INBOUND_SPEED);
       const earlier = new Float64Array(before.length);
+
       for (let i = before.length - 2; i >= 0; i--) {
         const [a, b] = [before[i], before[i + 1]];
         earlier[i] =
           earlier[i + 1] +
           Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) / inbound;
       }
+
       line(before, (i) => path.t[first] - earlier[i], until);
 
       // Where it's been seen, skipping the ground: taxiing would only
       // flicker in the tarmac. Without a way back, it fades in.
       let travelled = before.length || path.ground[first] ? FADE_IN : 0;
+
       for (let i = first; i < last; i++) {
         if (!path.joined[i] || (path.ground[i] && path.ground[i + 1])) continue;
         const weight = Math.min(travelled / FADE_IN, 1);
@@ -720,8 +796,9 @@ export function Flights({
         );
       }
     }
+
     segments.needsUpdate = times.needsUpdate = true;
-    (lines.geometry as LineSegmentsGeometry).instanceCount = n;
+    lines.geometry.instanceCount = n;
   }, [flying, planes, trails, toWorld, groundAt, epoch, windFrom]);
 
   useEffect(
@@ -732,6 +809,7 @@ export function Flights({
         mesh.material.dispose();
         mesh.dispose();
       }
+
       trails.lines.geometry.dispose();
       trails.lines.material.dispose();
       sprites.sprite.material.dispose();
@@ -748,6 +826,7 @@ export function Flights({
 
     for (const { aircraft, airframe, path, slot, phase, switchOn } of flying) {
       const { mesh } = planes[airframe.shape];
+
       if (!poseAt(path, now, pose)) {
         mesh.setMatrixAt(slot, HIDDEN);
         continue;
@@ -757,15 +836,18 @@ export function Flights({
       const distance = camera.position.distanceTo(
         position.set(pose.x, pose.y, pose.z)
       );
+
       const size = Math.max(
         airframe.length,
         distance * pixelAngle.value * MIN_PIXELS
       );
+
       if (pose.ground) position.y += size * RIDE_HEIGHT;
       euler.set(pose.pitch, -pose.heading, pose.bank);
       rotation.setFromEuler(euler);
       matrix.compose(position, rotation, scale.setScalar(size));
       mesh.setMatrixAt(slot, matrix);
+
       if (aircraft.hex === watched) {
         publish({
           x: position.x,
@@ -784,6 +866,7 @@ export function Flights({
       toCamera.copy(camera.position).sub(position).normalize();
       const facing = 0.15 + 0.85 * Math.max(forward.dot(toCamera), 0) ** 2;
       const on = lights > switchOn ? 1 : 0;
+
       const landing =
         !pose.ground && pose.height < LANDING_LIGHTS_BELOW
           ? Math.max(on, 0.5) * facing
@@ -791,11 +874,13 @@ export function Flights({
 
       for (const spec of LIGHTS[airframe.shape]) {
         if (lit >= MAX_LIGHTS) break;
+
         const intensity = spec.landing
           ? landing
           : spec.pattern === Pattern.Strobe
             ? Math.max(on, 0.3)
             : on;
+
         if (intensity <= 0) continue;
         offset.set(...spec.at).applyMatrix4(matrix);
         light.setXYZW(lit, offset.x, offset.y, offset.z, intensity);

@@ -24,7 +24,10 @@ export interface TerrainManifest {
    * landcover.png: fractions of forest, scrub and urban cover (R, G, B) over
    * NZTM bounds [west, south, east, north]. Row 0 is the north edge.
    */
-  landcover?: { bounds: [number, number, number, number]; size: [number, number] };
+  landcover?: {
+    bounds: [number, number, number, number];
+    size: [number, number];
+  };
   /**
    * shore.png: signed distance to the shore, positive out to sea, around the
    * harbour: (v - 128) * unit metres. Sample (i, j) is `resolution` * i east
@@ -84,14 +87,19 @@ export class TileIndex {
 
   tilesAt(level: number): TileInfo[] {
     const entry = this.manifest.levels.find((l) => l.level === level);
-    return entry ? entry.tiles.map(([x, y]) => this.get(level, x, y)) : [];
+
+    return entry
+      ? entry.tiles.flatMap(([x, y]) => this.get(level, x, y) ?? [])
+      : [];
   }
 
   /** True when the level was generated over this tile's area. */
   inRange(level: number, x: number, y: number) {
     const entry = this.manifest.levels.find((l) => l.level === level);
+
     if (!entry) return false;
     const [x0, x1, y0, y1] = entry.range;
+
     return x >= x0 && x < x1 && y >= y0 && y < y1;
   }
 
@@ -103,6 +111,7 @@ export class TileIndex {
   tileOrigin(level: number, x: number, y: number): [number, number] {
     const size = this.tileSize(level);
     const half = this.manifest.rootSize / 2;
+
     return [-half + x * size, -half + y * size];
   }
 
@@ -122,8 +131,10 @@ export function nztmToWorld(
 
 export async function loadManifest(): Promise<TileIndex> {
   const response = await fetch(`${TERRAIN_URL}/manifest.json`);
+
   if (!response.ok) {
     throw new Error(`terrain manifest: ${response.status}`);
   }
+
   return new TileIndex(await response.json());
 }

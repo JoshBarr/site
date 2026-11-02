@@ -78,12 +78,19 @@ export function Buildings({
       (index) => {
         const { origin, rootSize } = terrain.manifest;
         const [e, n] = index.manifest.origin;
-        if (e !== origin[0] || n !== origin[1] || index.manifest.rootSize !== rootSize) {
+
+        if (
+          e !== origin[0] ||
+          n !== origin[1] ||
+          index.manifest.rootSize !== rootSize
+        ) {
           throw new Error("buildings were built for a different terrain frame");
         }
+
         const finest = index.manifest.levels.find(
           ({ level }) => level === index.maxLevel
         )!;
+
         setCityLights(
           rootSize,
           2 ** index.maxLevel,
@@ -114,16 +121,19 @@ function BuildingTiles({
   const { cache, material, lightsMaterial } = useMemo(() => {
     const material = createBuildingMaterial(index.manifest.encoding);
     const lightsMaterial = createLightsMaterial();
+
     const cache = new BuildingCache(index, material, lightsMaterial, {
       maxTriangles: quality.maxTriangles,
       setup: ({ mesh, lights }) => {
         if (mesh) castsNearShadow(mesh);
+
         if (quality.reflections) {
           mesh?.layers.enable(REFLECTION_LAYER);
           lights?.layers.enable(REFLECTION_LAYER);
         }
       },
     });
+
     return { cache, material, lightsMaterial };
   }, [index, quality]);
 
@@ -138,12 +148,15 @@ function BuildingTiles({
 
   const preload = useMemo(() => {
     const tiles: BuildingTile[] = [];
+
     const visit = (tile: BuildingTile) => {
       if (tile.level > quality.preloadLevel) return;
       tiles.push(tile);
       tile.children.forEach(visit);
     };
+
     index.roots.forEach(visit);
+
     return tiles;
   }, [index, quality]);
 
@@ -158,22 +171,31 @@ function BuildingTiles({
       { ...quality, verticalScale: verticalScale.value },
       selected.current
     );
+
     for (const tile of preload) {
       cache.request(tile, PRELOAD_PRIORITY + tile.level * 1e6);
     }
+
     const next = new Set<TileObjects>();
+
     for (const tile of selected.current) {
       const objects = cache.use(tile);
+
       if (objects) next.add(objects);
     }
+
     for (const objects of visible.current) {
       if (!next.has(objects)) objects.object.visible = false;
     }
+
     const lit = windowLights.value > 0;
+
     for (const { object, lights } of next) {
       object.visible = true;
+
       if (lights) lights.visible = lit;
     }
+
     visible.current = next;
     cache.update();
   });

@@ -24,6 +24,7 @@ export function useBuses() {
       if (!document.hidden) {
         try {
           const response = await fetch("/api/buses");
+
           if (response.ok) {
             const body: BusesResponse = await response.json();
             const skew = Date.now() - body.time;
@@ -36,12 +37,16 @@ export function useBuses() {
         } catch (e) {
           console.error("[buses]", e);
         }
+
         known = known.filter((bus) => !isStale(bus));
+
         if (stopped) return;
         setBuses(known);
       }
+
       timer = setTimeout(poll, POLL);
     };
+
     poll();
 
     return () => {

@@ -25,21 +25,27 @@ export function useTraffic() {
       if (!document.hidden || !known) {
         try {
           const response = await fetch("/api/traffic");
+
           if (response.ok) known = await response.json();
         } catch (e) {
           console.error("[traffic]", e);
         }
+
         if (stopped) return;
+
         const fresh =
           known && known.time - known.fetched < STALE ? known : null;
+
         setState((last) =>
           last.ready && last.speeds === fresh
             ? last
             : { speeds: fresh, ready: true }
         );
       }
+
       timer = setTimeout(poll, POLL);
     };
+
     poll();
 
     return () => {

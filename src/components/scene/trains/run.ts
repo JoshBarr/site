@@ -10,12 +10,16 @@ import type { Train } from "./useTrains";
 
 /** No train goes faster than this, m/s: bounds the search between fixes. */
 const TOP_SPEED = 45;
+
 /** Track found beyond the first and last fixes, for cars to stand on, m. */
 const EXTEND = 120;
+
 /** Fixes this far apart, m, say which way a train's going. */
 const MOVED = 20;
+
 /** Tracks considered for each fix, nearest first. */
 const CANDIDATES = 4;
+
 /**
  * What a metre of detour between fixes costs, against a metre of distance
  * from a fix: trains go the short way.
@@ -23,7 +27,7 @@ const CANDIDATES = 4;
 const DETOUR = 0.2;
 
 /** A vehicle in a consist: size in m, and its grey. */
-export interface Car {
+interface Car {
   length: number;
   width: number;
   height: number;
@@ -38,14 +42,17 @@ const MATANGI: Car = {
   height: 3.75,
   tint: 0xd8d8d8,
 };
+
 /** The Wairarapa Connection's carriages and the locomotive hauling them. */
 const CARRIAGE: Car = { length: 22, width: 2.8, height: 3.6, tint: 0x8e8e8e };
+
 const LOCOMOTIVE: Car = {
   length: 17,
   width: 2.75,
   height: 3.85,
   tint: 0x3a3a3a,
 };
+
 /** Between cars, m. */
 export const GAP = 0.8;
 
@@ -58,9 +65,12 @@ export function isPeak(date = new Date()) {
     minute: "numeric",
     hourCycle: "h23",
   }).formatToParts(date);
+
   const get = (type: string) => parts.find((p) => p.type === type)!.value;
+
   if (["Sat", "Sun"].includes(get("weekday"))) return false;
   const minutes = Number(get("hour")) * 60 + Number(get("minute"));
+
   return (
     (minutes >= 7 * 60 && minutes < 9 * 60) ||
     (minutes >= 16 * 60 && minutes < 18.5 * 60)
@@ -110,17 +120,20 @@ function direction(
   least = 0.5
 ): [number, number] | null {
   const length = Math.hypot(bx - ax, bz - az);
+
   return length > least ? [(bx - ax) / length, (bz - az) / length] : null;
 }
 
 /** Length of a way along the tracks. */
 function lengthOf(route: Point[]) {
   let length = 0;
+
   for (let k = 1; k < route.length; k++) {
     const [ax, ay, az] = route[k - 1];
     const [bx, by, bz] = route[k];
     length += Math.hypot(bx - ax, by - ay, bz - az);
   }
+
   return length;
 }
 
@@ -146,13 +159,11 @@ export function follow(
     ...nztmToWorld(index.manifest, e, n),
     (time - epoch) / 1000,
   ]);
-  const bearing =
+
+  const bearing: [number, number] | null =
     train.bearing === null
       ? null
-      : ([
-          Math.sin(radians(train.bearing)),
-          -Math.cos(radians(train.bearing)),
-        ] as [number, number]);
+      : [Math.sin(radians(train.bearing)), -Math.cos(radians(train.bearing))];
 
   // Where on the tracks each fix could be, going the way the fixes either
   // side say.
@@ -176,12 +187,16 @@ export function follow(
     from: number;
     route: Point[] | null;
   }
+
   const steps: Step[][] = [];
   let begin = -1;
   let previous = -1;
+
   for (const [i, here] of options.entries()) {
     steps.push([]);
+
     if (!here.length) continue;
+
     const fresh = () => {
       steps[i] = here.map(({ score }) => ({
         cost: score,
@@ -190,41 +205,53 @@ export function follow(
       }));
       begin = previous = i;
     };
+
     if (previous < 0) {
       fresh();
       continue;
     }
+
     const limit =
       TOP_SPEED * Math.max(fixes[i][2] - fixes[previous][2], 1) + 300;
+
     steps[i] = here.map(({ snap, score }) => {
       let best: Step = { cost: Infinity, from: -1, route: null };
       steps[previous].forEach((step, k) => {
         const a = options[previous][k].snap;
+
         const route = routes(`${a.edge}:${a.t}>${snap.edge}:${snap.t}`, () =>
           network.route(a, snap, limit)
         );
+
         if (!route) return;
         const detour = lengthOf(route) - Math.hypot(snap.x - a.x, snap.z - a.z);
         const cost = step.cost + score + detour * DETOUR;
+
         if (cost < best.cost) best = { cost, from: k, route };
       });
+
       return best;
     });
+
     if (steps[i].every(({ cost }) => cost === Infinity)) fresh();
     previous = i;
   }
+
   if (previous < 0) return null;
 
   // Back from the best place for the latest fix.
   const chain: { i: number; snap: Snap; route: Point[] | null }[] = [];
+
   let k = steps[previous].reduce(
     (best, step, c) => (step.cost < steps[previous][best].cost ? c : best),
     0
   );
+
   for (let i = previous; i >= begin; i--) {
     if (!steps[i].length) continue;
     const step = steps[i][k];
     chain.unshift({ i, snap: options[i][k].snap, route: step.route });
+
     if (step.from < 0) break;
     k = step.from;
   }
@@ -235,12 +262,14 @@ export function follow(
   const s = [0];
   const times = [fixes[chain[0].i][2]];
   const at: Run["fixes"] = [{ s: 0, time: times[0] }];
+
   for (const { i, route } of chain.slice(1)) {
     const before = at[at.length - 1];
     const time = fixes[i][2];
     const from = s[s.length - 1];
     const total = lengthOf(route!);
     let along = from;
+
     for (const [k, p] of route!.slice(1).entries()) {
       along += Math.hypot(
         p[0] - route![k][0],
@@ -256,6 +285,7 @@ export function follow(
           : time
       );
     }
+
     at.push({ s: along, time });
   }
 
@@ -265,10 +295,12 @@ export function follow(
     flat(points[points.length - 1])
   ) ??
     bearing ?? [1, 0];
+
   const backward = direction(flat(points[1] ?? points[0]), flat(points[0])) ?? [
     -forward[0],
     -forward[1],
   ];
+
   const behind = network.extend(first, backward, EXTEND).slice(1);
   const ahead = network.extend(last, forward, EXTEND).slice(1);
   const end = s[s.length - 1];
@@ -281,6 +313,7 @@ export function follow(
     times.unshift(NaN);
   });
   let on = end;
+
   for (const p of ahead) {
     const [qx, qy, qz] = points[points.length - 1];
     on += Math.hypot(p[0] - qx, p[1] - qy, p[2] - qz);
@@ -291,6 +324,7 @@ export function follow(
 
   const cars = consist(train.line, peak);
   const id = Number(train.id) || train.id.length;
+
   return {
     train,
     cars,
@@ -311,29 +345,37 @@ export function pointAt(
 ) {
   if (distance <= s[0]) return out.set(...points[0]);
   const n = s.length - 1;
+
   if (distance >= s[n]) return out.set(...points[n]);
   let lo = 0;
   let hi = n;
+
   while (hi - lo > 1) {
     const mid = (lo + hi) >> 1;
+
     if (s[mid] <= distance) lo = mid;
     else hi = mid;
   }
+
   const t = (distance - s[lo]) / (s[hi] - s[lo] || 1);
   const [ax, ay, az] = points[lo];
   const [bx, by, bz] = points[hi];
+
   return out.set(ax + (bx - ax) * t, ay + (by - ay) * t, az + (bz - az) * t);
 }
 
 /** How far along its run a train is at `time`, seconds since the epoch. */
 export function distanceAt({ fixes }: Pick<Run, "fixes">, time: number) {
   if (time <= fixes[0].time) return fixes[0].s;
+
   for (let k = 1; k < fixes.length; k++) {
     const a = fixes[k - 1];
     const b = fixes[k];
+
     if (time <= b.time) {
       return a.s + ((time - a.time) / (b.time - a.time || 1)) * (b.s - a.s);
     }
   }
+
   return fixes[fixes.length - 1].s;
 }

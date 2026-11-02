@@ -15,6 +15,7 @@ export const BIN = 20;
 /** Gaps drivers keep, for the density of queues: as the sim's drivers. */
 export const MIN_GAP = 2;
 export const HEADWAY = 1.2;
+
 /** An average vehicle's length, m, trucks and all. */
 const MEAN_LENGTH = 5;
 
@@ -27,14 +28,17 @@ const WEEKDAY_IN = [
   60, 40, 30, 30, 50, 200, 800, 1500, 1500, 1000, 800, 800, 850, 850, 900, 1000,
   1100, 1100, 800, 550, 400, 330, 220, 120,
 ];
+
 const WEEKDAY_OUT = [
   60, 40, 30, 30, 40, 120, 450, 850, 900, 800, 800, 800, 850, 850, 950, 1200,
   1500, 1500, 1000, 600, 450, 350, 230, 120,
 ];
+
 const WEEKEND = [
   120, 80, 60, 40, 40, 80, 180, 300, 500, 700, 850, 950, 950, 950, 950, 900,
   850, 800, 650, 500, 400, 330, 250, 180,
 ];
+
 /** Where "toward the city" is toward: Lambton Quay, NZTM. */
 const CITY: [number, number] = [1748700, 5427800];
 
@@ -43,12 +47,14 @@ const CITY: [number, number] = [1748700, 5427800];
  * the lights: slower than that, they're congested.
  */
 const TOWN_FREE = 0.7;
+
 /**
  * Traffic through a stretch is held to what its narrowest point nearby
  * carries, this far either way, m: lanes on the approach to a lane drop
  * aren't all full.
  */
 const NARROWS = 600;
+
 /** Slowest any traffic's shown going, m/s: a crawl, not a car park. */
 const CRAWL = 1.5;
 
@@ -61,12 +67,14 @@ function demand(date: Date, inbound: boolean) {
     minute: "numeric",
     hourCycle: "h23",
   }).formatToParts(date);
+
   const get = (type: string) => parts.find((p) => p.type === type)!.value;
   const weekend = ["Sat", "Sun"].includes(get("weekday"));
   const profile = weekend ? WEEKEND : inbound ? WEEKDAY_IN : WEEKDAY_OUT;
   const hour = Number(get("hour")) + Number(get("minute")) / 60;
   const a = profile[Math.floor(hour) % 24];
   const b = profile[(Math.floor(hour) + 1) % 24];
+
   return (a + (b - a) * (hour % 1)) / 3600;
 }
 
@@ -75,6 +83,7 @@ function demand(date: Date, inbound: boolean) {
  * close they're packed that holds them to the queue's speed.
  */
 const EAGER = 0.3;
+
 /**
  * How much further apart than their usual gap drivers wanting EAGER more
  * settle, in the intelligent driver model, at the speed they're held to.
@@ -88,6 +97,7 @@ function queueDensity(v: number) {
 
 const smoothstep = (a: number, b: number, x: number) => {
   const t = Math.min(Math.max((x - a) / (b - a), 0), 1);
+
   return t * t * (3 - 2 * t);
 };
 
@@ -105,6 +115,7 @@ export interface Bins {
 
 export function createBins(road: Carriageway, index: TileIndex): Bins {
   const count = Math.ceil(road.length / BIN) + 1;
+
   const bins: Bins = {
     count,
     inbound: new Uint8Array(count),
@@ -113,8 +124,10 @@ export function createBins(road: Carriageway, index: TileIndex): Bins {
     limit: new Float32Array(count),
     town: new Uint8Array(count),
   };
+
   const [cx, cz] = nztmToWorld(index.manifest, ...CITY);
   let hint = 0;
+
   for (let b = 0; b < count; b++) {
     const i = (hint = road.locate((b + 0.5) * BIN, hint));
     const tx = road.x[i + 1] - road.x[i];
@@ -124,9 +137,12 @@ export function createBins(road: Carriageway, index: TileIndex): Bins {
     bins.limit[b] = road.limit[i];
     bins.town[b] = road.limit[i] <= 50 / 3.6 + 0.1 ? 1 : 0;
   }
+
   const reach = NARROWS / BIN;
+
   for (let b = 0; b < count; b++) {
     let fewest = bins.lanes[b];
+
     for (
       let k = Math.max(b - reach, 0);
       k <= Math.min(b + reach, count - 1);
@@ -134,8 +150,10 @@ export function createBins(road: Carriageway, index: TileIndex): Bins {
     ) {
       fewest = Math.min(fewest, bins.lanes[k]);
     }
+
     bins.narrows[b] = fewest;
   }
+
   return bins;
 }
 
@@ -147,8 +165,10 @@ export type Override = "jam" | "free" | number | null;
 
 export function overrideFromUrl(): Override {
   const value = new URLSearchParams(location.search).get("traffic");
+
   if (value === "jam" || value === "free") return value;
   const kmh = Number(value);
+
   return value && Number.isFinite(kmh) && kmh > 0 ? kmh : null;
 }
 
@@ -169,18 +189,21 @@ export function fillSpeeds(
     const limit = bins.limit[b];
     const free = limit * (bins.town[b] ? TOWN_FREE : 0.95);
     let kmh = NaN;
+
     if (override === "jam") kmh = 8;
     else if (override === "free") kmh = NaN;
-    else if (typeof override === "number") kmh = override;
+    else if (override !== null) kmh = override;
     else if (speeds) {
       let sum = 0;
       let n = 0;
+
       for (const [a, z, key] of road.links) {
         if (s >= a && s < z && speeds.links[key] !== undefined) {
           sum += speeds.links[key];
           n++;
         }
       }
+
       if (!n) {
         for (const [a, z, key] of road.legs) {
           if (s >= a && s < z && speeds.legs[key] !== undefined) {
@@ -189,18 +212,23 @@ export function fillSpeeds(
           }
         }
       }
+
       if (n) kmh = sum / n;
     }
+
     speed[b] = Number.isNaN(kmh)
       ? free
       : Math.min(Math.max(kmh / 3.6, CRAWL), limit * 1.1);
   }
+
   // Two passes of a moving average, ±4 bins.
   const scratch = new Float32Array(bins.count);
+
   for (let pass = 0; pass < 2; pass++) {
     for (let b = 0; b < bins.count; b++) {
       let sum = 0;
       let n = 0;
+
       for (
         let k = Math.max(b - 4, 0);
         k <= Math.min(b + 4, bins.count - 1);
@@ -209,8 +237,10 @@ export function fillSpeeds(
         sum += speed[k];
         n++;
       }
+
       scratch[b] = sum / n;
     }
+
     speed.set(scratch);
   }
 }
@@ -231,14 +261,17 @@ export function fillDensity(
   eager: Float32Array
 ) {
   const flow = [demand(date, false), demand(date, true)];
+
   for (let b = 0; b < bins.count; b++) {
     const v = speed[b];
     const q = (flow[bins.inbound[b]] * bins.narrows[b]) / bins.lanes[b];
     const queue = queueDensity(v);
     const free = Math.min(q / Math.max(v, CRAWL), queue);
     const freeSpeed = bins.limit[b] * (bins.town[b] ? TOWN_FREE : 0.95);
+
     const congested =
       smoothstep(0.85, 0.5, v / freeSpeed) * smoothstep(150, 600, q * 3600);
+
     density[b] = free + (queue - free) * congested;
     eager[b] = 1 + EAGER * congested;
   }

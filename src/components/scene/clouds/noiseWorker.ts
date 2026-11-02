@@ -10,6 +10,7 @@ import { clamp01, normalise, perlin, remap, worley } from "../noise";
 
 function generateShape(size: number) {
   const data = new Uint8Array(size * size * size * 4);
+
   for (let z = 0; z < size; z++) {
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
@@ -19,9 +20,11 @@ function generateShape(size: number) {
 
         let p = 0;
         let amplitude = 0.5;
+
         for (let o = 0, f = 4; o < 3; o++, f *= 2, amplitude *= 0.5) {
           p += amplitude * perlin(u * f, v * f, w * f, f, 11 + o);
         }
+
         p = clamp01(p * 0.9 + 0.5);
 
         const worleyFbm = (base: number, seed: number) =>
@@ -42,11 +45,13 @@ function generateShape(size: number) {
       }
     }
   }
+
   return data;
 }
 
 function generateWeather(size: number) {
   const data = new Uint8Array(size * size * 4);
+
   const fbm = (
     u: number,
     v: number,
@@ -56,11 +61,14 @@ function generateWeather(size: number) {
   ) => {
     let total = 0;
     let amplitude = 0.5;
+
     for (let o = 0, f = base; o < octaves; o++, f *= 2, amplitude *= 0.5) {
       total += amplitude * perlin(u * f, v * f, 0.5, f, seed + o);
     }
+
     return clamp01(total * 1.1 + 0.5);
   };
+
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const u = x / size;
@@ -72,6 +80,7 @@ function generateWeather(size: number) {
       data[i + 3] = 255;
     }
   }
+
   return data;
 }
 

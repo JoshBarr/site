@@ -57,5 +57,6 @@ export interface FlightsResponse {
 
 /** How far back trails go, with `?history`. */
 export const HISTORY = 30 * 60_000;
+
 /** How far back an ordinary poll goes: enough to bridge a missed one. */
 export const RECENT = 2 * 60_000;

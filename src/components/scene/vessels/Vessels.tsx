@@ -62,6 +62,7 @@ import {
 } from "../follow/store";
 
 const MAX_VESSELS = 256;
+
 /** Superstructure and deck cargo. */
 const MAX_PARTS_PER_VESSEL = 2;
 
@@ -70,15 +71,19 @@ const MAX_PARTS_PER_VESSEL = 2;
  * relays only a report every few minutes per ship around Wellington.
  */
 const MAX_DEAD_RECKONING = 300;
+
 /** Seconds to ease onto a new report rather than jump. */
 const SETTLE = 5;
+
 /** Further off than this (m), a new report is a jump, not a correction. */
 const SNAP = 1500;
+
 /**
  * Metres between a hull and the shore, past half its beam: fenders, and the
  * shore's own few metres of doubt.
  */
 const BERTH_GAP = 2;
+
 /** Wake length per m/s of speed. */
 const WAKE_SECONDS = 25;
 
@@ -89,12 +94,16 @@ const G = 9.81;
 /** Masthead, sidelights and stern light under way; an anchor light moored. */
 const LIGHTS_PER_VESSEL = 4;
 const MAX_LIGHTS = MAX_VESSELS * LIGHTS_PER_VESSEL;
+
 /** Smallest light, metres; most are bigger on screen, see MIN_PIXELS. */
 const LIGHT_SIZE = 1;
+
 /** Small: a couple of bright pixels at range. */
 const LIGHT_PIXELS = 8;
+
 /** Sidelights show from dead ahead to 22.5° abaft the beam; the stern the rest. */
 const SIDELIGHT_ARC = (112.5 * Math.PI) / 180;
+
 /** Arcs blend over this, so a light doesn't pop as the camera crosses. */
 const ARC_BLEND = (4 * Math.PI) / 180;
 
@@ -104,13 +113,17 @@ const NAV_WHITE = new Color(1, 0.95, 0.85);
 
 /** Light blue, against the scene's greys: it's data, not part of the view. */
 const TRAIL_COLOR = new Color(0.35, 0.7, 1);
+
 /** As strong as an aircraft's. */
 const TRAIL_OPACITY = 0.35;
+
 /** Pixels. */
 const TRAIL_WIDTH = 2;
 const MAX_TRAIL_SEGMENTS = 4096;
+
 /** Above the sea, metres, clear of its waves. */
 const TRAIL_HEIGHT = 1;
+
 /**
  * Behind a ship, its trail is whole for this many seconds, then fades out,
  * the oldest first, until it's gone at TRAIL: like an aircraft's, but slower,
@@ -118,6 +131,7 @@ const TRAIL_HEIGHT = 1;
  */
 const TAIL_HOLD = 2 * 60;
 const TAIL_FADE = TRAIL / 1000 - TAIL_HOLD;
+
 /** Time of a trail's end at the ship, seconds: always now. */
 const FUTURE = 1e9;
 
@@ -134,13 +148,21 @@ type Kind =
 
 function kindOf(type: number): Kind {
   if (type >= 60 && type < 70) return "passenger";
+
   if (type >= 70 && type < 80) return "cargo";
+
   if (type >= 80 && type < 90) return "tanker";
+
   if (type === 31 || type === 32 || type === 52) return "tug";
+
   if (type === 50) return "pilot";
+
   if (type === 36) return "sailing";
+
   if (type === 37) return "pleasure";
+
   if (type === 30) return "fishing";
+
   return "other";
 }
 
@@ -161,6 +183,7 @@ const KINDS: Record<
 };
 
 const WHITE = 0xf2f2f2;
+
 /** Container stacks, light to dark, so cargo ships still vary. */
 const CONTAINERS = [0x9a9a9a, 0x7a7a7a, 0x5c5c5c, 0x8a8a8a];
 
@@ -211,11 +234,13 @@ function lightsFor(
   const bridge = parts[0];
   const tallest = parts.reduce((a, b) => (b.height > a.height ? b : a));
   const top = freeboard + tallest.height + 0.3;
+
   const side = (sign: number): Point => [
     (sign * bridge.width * beam) / 2,
     freeboard + bridge.height * 0.7,
     (bridge.from - 0.5) * length,
   ];
+
   return {
     masthead: [0, top, (tallest.from - 0.5) * length],
     port: side(-1),
@@ -233,6 +258,7 @@ function partsFor(kind: Kind, length: number, mmsi: number): Part[] {
     height: number,
     color = WHITE
   ) => ({ from, to, width, height, color });
+
   switch (kind) {
     case "passenger":
       // Cook Strait ferries are mostly superstructure; harbour ferries less so.
@@ -277,8 +303,10 @@ function hullFor({ mmsi, type, dimension }: Vessel): Hull {
   let length = typical.length;
   let beam = typical.beam;
   let offset: [number, number] = [0, 0];
+
   if (dimension) {
     const [bow, stern, port, starboard] = dimension;
+
     // Some transponders are set up with nonsense; keep to plausible ships.
     if (bow + stern <= 400 && port + starboard <= 70) {
       length = Math.max(bow + stern, 3);
@@ -286,8 +314,10 @@ function hullFor({ mmsi, type, dimension }: Vessel): Hull {
       offset = [(bow - stern) / 2, (starboard - port) / 2];
     }
   }
+
   const freeboard =
     length >= 80 ? Math.min(14, length * 0.065) : Math.max(0.8, length * 0.09);
+
   const parts = partsFor(kind, length, mmsi);
 
   return {
@@ -323,6 +353,7 @@ interface Track {
 
 const wrap = (angle: number) =>
   angle - 2 * Math.PI * Math.round(angle / (2 * Math.PI));
+
 const radians = (degrees: number) => (degrees * Math.PI) / 180;
 
 function colorAttribute(count: number) {
@@ -330,7 +361,9 @@ function colorAttribute(count: number) {
     new Float32Array(count * 3),
     3
   );
+
   attribute.setUsage(DynamicDrawUsage);
+
   return attribute;
 }
 
@@ -343,6 +376,7 @@ function createMeshes() {
     instancedBufferAttribute<"vec3">(deckColors, "vec3"),
     attribute<"float">("deck", "float")
   );
+
   const hulls = new InstancedMesh(
     createHullGeometry(),
     hullMaterial,
@@ -352,6 +386,7 @@ function createMeshes() {
   const partColors = colorAttribute(MAX_VESSELS * MAX_PARTS_PER_VESSEL);
   const partMaterial = new MeshStandardNodeMaterial({ roughness: 0.6 });
   partMaterial.colorNode = instancedBufferAttribute<"vec3">(partColors, "vec3");
+
   const parts = new InstancedMesh(
     createBlockGeometry(),
     partMaterial,
@@ -364,6 +399,7 @@ function createMeshes() {
     transparent: true,
     depthWrite: false,
   });
+
   const along = uv().y;
   const across = abs(uv().x.mul(2).sub(1));
   wakeMaterial.colorNode = vec3(0.94);
@@ -372,11 +408,13 @@ function createMeshes() {
     .pow(2)
     .mul(float(1).sub(across.mul(across)))
     .mul(0.55);
+
   const wakes = new InstancedMesh(
     createWakeGeometry(),
     wakeMaterial,
     MAX_VESSELS
   );
+
   // Over the sea, which draws after the terrain.
   wakes.renderOrder = 2;
 
@@ -397,11 +435,13 @@ const trailNow = uniform(0);
 /** Fat line segments, each end with its time, so it can fade with age. */
 function createTrailLines(count: number, material: TrailMaterial) {
   const geometry = new LineSegmentsGeometry();
+
   const segments = new InstancedInterleavedBuffer(
     new Float32Array(count * 6),
     6,
     1
   );
+
   segments.setUsage(DynamicDrawUsage);
   geometry.setAttribute(
     "instanceStart",
@@ -411,11 +451,13 @@ function createTrailLines(count: number, material: TrailMaterial) {
     "instanceEnd",
     new InterleavedBufferAttribute(segments, 3, 3)
   );
+
   const times = new InstancedInterleavedBuffer(
     new Float32Array(count * 2),
     2,
     1
   );
+
   times.setUsage(DynamicDrawUsage);
   geometry.setAttribute(
     "instanceTimeStart",
@@ -430,6 +472,7 @@ function createTrailLines(count: number, material: TrailMaterial) {
   lines.frustumCulled = false;
   // After the sea (1) and wakes (2).
   lines.renderOrder = 3;
+
   return { lines, segments, times };
 }
 
@@ -446,10 +489,12 @@ function createTrails() {
     transparent: true,
     depthWrite: false,
   });
+
   material.blending = NormalBlending;
   material.alphaToCoverage = false;
   // Its fog would be the template quad's, not the line's: hazed below.
   material.fog = false;
+
   // The template quad's y is below 0.5 at a segment's start, above at its end.
   const end = <T extends "float" | "vec3">(
     type: T,
@@ -461,13 +506,16 @@ function createTrails() {
       attribute<T>(start, type),
       attribute<T>(end, type)
     );
+
   const at = varying(end("float", "instanceTimeStart", "instanceTimeEnd"));
+
   const seen = varying(
     hazeTransmittance(
       cameraPosition,
       end("vec3", "instanceStart", "instanceEnd")
     )
   );
+
   material.opacityNode = float(1)
     .sub(smoothstep(TAIL_HOLD, TAIL_HOLD + TAIL_FADE, trailNow.sub(at)))
     .mul(TRAIL_OPACITY)
@@ -486,19 +534,23 @@ function createLights() {
     new Float32Array(MAX_LIGHTS * 4),
     4
   );
+
   const tint = new InstancedBufferAttribute(
     new Float32Array(MAX_LIGHTS * 3),
     3
   );
+
   for (const a of [light, tint]) a.setUsage(DynamicDrawUsage);
 
   const at = instancedBufferAttribute<"vec4">(light, "vec4");
   const position = at.xyz;
+
   const material = new SpriteNodeMaterial({
     transparent: true,
     depthWrite: false,
     blending: AdditiveBlending,
   });
+
   material.fog = false;
   material.positionNode = position;
   material.scaleNode = max(
@@ -517,12 +569,14 @@ function createLights() {
   sprite.count = 0;
   sprite.frustumCulled = false;
   sprite.renderOrder = 10;
+
   return { sprite, light, tint };
 }
 
 /** 0..1: how much of a light's arc, from `from` to `to` radians off the bow, takes in `bearing`. */
 function inArc(bearing: number, from: number, to: number) {
   const blend = (x: number) => Math.min(Math.max(x / ARC_BLEND + 0.5, 0), 1);
+
   return blend(bearing - from) * blend(to - bearing);
 }
 
@@ -567,6 +621,7 @@ export function Vessels({
 
   const waves = useMemo(() => {
     const period = peakPeriod(sea);
+
     return {
       omega: (2 * Math.PI) / period,
       length: (G * period * period) / (2 * Math.PI),
@@ -578,22 +633,28 @@ export function Vessels({
 
   const ships = useMemo(() => {
     if (!shore) return [];
+
     return vessels
       .flatMap((vessel) => {
         const at = nztmToWorld(index.manifest, ...vessel.position);
+
         if (!shore.toWater(...at)) return [];
+
         // Points off the sea are left out, and the trail broken there.
-        const trail = vessel.trail.map(([e, n, time]) => {
-          const water = shore.toWater(...nztmToWorld(index.manifest, e, n));
-          return water
-            ? ([...water, (time - epoch) / 1000] as [number, number, number])
-            : null;
-        });
+        const trail = vessel.trail.map(
+          ([e, n, time]): [number, number, number] | null => {
+            const water = shore.toWater(...nztmToWorld(index.manifest, e, n));
+
+            return water ? [...water, (time - epoch) / 1000] : null;
+          }
+        );
+
         // The trail reaches the ship if it's under way from the last point.
         const last = vessel.trail[vessel.trail.length - 1];
         const underWay = vessel.speed > UNDER_WAY && vessel.course !== null;
         const hull = hullFor(vessel);
         const course = radians(vessel.course ?? 0);
+
         return [
           {
             vessel,
@@ -624,41 +685,43 @@ export function Vessels({
     "ship",
     useMemo(
       () =>
-        ships.map(
-          ({ vessel }): Candidate => ({
-            id: String(vessel.mmsi),
-            label: vessel.name ?? `MMSI ${vessel.mmsi}`,
-            moving: vessel.speed > UNDER_WAY,
-          })
-        ),
+        ships.map(({ vessel }): Candidate => ({
+          id: String(vessel.mmsi),
+          label: vessel.name ?? `MMSI ${vessel.mmsi}`,
+          moving: vessel.speed > UNDER_WAY,
+        })),
       [ships]
     )
   );
 
   useEffect(() => {
     const { past, heads } = trails;
-    const positions = past.segments.array as Float32Array;
-    const stamps = past.times.array as Float32Array;
+    const positions = past.segments.array;
+    const stamps = past.times.array;
     let n = 0;
+
     for (const { trail } of ships) {
       for (let i = 0; i < trail.length - 1 && n < MAX_TRAIL_SEGMENTS; i++) {
         const a = trail[i];
         const b = trail[i + 1];
+
         if (!a || !b) continue;
         const [ax, az, at] = a;
         const [bx, bz, bt] = b;
+
         if (bt - at > TRAIL_GAP / 1000) continue;
         positions.set([ax, TRAIL_HEIGHT, az, bx, TRAIL_HEIGHT, bz], n * 6);
         stamps.set([at, bt], n * 2);
         n++;
       }
     }
+
     past.segments.needsUpdate = past.times.needsUpdate = true;
-    (past.lines.geometry as LineSegmentsGeometry).instanceCount = n;
+    past.lines.geometry.instanceCount = n;
 
     // Heads start at the latest report; where they end is set each frame.
     // Without one, long faded.
-    const headStamps = heads.times.array as Float32Array;
+    const headStamps = heads.times.array;
     ships.forEach(({ head }, i) => {
       headStamps.set(head ? [head[2], FUTURE] : [-FUTURE, -FUTURE], i * 2);
     });
@@ -671,6 +734,7 @@ export function Vessels({
     ships.forEach(({ hull }, i) => {
       color.setHex(hull.hull).toArray(hullColors.array, i * 3);
       color.setHex(hull.deck).toArray(deckColors.array, i * 3);
+
       for (const { color: hex } of hull.parts) {
         color.setHex(hex).toArray(partColors.array, part++ * 3);
       }
@@ -679,6 +743,7 @@ export function Vessels({
     partColors.needsUpdate = true;
 
     const present = new Set(ships.map(({ vessel }) => vessel.mmsi));
+
     for (const mmsi of tracks.current.keys()) {
       if (!present.has(mmsi)) tracks.current.delete(mmsi);
     }
@@ -688,12 +753,14 @@ export function Vessels({
     () => () => {
       for (const mesh of [meshes.hulls, meshes.parts, meshes.wakes]) {
         mesh.geometry.dispose();
-        (mesh.material as MeshStandardNodeMaterial).dispose();
+        mesh.material.dispose();
         mesh.dispose();
       }
+
       for (const { lines } of [trails.past, trails.heads]) {
         lines.geometry.dispose();
       }
+
       trails.material.dispose();
       sprites.sprite.material.dispose();
     },
@@ -708,10 +775,11 @@ export function Vessels({
     let partCount = 0;
     let wakeCount = 0;
     trailNow.value = (now - epoch) / 1000;
-    const heads = trails.heads.segments.array as Float32Array;
+    const heads = trails.heads.segments.array;
     const { light, tint } = sprites;
     let lit = 0;
     const watched = followed("ship");
+
     const show = (at: Point, tone: Color, intensity: number) => {
       if (intensity <= 0 || lit >= MAX_LIGHTS) return;
       point.set(...at).applyMatrix4(ship);
@@ -721,21 +789,25 @@ export function Vessels({
     };
 
     ships.forEach(({ vessel, hull, at, reach, head }, i) => {
-      const underWay = vessel.speed > UNDER_WAY && vessel.course !== null;
+      const { course: reported } = vessel;
+      const underWay = vessel.speed > UNDER_WAY && reported !== null;
       let track = tracks.current.get(vessel.mmsi);
 
       // Where the report puts it now, carrying on at its course and speed.
       let [x, z] = at;
+
       if (underWay) {
         const age = Math.min(
           Math.max((now - vessel.time) / 1000, 0),
           MAX_DEAD_RECKONING
         );
-        const course = radians(vessel.course);
+
+        const course = radians(reported);
         const run = Math.min(vessel.speed * age, reach);
         x += Math.sin(course) * run;
         z -= Math.cos(course) * run;
       }
+
       // Moored ships' courses are noise; keep the last heading we had.
       const given = vessel.heading ?? (underWay ? vessel.course : null);
       const heading = given !== null ? radians(given) : (track?.reported ?? 0);
@@ -754,13 +826,17 @@ export function Vessels({
       } else if (track.time !== vessel.time) {
         // New report: ease from where it's drawn onto where it should be.
         track.error = [track.x - x, track.z - z, wrap(track.heading - heading)];
+
         if (Math.hypot(track.error[0], track.error[1]) > SNAP) {
           track.error = [0, 0, 0];
         }
+
         track.time = vessel.time;
       } else {
-        track.error = track.error.map((e) => e * decay) as Track["error"];
+        const [ex, ez, eh] = track.error;
+        track.error = [ex * decay, ez * decay, eh * decay];
       }
+
       track.reported = heading;
       track.headed ||= given !== null;
       track.x = x + track.error[0];
@@ -773,6 +849,7 @@ export function Vessels({
       let h = track.heading;
       let forward = [Math.sin(h), -Math.cos(h)];
       let starboard = [Math.cos(h), Math.sin(h)];
+
       // All along the keel, as far as the ends' curves, half the beam off.
       const centre = () =>
         shore.toWater(
@@ -783,7 +860,9 @@ export function Vessels({
           forward[1],
           Math.max(length - beam, 0) / 2
         );
+
       let water = centre();
+
       if (!water) {
         // Eased across a headland: go straight to the report instead.
         track.error = [0, 0, 0];
@@ -794,17 +873,22 @@ export function Vessels({
         starboard = [Math.cos(h), Math.sin(h)];
         water = centre();
       }
+
       if (!water) {
         // Nowhere at sea to put it: keep its instances, out of sight.
         matrix.makeScale(0, 0, 0);
         hulls.setMatrixAt(i, matrix);
+
         for (let p = 0; p < hull.parts.length; p++) {
           parts.setMatrixAt(partCount++, matrix);
         }
+
         const [hx, hz] = head ?? [track.x, track.z];
         heads.set([hx, TRAIL_HEIGHT, hz, hx, TRAIL_HEIGHT, hz], i * 6);
+
         return;
       }
+
       const [cx, cz] = water;
       // The antenna goes where the hull's been put.
       track.x = cx - forward[0] * offset[0] - starboard[0] * offset[1];
@@ -822,16 +906,19 @@ export function Vessels({
       // Pitching head to sea, rolling beam on.
       const relative = h - waves.bearing;
       const heave = ((BOB * waves.height) / 2) * along * Math.sin(phase);
+
       const pitch =
         slope *
         along *
         (0.3 + 0.7 * Math.abs(Math.cos(relative))) *
         Math.cos(phase);
+
       const roll =
         slope *
         across *
         (0.3 + 0.7 * Math.abs(Math.sin(relative))) *
         Math.cos(phase + 0.6);
+
       yaw.setFromAxisAngle(UP, -h);
       tilt.setFromEuler(euler.set(pitch, 0, roll));
       rotation.multiplyQuaternions(yaw, tilt);
@@ -839,6 +926,7 @@ export function Vessels({
 
       matrix.multiplyMatrices(ship, local.makeScale(beam, freeboard, length));
       hulls.setMatrixAt(i, matrix);
+
       if (String(vessel.mmsi) === watched) {
         publish({
           x: cx,
@@ -861,15 +949,19 @@ export function Vessels({
       }
 
       const on = lights > hull.switchOn ? 1 : 0;
+
       if (on > 0) {
         // Off the bow, positive to starboard, as seen from the camera.
         const dx = camera.position.x - cx;
         const dz = camera.position.z - cz;
+
         const bearing = Math.atan2(
           dx * starboard[0] + dz * starboard[1],
           dx * forward[0] + dz * forward[1]
         );
+
         const at = hull.lights;
+
         if (underWay) {
           show(
             at.masthead,
@@ -906,15 +998,16 @@ export function Vessels({
     hulls.count = ships.length;
     parts.count = partCount;
     wakes.count = wakeCount;
+
     for (const mesh of [hulls, parts, wakes]) {
       mesh.instanceMatrix.needsUpdate = true;
     }
+
     sprites.sprite.count = lit;
     sprites.sprite.visible = lit > 0;
     light.needsUpdate = tint.needsUpdate = true;
     trails.heads.segments.needsUpdate = true;
-    (trails.heads.lines.geometry as LineSegmentsGeometry).instanceCount =
-      ships.length;
+    trails.heads.lines.geometry.instanceCount = ships.length;
   });
 
   return (

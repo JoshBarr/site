@@ -67,8 +67,10 @@ function member(a: Vector3, b: Vector3, width: number, depth = width) {
   const dir = new Vector3().subVectors(b, a);
   const length = dir.length();
   dir.normalize();
+
   const ref =
     Math.abs(dir.y) > 0.99 ? new Vector3(1, 0, 0) : new Vector3(0, 1, 0);
+
   const side = new Vector3().crossVectors(dir, ref).normalize();
   const up = new Vector3().crossVectors(side, dir);
   const basis = new Matrix4().makeBasis(dir, up, side);
@@ -77,10 +79,12 @@ function member(a: Vector3, b: Vector3, width: number, depth = width) {
   box.deleteAttribute("uv");
   const position = box.getAttribute("position");
   const spread = new Float32Array(position.count * 3);
+
   for (let i = 0; i < position.count; i++) {
     tmp.set(0, position.getY(i), position.getZ(i)).applyMatrix4(basis);
     tmp.toArray(spread, i * 3);
   }
+
   box.setAttribute("spread", new Float32BufferAttribute(spread, 3));
   box.setAttribute(
     "thickness",
@@ -91,6 +95,7 @@ function member(a: Vector3, b: Vector3, width: number, depth = width) {
   );
   box.translate(length / 2, 0, 0);
   box.applyMatrix4(basis.setPosition(a));
+
   return box;
 }
 
@@ -107,6 +112,7 @@ function block(centre: Vector3, size: [number, number, number]) {
     "thickness",
     new Float32BufferAttribute(new Float32Array(count).fill(1e3), 1)
   );
+
   return box.translate(centre.x, centre.y, centre.z);
 }
 
@@ -120,6 +126,7 @@ function apexX(spec: CraneSpec) {
 /** Tip of the boom, at the centre line. */
 function boomTip(spec: CraneSpec, pose: CranePose) {
   const length = spec.outreach + 2;
+
   return v(
     spec.gauge / 2 + Math.cos(pose.boom) * length,
     spec.girderHeight + Math.sin(pose.boom) * length,
@@ -142,6 +149,7 @@ export function createCraneGeometry(spec: CraneSpec, pose: CranePose) {
     for (const x of [-g, g]) {
       parts.push(member(v(x, -FOOTING, z), v(x, h, z), 1.8));
     }
+
     parts.push(
       member(v(-g, spec.portalHeight, z), v(g, spec.portalHeight, z), 1.4, 2)
     );
@@ -167,6 +175,7 @@ export function createCraneGeometry(spec: CraneSpec, pose: CranePose) {
       member(v(x, spec.portalHeight, -s), v(x, spec.portalHeight, s), 1.2)
     );
   }
+
   parts.push(member(v(back, h, -s), v(back, h, s), 1.6, 2));
   parts.push(
     member(v(ax, spec.apexHeight, -s), v(ax, spec.apexHeight, s), 1.4)
@@ -175,9 +184,11 @@ export function createCraneGeometry(spec: CraneSpec, pose: CranePose) {
 
   // Machinery house on the back reach, trolley and cab under the girders.
   parts.push(block(v(back + 8, h + 4.2, 0), [14, 5, spec.legSpacing + 2.5]));
+
   // A stowed boom takes the trolley's rails with it: park it inboard.
   const trolley =
     pose.boom > 0.1 ? Math.min(pose.trolley, g - 4) : pose.trolley;
+
   parts.push(block(v(trolley, h - 1.4, 0), [7, 2.4, spec.legSpacing - 2]));
   parts.push(block(v(trolley + 2, h - 4.4, 0), [3, 3, 3]));
 
@@ -189,6 +200,7 @@ export function craneLightPoints(spec: CraneSpec, pose: CranePose) {
   const s = spec.legSpacing / 2;
   const ax = apexX(spec);
   const tip = boomTip(spec, pose);
+
   return [
     v(ax, spec.apexHeight + 1, -s),
     v(ax, spec.apexHeight + 1, s),

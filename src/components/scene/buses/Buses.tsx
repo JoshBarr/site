@@ -10,7 +10,6 @@ import {
   Vector3,
 } from "three/webgpu";
 import { attribute, select, uniform, vec3 } from "three/tsl";
-import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeometry.js";
 import { TileIndex } from "../terrain/manifest";
 import type { HeightQuery } from "../terrain/Terrain";
 import { castsNearShadow } from "../landmarks/nearShadow";
@@ -36,6 +35,7 @@ const MAX_BUSES = 640;
  * seconds, and the fix takes a while to reach the page.
  */
 const DELAY = 45_000;
+
 /**
  * Seconds over which a bus that's fallen behind (it waited at its last fix
  * for the next) makes the time up, at up to three times the pace.
@@ -48,17 +48,21 @@ const CATCH_UP = 10;
  */
 const BUS = { length: 12.5, width: 2.5, height: 3.2 };
 const BUS_TINT = new Color(0xc4c4c4);
+
 /** Off the road, m: the DEM's a little rough under it. */
 const RIDE = 0.1;
 
 /** Green, against the scene's greys: it's data, like the others. */
 const TRAIL_COLOR = new Color(0.45, 1, 0.55);
 const TRAIL_OPACITY = 0.35;
+
 /** Pixels. */
 const TRAIL_WIDTH = 2;
 const MAX_TRAIL_SEGMENTS = 65536;
+
 /** Above the road, m: inside the bus, so it comes out behind it. */
 const TRAIL_HEIGHT = 1.6;
+
 /**
  * Behind a bus its trail fades out by age, s: whole at the bus, gone this
  * far back.
@@ -70,6 +74,7 @@ const MOVING = 100;
 
 /** Head and tail lights. */
 const MAX_LIGHTS = MAX_BUSES * 2;
+
 /** Above the road, m. */
 const LIGHT_HEIGHT = 0.8;
 const HEAD = new Color(1, 0.95, 0.85);
@@ -81,8 +86,10 @@ const LIT_WINDOWS = new Color(1, 0.88, 0.7);
 function createBuses() {
   const windowsLit = uniform(0);
   const part = attribute<"float">("part", "float");
+
   const isPart = (p: number) =>
     part.greaterThan(p - 0.5).and(part.lessThan(p + 0.5));
+
   const material = new MeshStandardNodeMaterial({ roughness: 0.55 });
   material.colorNode = select(
     isPart(BODY),
@@ -104,6 +111,7 @@ function createBuses() {
   mesh.frustumCulled = false;
   mesh.count = 0;
   castsNearShadow(mesh);
+
   return { mesh, windowsLit };
 }
 
@@ -134,6 +142,7 @@ function Fleet({
   const buses = useBuses();
   const epoch = useMemo(() => Date.now(), []);
   const fleet = useMemo(createBuses, []);
+
   const trails = useMemo(
     () =>
       createRunTrails({
@@ -146,6 +155,7 @@ function Fleet({
       }),
     []
   );
+
   const sprites = useMemo(() => createRunLights(MAX_LIGHTS), []);
   const playheads = useRef(new Map<string, number>());
 
@@ -162,27 +172,27 @@ function Fleet({
     "bus",
     useMemo(
       () =>
-        runs.map(
-          ({ bus, fixes }): Candidate => ({
-            id: bus.id,
-            label: `Route ${routes.nameOf(bus.route)}`,
-            moving: fixes[fixes.length - 1].s - fixes[0].s > MOVING,
-          })
-        ),
+        runs.map(({ bus, fixes }): Candidate => ({
+          id: bus.id,
+          label: `Route ${routes.nameOf(bus.route)}`,
+          moving: fixes[fixes.length - 1].s - fixes[0].s > MOVING,
+        })),
       [runs, routes]
     )
   );
 
   useEffect(() => {
-    const positions = trails.segments.array as Float32Array;
-    const stamps = trails.times.array as Float32Array;
-    const owners = trails.owner.array as Float32Array;
+    const positions = trails.segments.array;
+    const stamps = trails.times.array;
+    const owners = trails.owner.array;
     let n = 0;
     runs.forEach(({ points, arrived, left }, bus) => {
       for (let i = 0; i < points.length - 1 && n < MAX_TRAIL_SEGMENTS; i++) {
         const [ax, ay, az] = points[i];
         const [bx, by, bz] = points[i + 1];
+
         if (Number.isNaN(left[i]) || Number.isNaN(arrived[i + 1])) continue;
+
         if (ax === bx && az === bz) continue;
         positions.set(
           [ax, ay + TRAIL_HEIGHT, az, bx, by + TRAIL_HEIGHT, bz],
@@ -195,9 +205,10 @@ function Fleet({
     });
     trails.segments.needsUpdate = trails.times.needsUpdate = true;
     trails.owner.needsUpdate = true;
-    (trails.lines.geometry as LineSegmentsGeometry).instanceCount = n;
+    trails.lines.geometry.instanceCount = n;
 
     const present = new Set(runs.map(({ bus }) => bus.id));
+
     for (const id of playheads.current.keys()) {
       if (!present.has(id)) playheads.current.delete(id);
     }
@@ -210,7 +221,7 @@ function Fleet({
   useEffect(
     () => () => {
       fleet.mesh.geometry.dispose();
-      (fleet.mesh.material as MeshStandardNodeMaterial).dispose();
+      fleet.mesh.material.dispose();
       fleet.mesh.dispose();
       trails.lines.geometry.dispose();
       trails.material.dispose();
@@ -223,6 +234,7 @@ function Fleet({
     const target = (Date.now() - DELAY - epoch) / 1000;
     const { light, tint } = sprites;
     let lit = 0;
+
     const show = (at: Vector3, tone: Color, intensity: number) => {
       if (lit >= MAX_LIGHTS) return;
       light.setXYZW(lit, at.x, at.y + LIGHT_HEIGHT, at.z, intensity);
@@ -238,13 +250,16 @@ function Fleet({
       // Run on toward now less DELAY; wait at the last fix for the next,
       // then make the time up.
       let playhead = playheads.current.get(bus.id);
+
       if (playhead === undefined) {
         playhead = Math.min(target, latest);
       } else {
         const rate =
           1 + Math.min(Math.max((target - playhead) / CATCH_UP, 0), 2);
+
         playhead = Math.min(playhead + delta * rate, target, latest);
       }
+
       playheads.current.set(bus.id, playhead);
       trails.playheads.array[i] = playhead;
 
@@ -255,12 +270,15 @@ function Fleet({
       centre.addVectors(front, back).multiplyScalar(0.5);
       centre.y += RIDE;
       along.subVectors(front, back);
+
       if (along.lengthSq() > 1e-6) {
         rotation.setFromUnitVectors(FORWARD, along.normalize());
       } else {
         rotation.identity();
       }
+
       fleet.mesh.setMatrixAt(count++, matrix.compose(centre, rotation, scale));
+
       if (bus.id === watched) {
         publish({
           x: centre.x,
@@ -319,6 +337,7 @@ export function Buses({
   }, [index]);
 
   if (!routes) return null;
+
   return (
     <Fleet index={index} routes={routes} heightAt={heightAt} lights={lights} />
   );

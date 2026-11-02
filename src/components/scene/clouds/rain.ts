@@ -26,12 +26,12 @@ export type RainUniforms = ReturnType<typeof createRainUniforms>;
  * Median-volume drop diameter for a rain rate in mm/h, mm. Marshall–Palmer:
  * D0 = 3.67 / Λ, with Λ = 4.1 R^-0.21 per mm.
  */
-export function dropDiameter(rate: number) {
+function dropDiameter(rate: number) {
   return 0.895 * Math.pow(Math.max(rate, 0.01), 0.21);
 }
 
 /** Terminal fall speed of a drop that size, m/s (Atlas et al., 1973). */
-export function fallSpeed(diameter: number) {
+function fallSpeed(diameter: number) {
   return Math.max(9.65 - 10.3 * Math.exp(-0.6 * diameter), 0.5);
 }
 
@@ -39,7 +39,7 @@ export function fallSpeed(diameter: number) {
  * Extinction through rain of a rate in mm/h, per metre: about 0.25 R^0.63
  * per km, so 5 mm/h cuts visibility to about 6 km.
  */
-export function rainExtinction(rate: number) {
+function rainExtinction(rate: number) {
   return rate > 0 ? 2.5e-4 * Math.pow(rate, 0.63) : 0;
 }
 
@@ -61,6 +61,7 @@ export function applyRain(conditions: Conditions, rain: RainUniforms) {
  * a line, nor fill the view when it's skimming along the base, m.
  */
 const FADE_IN = 300;
+
 /** The coverage map again, this small, for streaks within a shaft, m. */
 const STREAK_SCALE = 1800;
 
@@ -84,6 +85,7 @@ export function rainfall(
   const threshold = float(1).sub(low.shape.z);
   const raining = smoothstep(threshold, threshold.add(0.15), map);
   const streaks = texture(weather, source.add(low.offset).div(STREAK_SCALE)).r;
+
   return max(raining, overcast)
     .mul(mix(0.5, 1, broad.g))
     .mul(mix(0.35, 1.3, streaks))
@@ -92,6 +94,7 @@ export function rainfall(
 
 function smoothstepTo(from: number, to: number, x: number) {
   const t = Math.min(Math.max((x - from) / (to - from), 0), 1);
+
   return t * t * (3 - 2 * t);
 }
 
@@ -108,6 +111,7 @@ export function rainfallAt(
   const base = low.shape.value.x;
   const fallen = Math.max(base - p.y, 0);
   const slant = fallen / rain.fall.value;
+
   const { broad, map } = coverageMapAt(
     weather,
     p.x - rain.wind.value.x * slant,
@@ -115,8 +119,10 @@ export function rainfallAt(
     low.offset.value,
     LOW_ANGLE
   );
+
   const threshold = 1 - low.shape.value.z;
   const raining = smoothstepTo(threshold, threshold + 0.15, map);
+
   return (
     Math.max(raining, overcast.value) *
     (0.5 + 0.5 * broad.g) *

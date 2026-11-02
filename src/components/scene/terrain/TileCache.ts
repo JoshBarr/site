@@ -32,6 +32,10 @@ export class TileCache {
   /** Bumped whenever a tile finishes loading. */
   version = 0;
 
+  /** What `texture` and `ground` hold, slot after slot. */
+  private heights: Float32Array;
+  private grounds: Uint8Array;
+
   private index: TileIndex;
   private slotByKey = new Map<string, number>();
   private keyBySlot: (string | null)[];
@@ -58,17 +62,14 @@ export class TileCache {
   constructor(index: TileIndex, slots: number, workers = 3) {
     this.index = index;
     this.slots = slots;
-    this.keyBySlot = new Array(slots).fill(null);
+    this.keyBySlot = Array.from({ length: slots }, () => null);
     this.lastUsed = new Int32Array(slots).fill(-1);
     this.maxInFlight = workers * 2;
 
     const size = index.samples;
-    this.texture = new DataArrayTexture(
-      new Float32Array(size * size * slots),
-      size,
-      size,
-      slots
-    );
+    this.heights = new Float32Array(size * size * slots);
+
+    this.texture = new DataArrayTexture(this.heights, size, size, slots);
     this.texture.format = RedFormat;
     this.texture.type = FloatType;
     this.texture.magFilter = NearestFilter;
@@ -76,12 +77,9 @@ export class TileCache {
     this.texture.generateMipmaps = false;
     this.texture.needsUpdate = true;
 
-    this.ground = new DataArrayTexture(
-      new Uint8Array(size * size * 2 * slots),
-      size,
-      size,
-      slots
-    );
+    this.grounds = new Uint8Array(size * size * 2 * slots);
+
+    this.ground = new DataArrayTexture(this.grounds, size, size, slots);
     this.ground.format = RGFormat;
     this.ground.type = UnsignedByteType;
     this.ground.magFilter = NearestFilter;
@@ -96,6 +94,7 @@ export class TileCache {
         this.callbacks.get(id)?.(result);
         this.callbacks.delete(id);
       };
+
       this.workers.push(worker);
     }
   }
@@ -108,13 +107,14 @@ export class TileCache {
   heightAt(x: number, z: number): number | undefined {
     const { manifest, samples } = this.index;
     const { rootSize, tileCells, apron } = manifest;
-    const data = this.texture.image.data as Float32Array;
+    const data = this.heights;
 
     for (let level = this.index.maxLevel; level >= 0; level--) {
       const size = this.index.tileSize(level);
       const tx = Math.floor((x + rootSize / 2) / size);
       const ty = Math.floor((z + rootSize / 2) / size);
       const slot = this.slotByKey.get(tileKey(level, tx, ty));
+
       if (slot === undefined) continue;
 
       const [ox, oz] = this.index.tileOrigin(level, tx, ty);
@@ -126,26 +126,31 @@ export class TileCache {
       const fv = v - j;
       const base = slot * samples * samples;
       const at = (a: number, b: number) => data[base + b * samples + a];
+
       return (
         (at(i, j) * (1 - fu) + at(i + 1, j) * fu) * (1 - fv) +
         (at(i, j + 1) * (1 - fu) + at(i + 1, j + 1) * fu) * fv
       );
     }
+
     return undefined;
   }
 
   /** Layer holding this tile, or undefined. Marks the tile as in use. */
   use(tile: TileInfo): number | undefined {
     const slot = this.slotByKey.get(tileKey(tile.level, tile.x, tile.y));
+
     if (slot !== undefined) {
       this.lastUsed[slot] = this.frame;
     }
+
     return slot;
   }
 
   /** Ask for a tile this frame. Lower priority values load first. */
   request(tile: TileInfo, priority: number) {
     const key = tileKey(tile.level, tile.x, tile.y);
+
     if (
       this.slotByKey.has(key) ||
       this.inFlight.has(key) ||
@@ -153,7 +158,9 @@ export class TileCache {
     ) {
       return;
     }
+
     const existing = this.wanted.get(key);
+
     if (!existing || priority < existing.priority) {
       this.wanted.set(key, { tile, priority });
     }
@@ -164,20 +171,24 @@ export class TileCache {
     const queue = [...this.wanted.values()].sort(
       (a, b) => a.priority - b.priority
     );
+
     this.wanted.clear();
 
     // Only start loads there's room for. When every layer is in use, a new
     // tile would be dropped on arrival and requested again: a reload loop.
     const room = this.evictableSlots() - this.inFlight.size;
+
     for (const { tile } of queue.slice(0, Math.max(0, room))) {
       if (this.inFlight.size >= this.maxInFlight) break;
       this.load(tile);
     }
+
     this.frame++;
   }
 
   private evictableSlots() {
     let count = 0;
+
     for (let slot = 0; slot < this.slots; slot++) {
       if (
         this.keyBySlot[slot] === null ||
@@ -186,6 +197,7 @@ export class TileCache {
         count++;
       }
     }
+
     return count;
   }
 
@@ -203,6 +215,7 @@ export class TileCache {
     const key = tileKey(tile.level, tile.x, tile.y);
     const { offset, scale } = this.index.manifest.encoding;
     const id = this.nextId++;
+
     const url = new URL(
       this.index.url(tile.level, tile.x, tile.y),
       location.href
@@ -211,11 +224,14 @@ export class TileCache {
     this.inFlight.add(key);
     this.callbacks.set(id, ({ heights, ground, error }) => {
       this.inFlight.delete(key);
+
       if (error || !heights || !ground) {
         console.warn("[terrain]", error);
         this.failed.add(key);
+
         return;
       }
+
       this.store(key, tile.level, heights, ground);
     });
 
@@ -231,9 +247,11 @@ export class TileCache {
     ground: Uint8Array
   ) {
     const slot = this.freeSlot();
+
     if (slot === undefined) return;
 
     const previous = this.keyBySlot[slot];
+
     if (previous) this.slotByKey.delete(previous);
 
     this.keyBySlot[slot] = key;
@@ -241,11 +259,10 @@ export class TileCache {
     // Count as used now so it survives until the next selection pass.
     this.lastUsed[slot] = level <= PINNED_LEVEL ? 0x7fffffff : this.frame;
 
-    const data = this.texture.image.data as Float32Array;
-    data.set(heights, slot * heights.length);
+    this.heights.set(heights, slot * heights.length);
     this.texture.addLayerUpdate(slot);
     this.texture.needsUpdate = true;
-    (this.ground.image.data as Uint8Array).set(ground, slot * ground.length);
+    this.grounds.set(ground, slot * ground.length);
     this.ground.addLayerUpdate(slot);
     this.ground.needsUpdate = true;
     this.version++;
@@ -253,15 +270,19 @@ export class TileCache {
 
   private freeSlot(): number | undefined {
     let oldest: number | undefined;
+
     for (let slot = 0; slot < this.slots; slot++) {
       if (this.keyBySlot[slot] === null) return slot;
+
       // Loads land between frames, after update() has advanced the counter,
       // so protect whatever the last selection pass drew.
       if (this.lastUsed[slot] >= this.frame - 1) continue;
+
       if (oldest === undefined || this.lastUsed[slot] < this.lastUsed[oldest]) {
         oldest = slot;
       }
     }
+
     return oldest;
   }
 }

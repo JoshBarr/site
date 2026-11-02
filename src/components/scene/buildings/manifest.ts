@@ -1,8 +1,7 @@
 // Mirrors the manifest written by scripts/buildings/build_tiles.mjs.
 
 // Tiles can be served from elsewhere (e.g. Vercel Blob) without code changes.
-export const BUILDINGS_URL =
-  process.env.NEXT_PUBLIC_BUILDINGS_URL ?? "/buildings";
+const BUILDINGS_URL = process.env.NEXT_PUBLIC_BUILDINGS_URL ?? "/buildings";
 
 export interface EncodedRange {
   min: number;
@@ -80,6 +79,7 @@ export class BuildingIndex {
         new Map(
           tiles.map((entry) => {
             const tile = createTile(level, entry);
+
             return [tile.key, tile];
           })
         )
@@ -90,15 +90,18 @@ export class BuildingIndex {
     for (let i = levels.length - 1; i > 0; i--) {
       const shift = levels[i].level - levels[i - 1].level;
       const parents = byLevel[i - 1];
+
       for (const tile of byLevel[i].values()) {
         const x = tile.x >> shift;
         const y = tile.y >> shift;
         const key = `${levels[i - 1].level}/${x}/${y}`;
         let parent = parents.get(key);
+
         if (!parent) {
           parent = createPlaceholder(levels[i - 1].level, x, y, tile);
           parents.set(key, parent);
         }
+
         parent.children.push(tile);
       }
     }
@@ -132,7 +135,9 @@ function createTile(level: number, entry: number[]): BuildingTile {
     lights = 0,
     windowWall = 0,
   ] = entry;
+
   const own = { minX, minZ, maxX, maxZ, minGround, maxGround, maxRel };
+
   return {
     key: `${level}/${x}/${y}`,
     level,
@@ -155,6 +160,7 @@ function createPlaceholder(
 ): BuildingTile {
   const tile = createTile(level, [x, y, 0, 0, 0, 0, 0, 0, 0, 0]);
   tile.bounds = { ...child.bounds };
+
   return tile;
 }
 
@@ -176,8 +182,10 @@ function growBounds(tile: BuildingTile) {
 
 export async function loadBuildingIndex(): Promise<BuildingIndex> {
   const response = await fetch(`${BUILDINGS_URL}/manifest.json`);
+
   if (!response.ok) {
     throw new Error(`buildings manifest: ${response.status}`);
   }
+
   return new BuildingIndex(await response.json());
 }

@@ -24,6 +24,7 @@ export function useVessels() {
       if (!document.hidden) {
         try {
           const response = await fetch("/api/vessels");
+
           if (response.ok) {
             const body: VesselsResponse = await response.json();
             const skew = Date.now() - body.time;
@@ -36,12 +37,16 @@ export function useVessels() {
         } catch (e) {
           console.error("[vessels]", e);
         }
+
         known = known.filter((vessel) => !isStale(vessel));
+
         if (stopped) return;
         setVessels(known);
       }
+
       timer = setTimeout(poll, POLL);
     };
+
     poll();
 
     return () => {

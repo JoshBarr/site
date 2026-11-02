@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useSpring, animated, config } from "@react-spring/web";
+import { useSpring, animated } from "@react-spring/web";
 
 type Theme = "theme--light" | "theme--dark" | string;
 
@@ -23,6 +23,7 @@ const ScrollToTop = () => {
   useEffect(() => {
     const handleScroll: IntersectionObserverCallback = (e) => {
       const target = e.at(0);
+
       if (!target) {
         return;
       }
@@ -35,6 +36,8 @@ const ScrollToTop = () => {
     };
 
     let target = document.querySelector(".header");
+
+    if (!target) return;
 
     let observer = new IntersectionObserver(handleScroll, {
       root: null,
@@ -77,7 +80,7 @@ const ScrollToTop = () => {
   );
 };
 
-const Header = ({ siteTitle, theme }: HeaderProps) => (
+const Header = ({ siteTitle }: HeaderProps) => (
   <>
     <div className={"header  theme-header theme-color relative z-1"}>
       <div className="container container--secondary grid grid-odd align-center">

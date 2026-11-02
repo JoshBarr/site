@@ -11,6 +11,7 @@ const FALSE_N = 10000000;
 const n = F / (2 - F);
 const e = Math.sqrt(F * (2 - F));
 const radius = (A / (1 + n)) * (1 + n ** 2 / 4 + n ** 4 / 64);
+
 const alpha = [
   n / 2 - (2 / 3) * n ** 2 + (5 / 16) * n ** 3,
   (13 / 48) * n ** 2 - (3 / 5) * n ** 3,
@@ -21,9 +22,11 @@ const alpha = [
 export function toNztm(lat: number, lon: number): [number, number] {
   const phi = (lat * Math.PI) / 180;
   const dLon = (lon * Math.PI) / 180 - LON0;
+
   const t = Math.sinh(
     Math.atanh(Math.sin(phi)) - e * Math.atanh(e * Math.sin(phi))
   );
+
   const xi0 = Math.atan2(t, Math.cos(dLon));
   const eta0 = Math.atanh(Math.sin(dLon) / Math.sqrt(1 + t * t));
 

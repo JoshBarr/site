@@ -48,6 +48,7 @@ import {
   DEFAULT_CONDITIONS,
   OceanConditions,
 } from "./spectrum";
+import { useRenderer } from "../renderer";
 
 export interface OceanQuality {
   /** FFT resolution per cascade. */
@@ -66,6 +67,7 @@ export const OCEAN_DESKTOP: OceanQuality = {
   reflectionScale: 0.35,
   reflectionSamples: 0,
 };
+
 export const OCEAN_MOBILE: OceanQuality = {
   fftSize: 128,
   segments: 192,
@@ -83,12 +85,14 @@ const RADIUS = 45000;
 function createSurfaceGeometry(segments: number) {
   const radii = [0];
   const minStep = 1.5;
+
   while (radii[radii.length - 1] < RADIUS) {
     const r = radii[radii.length - 1];
     radii.push(r + Math.max(minStep, (r * 2 * Math.PI) / segments));
   }
 
   const positions = [0, 0, 0];
+
   for (let ring = 1; ring < radii.length; ring++) {
     for (let s = 0; s < segments; s++) {
       const angle = (s / segments) * Math.PI * 2;
@@ -101,11 +105,14 @@ function createSurfaceGeometry(segments: number) {
   }
 
   const indices: number[] = [];
+
   const vertex = (ring: number, s: number) =>
     1 + (ring - 1) * segments + (s % segments);
+
   for (let s = 0; s < segments; s++) {
     indices.push(0, vertex(1, s + 1), vertex(1, s));
   }
+
   for (let ring = 1; ring < radii.length - 1; ring++) {
     for (let s = 0; s < segments; s++) {
       const a = vertex(ring, s);
@@ -122,6 +129,7 @@ function createSurfaceGeometry(segments: number) {
     new BufferAttribute(new Float32Array(positions), 3)
   );
   geometry.setIndex(indices);
+
   return geometry;
 }
 
@@ -133,6 +141,8 @@ function createMaterial(
   quality: OceanQuality
 ) {
   const cascades = simulation?.cascades ?? [];
+  const displacements = simulation?.displacement ?? [];
+  const derivatives = simulation?.derivatives ?? [];
   const { rootSize } = index.manifest;
   const maxDepth = index.manifest.water?.maxDepth ?? 30;
   const sqrtEncoded = index.manifest.water?.encoding === "sqrt";
@@ -143,6 +153,7 @@ function createMaterial(
 
   const depthAt = (xz) => {
     const v = texture(water, xz.div(rootSize).add(0.5)).r;
+
     return (sqrtEncoded ? v.mul(v) : v).mul(maxDepth);
   };
 
@@ -155,9 +166,7 @@ function createMaterial(
     // waves are smaller than the mesh can carry.
     const fade = float(1).sub(smoothstep(size * 4, size * 16, distance));
     displacement = displacement.add(
-      texture(simulation.displacement[c], world.div(size))
-        .level(float(0))
-        .xyz.mul(fade)
+      texture(displacements[c], world.div(size)).level(float(0)).xyz.mul(fade)
     );
   });
 
@@ -176,10 +185,11 @@ function createMaterial(
   let jacobian: any = float(1);
   cascades.forEach(({ size }, c) => {
     const uv = surface.div(size);
-    const d = texture(simulation.derivatives[c], uv);
+    const d = texture(derivatives[c], uv);
     slope = slope.add(vec2(d.x.div(d.z.add(1)), d.y.div(d.w.add(1))));
+
     if (c < 2) {
-      jacobian = jacobian.add(texture(simulation.displacement[c], uv).w.sub(1));
+      jacobian = jacobian.add(texture(displacements[c], uv).w.sub(1));
     }
   });
   slope = slope.mul(shallow);
@@ -198,14 +208,18 @@ function createMaterial(
     resolutionScale: quality.reflectionScale,
     samples: quality.reflectionSamples,
   });
+
   mirror.target.rotateX(-Math.PI / 2);
-  mirror.uvNode = mirror.uvNode.add(slope.mul(0.12));
+
+  if (mirror.uvNode) mirror.uvNode = mirror.uvNode.add(slope.mul(0.12));
   const sky = mirror.rgb;
   const sunAmount = max(dot(reflected, sunDirection), 0);
   // In a hill's or a cloud's shadow the sun's glint and direct light go;
   // skylight stays, so the body of the water only dims and its reflection
   // barely changes.
+  // SAFETY: shadow() makes a float node; see environment.ts.
   const lit = float(sunShadow as any).mul(cloudShadow);
+
   const glint = pow(sunAmount, 900)
     .mul(40)
     .add(pow(sunAmount, 60).mul(0.25))
@@ -230,6 +244,7 @@ function createMaterial(
   const reflectance = float(0.001)
     .add(exp(depth.div(-40)).mul(0.014))
     .add(exp(depth.div(-4.5)).mul(0.07));
+
   const scatter = vec3(reflectance.mul(irradiance)).add(
     max(dot(normal, sunDirection), 0).mul(0.02).mul(sunIntensity).mul(lit)
   );
@@ -241,12 +256,14 @@ function createMaterial(
   const thickness = viewportLinearDepth
     .sub(linearDepth())
     .mul(cameraFar.sub(cameraNear));
+
   // A continuous band that swells and recedes with the waves.
   const shoreFoam = float(1)
     .sub(smoothstep(0, 1.2, thickness))
     .mul(
       mix(0.45, 1, smoothstep(-0.3, 0.6, displacement.y.add(slope.x.mul(2))))
     );
+
   const foam = max(whitecaps, shoreFoam.mul(0.8));
 
   // Held back a little: a full-strength mirror reads as glass, not sea.
@@ -262,7 +279,8 @@ function createMaterial(
 
 function isWebGPU(renderer: WebGPURenderer) {
   return (
-    (renderer.backend as { isWebGPUBackend?: boolean }).isWebGPUBackend === true
+    "isWebGPUBackend" in renderer.backend &&
+    renderer.backend.isWebGPUBackend === true
   );
 }
 
@@ -275,7 +293,7 @@ export function Ocean({
   quality: OceanQuality;
   conditions?: OceanConditions;
 }) {
-  const renderer = useThree((state) => state.gl) as unknown as WebGPURenderer;
+  const renderer = useRenderer();
   const camera = useThree((state) => state.camera);
   const supported = isWebGPU(renderer);
   const water = useLoader(TextureLoader, `${TERRAIN_URL}/water.png`);
@@ -292,17 +310,20 @@ export function Ocean({
     const simulation = supported
       ? new OceanSimulation(quality.fftSize, createCascades(CASCADE_SIZES))
       : null;
+
     const { material, mirror } = createMaterial(
       simulation,
       water,
       index,
       quality
     );
+
     const mesh = new Mesh(createSurfaceGeometry(quality.segments), material);
     mirror.reflector.getVirtualCamera(camera).layers.set(REFLECTION_LAYER);
     mesh.frustumCulled = false;
     // After the terrain, so the depth behind the water is known.
     mesh.renderOrder = 1;
+
     return { simulation, mesh, mirror };
   }, [index, quality, water, supported, camera]);
 
@@ -314,7 +335,7 @@ export function Ocean({
     () => () => {
       simulation?.dispose();
       mesh.geometry.dispose();
-      (mesh.material as MeshBasicNodeMaterial).dispose();
+      mesh.material.dispose();
     },
     [simulation, mesh]
   );

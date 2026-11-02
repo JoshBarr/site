@@ -16,6 +16,7 @@ let ctx: OffscreenCanvasRenderingContext2D | null = null;
 
 async function decode({ url, offset, scale }: DecodeRequest) {
   const response = await fetch(url);
+
   if (!response.ok) {
     throw new Error(`${url}: ${response.status}`);
   }
@@ -28,16 +29,21 @@ async function decode({ url, offset, scale }: DecodeRequest) {
   });
 
   const { width, height } = bitmap;
+
   if (!canvas || canvas.width !== width || canvas.height !== height) {
     canvas = new OffscreenCanvas(width, height);
     ctx = canvas.getContext("2d", { willReadFrequently: true });
   }
+
+  if (!ctx) throw new Error("no 2D canvas context");
+
   ctx.drawImage(bitmap, 0, 0);
   bitmap.close();
 
   const rgba = ctx.getImageData(0, 0, width, height).data;
   const heights = new Float32Array(width * height);
   const ground = new Uint8Array(width * height * 2);
+
   for (let i = 0; i < heights.length; i++) {
     const q = (rgba[i * 4] << 8) | rgba[i * 4 + 1];
     heights[i] = q / scale - offset;
@@ -46,11 +52,13 @@ async function decode({ url, offset, scale }: DecodeRequest) {
     ground[i * 2] = (b >> 1) * 2;
     ground[i * 2 + 1] = (b & 1) * 255;
   }
+
   return { heights, ground };
 }
 
 self.onmessage = async (event: MessageEvent<DecodeRequest>) => {
   const { id } = event.data;
+
   try {
     const { heights, ground } = await decode(event.data);
     self.postMessage(

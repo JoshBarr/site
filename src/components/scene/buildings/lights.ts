@@ -49,15 +49,19 @@ import {
 
 /** Never smaller than this many pixels across. */
 const MIN_PIXELS = 2.5;
+
 /** Glow profile exp(-FALLOFF r²) to the sprite's edge, r = 1... */
 const FALLOFF = 6;
+
 /** ...which covers this much of the sprite's square. */
 const PROFILE_AREA = (Math.PI / (4 * FALLOFF)) * (1 - Math.exp(-FALLOFF));
+
 /**
  * Of what the windows would give out: a speck reads brighter than the same
  * light spread over a wall of windows, so they're held under to match.
  */
 const BRIGHTNESS = 0.35;
+
 /**
  * Wall a light stands for, m², eases off toward this: a tower's share in
  * one speck would flare far over the houses around it.
@@ -72,9 +76,11 @@ export function createLights(data: Float32Array, material: SpriteNodeMaterial) {
   // Its own sprite quad, not the shared one: it's disposed with the tile.
   const geometry = new BufferGeometry();
   geometry.setIndex([0, 1, 2, 0, 2, 3]);
+
   const corners = new Float32Array([
     -0.5, -0.5, 0, 0.5, -0.5, 0, 0.5, 0.5, 0, -0.5, 0.5, 0,
   ]);
+
   geometry.setAttribute("position", new BufferAttribute(corners, 3));
   geometry.setAttribute(
     "uv",
@@ -92,6 +98,7 @@ export function createLights(data: Float32Array, material: SpriteNodeMaterial) {
   sprite.count = data.length / STRIDE;
   sprite.frustumCulled = false;
   sprite.renderOrder = 5;
+
   return sprite;
 }
 
@@ -105,9 +112,11 @@ export function createLightsMaterial() {
     depthWrite: false,
     blending: AdditiveBlending,
   });
+
   // Haze dims them; its glow is the fog's to add, and additive light can't
   // be fogged toward a colour.
   material.fog = false;
+
   const position = vec3(
     light.x,
     light.y.mul(verticalScale).add(light.w),
@@ -121,14 +130,17 @@ export function createLightsMaterial() {
   const distance = toCamera.length();
   const level = normalize(toCamera).xz.length();
   const storeys = max(top.div(STOREY), 1);
+
   const share = windowShare(
     seed,
     float(STREET_BUSIER - 1)
       .div(storeys)
       .add(1)
   );
+
   const windowless = step(32767.5, seed);
   const lamps = wall.div(max(top, 1)).mul(STOREY).mul(LAMP_GLOW);
+
   const glow = select(
     windowless.greaterThan(0.5),
     lamps,
@@ -152,6 +164,7 @@ export function createLightsMaterial() {
         drawn
       )
     );
+
   const colour = mix(WARM, COOL, step(1 - COOL_SHARE, hash(seed.add(271))));
 
   const size = distance.mul(pixelAngle).mul(MIN_PIXELS);
@@ -161,9 +174,11 @@ export function createLightsMaterial() {
   material.positionNode = position.add(normalize(toCamera).mul(size.mul(0.5)));
 
   const r = uv().sub(0.5).length().mul(2);
+
   const profile = exp(r.mul(r).mul(-FALLOFF)).mul(
     float(1).sub(smoothstep(0.9, 1, r))
   );
+
   material.colorNode = colour
     .mul(glow.div(size.mul(size).mul(PROFILE_AREA)))
     .mul(profile)

@@ -67,6 +67,7 @@ import { AirfieldLights } from "./airport/AirfieldLights";
 import { updateLens } from "./lens";
 import { DEFAULT_FOV, FollowRig } from "./follow/rig";
 import { getSnapshot, stop as stopFollowing } from "./follow/store";
+import { useRenderer } from "./renderer";
 
 // Over the harbour, looking west across Te Aro to Kelburn.
 const START_POSITION: [number, number] = [1752500, 5429000];
@@ -104,6 +105,7 @@ function Atmosphere({
     const haze = float(1).sub(hazeTransmittance(cameraPosition, positionWorld));
 
     let fogColor: any = hazeColor(positionWorld.sub(cameraPosition));
+
     if (night) fogColor = fogColor.add(hazeGlow(cameraPosition, positionWorld));
     scene.fogNode = fog(fogColor, max(haze, edgeFade));
 
@@ -111,18 +113,23 @@ function Atmosphere({
     // small disc toward the sun.
     const direction = positionWorldDirection;
     const toward = dot(direction, environment.sunDirection);
+
     const gradient = mix(
       environment.skyHorizon,
       environment.skyZenith,
       smoothstep(0, 0.35, direction.y)
     );
+
     const horizon = float(1).sub(smoothstep(0, 0.25, max(direction.y, 0)));
+
     const disc = smoothstep(0.99996, 0.99999, toward).mul(
       environment.sunIntensity.mul(3)
     );
+
     let sky: any = mix(gradient, hazeColor(direction), horizon.mul(0.8))
       .add(phase(toward, 0.7).mul(environment.sunIntensity).mul(0.15))
       .add(disc);
+
     if (night) {
       const far = cameraPosition.add(direction.mul(SKYGLOW_DISTANCE));
       sky = sky.add(
@@ -131,6 +138,7 @@ function Atmosphere({
         )
       );
     }
+
     scene.backgroundNode = sky;
 
     return () => {
@@ -144,22 +152,27 @@ function Atmosphere({
 
 /** Keep the camera at least this far above the ground. */
 const GROUND_CLEARANCE = 3;
+
 /** And this far above the tallest wave crests. */
 const SEA_CLEARANCE = 1.5;
+
 /** Near plane as a fraction of height above the ground or sea, clamped. */
 const NEAR_FRACTION = 0.2;
 const NEAR_MIN = 0.3;
 const NEAR_MAX = 5;
+
 /** Highest the camera may go: clear of the low deck on most overcast days. */
 const CEILING = 4000;
 const MIN_DISTANCE = 10;
 const MAX_DISTANCE = 14000;
 const MAX_POLAR_ANGLE = Math.PI * 0.5;
+
 /**
  * After the layers have put their vehicles where they are this frame, so a
  * followed one sits still in the shot, and before the clouds render it.
  */
 const CAMERA_PRIORITY = 0.5;
+
 /** Handing back from following, the orbit target's this far off, m. */
 const HAND_BACK: [number, number] = [50, 2000];
 
@@ -187,6 +200,7 @@ function Controls({
       .get("cam")
       ?.split(",")
       .map(Number);
+
     const [pe, pn, pAlt, te, tn, tAlt] =
       cam?.length === 6 && cam.every(Number.isFinite)
         ? cam
@@ -194,6 +208,7 @@ function Controls({
 
     const [px, pz] = nztmToWorld(manifest, pe, pn);
     const [tx, tz] = nztmToWorld(manifest, te, tn);
+
     return [new Vector3(px, pAlt, pz), new Vector3(tx, tAlt, tz)];
   }, [manifest]);
 
@@ -210,10 +225,11 @@ function Controls({
 
   const controls = useRef<React.ComponentRef<typeof CameraControls>>(null);
   const orbit = useMemo(() => new Vector3(), []);
-  const renderer = useThree((state) => state.gl) as unknown as WebGPURenderer;
-  const events = useThree((state) => state.events.connected) as
-    | HTMLElement
-    | undefined;
+  const renderer = useRenderer();
+
+  const connected = useThree((state) => state.events.connected);
+  const events = connected instanceof HTMLElement ? connected : undefined;
+
   // Crests rarely top the significant height, so that's enough headroom.
   const seaFloor = useRef(0);
   seaFloor.current = SEA_CLEARANCE + significantHeight(sea);
@@ -230,26 +246,30 @@ function Controls({
       ),
     [manifest, heightAt]
   );
+
   /** Whether the rig has the camera. */
   const followingRef = useRef(false);
 
   // Back to orbiting, from where the follow rig left the camera.
   const handBack = useCallback(() => {
     const c = controls.current;
+
     if (!c || !followingRef.current) return;
     followingRef.current = false;
-    const camera = c.camera as PerspectiveCamera;
+    const { camera } = c;
     c.minDistance = MIN_DISTANCE;
     c.maxDistance = MAX_DISTANCE;
     c.maxPolarAngle = MAX_POLAR_ANGLE;
     c.boundaryEnclosesCamera = true;
     c.setBoundary(boundary);
     c.enabled = true;
+
     // Orbiting what it was looking at, no higher than the camera.
     const distance = Math.min(
       Math.max(camera.position.distanceTo(rig.shot.target), HAND_BACK[0]),
       HAND_BACK[1]
     );
+
     camera.getWorldDirection(orbit);
     orbit.multiplyScalar(distance).add(camera.position);
     orbit.y = Math.min(orbit.y, camera.position.y);
@@ -261,17 +281,21 @@ function Controls({
   // zoom: this runs before the controls see the event.
   useEffect(() => {
     const element = events ?? renderer.domElement;
+
     const take = () => {
       if (!getSnapshot().following) return;
       stopFollowing();
       handBack();
     };
+
     const keys = (e: KeyboardEvent) => {
       if (e.key === "Escape") stopFollowing();
     };
+
     element.addEventListener("pointerdown", take, { capture: true });
     element.addEventListener("wheel", take, { capture: true });
     window.addEventListener("keydown", keys);
+
     return () => {
       element.removeEventListener("pointerdown", take, { capture: true });
       element.removeEventListener("wheel", take, { capture: true });
@@ -280,8 +304,12 @@ function Controls({
   }, [events, renderer, handBack]);
 
   useEffect(() => {
-    controls.current.setBoundary(boundary);
-    controls.current.setLookAt(
+    const c = controls.current;
+
+    if (!c) return;
+
+    c.setBoundary(boundary);
+    c.setLookAt(
       position.x,
       position.y,
       position.z,
@@ -294,10 +322,16 @@ function Controls({
 
   useFrame((_, delta) => {
     const c = controls.current;
-    const camera = c?.camera as PerspectiveCamera | undefined;
-    if (!camera || !heightAt.current) return;
+
+    if (!c || !heightAt.current) return;
+
+    const { camera } = c;
+
+    // The Canvas's camera, which is a perspective one.
+    if (!(camera instanceof PerspectiveCamera)) return;
 
     const shot = rig.update(camera, delta);
+
     if (shot) {
       if (!followingRef.current) {
         // Out of the orbit's limits: landings are watched from the ground,
@@ -310,6 +344,7 @@ function Controls({
         c.maxPolarAngle = Math.PI;
         c.enabled = false;
       }
+
       // Straight onto the camera for this frame, and into the controls so
       // they hold it there through the next.
       const { position: p, target: t } = shot;
@@ -319,8 +354,10 @@ function Controls({
     } else {
       handBack();
     }
+
     // The lens goes back to the scene's when the rig lets go.
     const fov = shot?.fov ?? DEFAULT_FOV;
+
     if (Math.abs(camera.fov - fov) > 0.01) {
       camera.fov = shot
         ? fov
@@ -329,26 +366,32 @@ function Controls({
     }
 
     const ground = heightAt.current(camera.position.x, camera.position.z);
+
     if (ground === undefined) return;
     const floor = Math.max(ground + GROUND_CLEARANCE, seaFloor.current);
     const allowed = Math.max(floor, camera.position.y);
+
     if (camera.position.y !== allowed) {
       const { x, z } = camera.position;
+
       if (shot) {
         camera.position.y = allowed;
         camera.lookAt(shot.target);
       } else c.setPosition(x, allowed, z, false);
     }
+
     // Pull the near plane in when low so nearby waves and ground aren't cut
     // off, and push it out when high to keep depth precision for the distance.
     const near = Math.min(
       Math.max((allowed - ground) * NEAR_FRACTION, NEAR_MIN),
       NEAR_MAX
     );
+
     if (Math.abs(camera.near - near) > camera.near * 0.1) {
       camera.near = near;
       camera.updateProjectionMatrix();
     }
+
     updateLens(renderer, camera, shot?.target ?? c.getTarget(orbit), delta);
   }, CAMERA_PRIORITY);
 
@@ -365,8 +408,10 @@ function Controls({
 }
 
 const SUN_DISTANCE = 20000;
+
 /** Width of the shadow-mapped square, centred on SHADOW_CENTRE. */
 const SHADOW_EXTENT = 32000;
+
 /** Middle of the high-detail core (NZTM). */
 const SHADOW_CENTRE: [number, number] = [1745500, 5429000];
 
@@ -391,6 +436,7 @@ const DUSK = [4, -6];
 function nightFor(altitude: number) {
   const [start, end] = DUSK;
   const t = Math.min(Math.max((altitude - start) / (end - start), 0), 1);
+
   return t * t * (3 - 2 * t);
 }
 
@@ -408,21 +454,25 @@ function useSceneTime() {
   const clock = useMemo(() => {
     const params = new URLSearchParams(location.search);
     const t = params.get("t");
+
     return {
       start: t ? new Date(t).getTime() : Date.now(),
       openedAt: Date.now(),
       frozen: params.has("freeze"),
     };
   }, []);
+
   const [time, setTime] = useState(() => new Date(clock.start));
 
   useEffect(() => {
     if (clock.frozen) return;
+
     // From the wall clock, not a count of ticks: background tabs skip them.
     const id = setInterval(
       () => setTime(new Date(clock.start + Date.now() - clock.openedAt)),
       CLOCK_TICK
     );
+
     return () => clearInterval(id);
   }, [clock]);
 
@@ -442,8 +492,10 @@ function Sun({
   position: SunPosition;
 }) {
   const light = useRef<DirectionalLight>(environment.sunLight);
+
   const centre = useMemo(() => {
     const [x, z] = nztmToWorld(index.manifest, ...SHADOW_CENTRE);
+
     return new Vector3(x, 0, z);
   }, [index]);
 
@@ -451,8 +503,10 @@ function Sun({
     if (position.altitude < 0) {
       return { direction: MOON, intensity: 0.4 };
     }
+
     // Fade in through the first few degrees above the horizon.
     const fade = Math.min(1, position.altitude / 6);
+
     return { direction: sunDirection(position), intensity: 3 * fade };
   }, [position]);
 
@@ -505,16 +559,14 @@ function Sun({
     }
   });
 
+  const [sunX, sunY, sunZ] = direction.map(
+    (v, i) => centre.getComponent(i) + v * SUN_DISTANCE
+  );
+
   return (
     <primitive
       object={environment.sunLight}
-      position={
-        direction.map((v, i) => centre.getComponent(i) + v * SUN_DISTANCE) as [
-          number,
-          number,
-          number,
-        ]
-      }
+      position={[sunX, sunY, sunZ]}
       intensity={lit}
     />
   );
@@ -527,6 +579,7 @@ function Sun({
  */
 function seaConditions({ wind }: Conditions): OceanConditions {
   const southerly = wind.direction > 120 && wind.direction < 240;
+
   return {
     windSpeed: wind.speed,
     windDirection: wind.direction,
@@ -540,6 +593,7 @@ function useIsMobile() {
   useEffect(() => {
     setMobile(window.matchMedia("(pointer: coarse)").matches);
   }, []);
+
   return mobile;
 }
 
@@ -551,14 +605,17 @@ export const WellingtonScene: React.FC<{
   const mobile = useIsMobile();
   const heightAt = useRef<HeightQuery | null>(null);
   const forecast = useConditions();
+
   const conditions = useMemo(
     () =>
       clouds ? forecast : { ...forecast, cloudCover: 0, precipitation: 0 },
     [forecast, clouds]
   );
+
   const time = useSceneTime();
   const sun = useMemo(() => sunPosition(time), [time]);
   const sea = useMemo(() => seaConditions(conditions), [conditions]);
+
   const setHeightQuery = useCallback((query: HeightQuery | null) => {
     heightAt.current = query;
   }, []);
@@ -573,12 +630,17 @@ export const WellingtonScene: React.FC<{
       dpr={mobile ? [1, 1.5] : [1, 2]}
       gl={async (props) => {
         const renderer = new WebGPURenderer({
+          // SAFETY: R3F's props are for a WebGLRenderer, and WebGPURenderer
+          // takes the same ones; the types differ only in which declaration
+          // of OffscreenCanvas each was built against.
           ...(props as any),
           antialias: true,
           // ?webgl tests the fallback path browsers without WebGPU get.
           forceWebGL: new URLSearchParams(location.search).has("webgl"),
         });
+
         await renderer.init();
+
         return renderer;
       }}
       camera={{ fov: DEFAULT_FOV, near: 5, far: 80000 }}

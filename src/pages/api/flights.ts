@@ -23,24 +23,30 @@ export default async function handler(
   res: NextApiResponse<FlightsResponse | { error: string }>
 ) {
   const since = "history" in req.query ? HISTORY : RECENT;
+
   const [live, past] = await Promise.allSettled([
     fetchAirspace(),
-    canStore ? loadSightings(since) : Promise.resolve([] as Sighting[]),
+    canStore() ? loadSightings(since) : Promise.resolve<Sighting[]>([]),
   ]);
+
   if (live.status === "rejected") {
     console.error("[flights] fetch failed:", live.reason);
   }
+
   if (past.status === "rejected") {
     console.error("[flights] load failed:", past.reason);
   }
+
   if (live.status === "rejected" && past.status === "rejected") {
     res.setHeader("Cache-Control", "public, s-maxage=30");
     res.status(502).json({ error: "flights unavailable" });
+
     return;
   }
 
   const fresh = live.status === "fulfilled" ? live.value : [];
-  if (canStore && fresh.length) {
+
+  if (canStore() && fresh.length) {
     waitUntil(
       saveSightings(fresh).catch((e) =>
         console.error("[flights] save failed:", e)
@@ -52,10 +58,12 @@ export default async function handler(
     ...(past.status === "fulfilled" ? past.value : []),
     ...fresh,
   ];
+
   // Without routes, trails just end where the aircraft were first and last
   // seen: no reason to fail.
   const routes = await findRoutes(sightings).catch((e) => {
     console.error("[flights] routes failed:", e);
+
     return undefined;
   });
 

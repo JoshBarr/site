@@ -13,7 +13,9 @@ export default async function handler(
 ) {
   try {
     const { snapshot, refresh } = await loadTraffic();
+
     if (refresh) waitUntil(refresh);
+
     if (!snapshot) throw new Error("nothing fetched yet");
     res.setHeader(
       "Cache-Control",

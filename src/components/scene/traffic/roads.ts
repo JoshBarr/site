@@ -6,13 +6,14 @@ import { verticalScale } from "../terrain/Terrain";
 // traffic can be put and run along, lane by lane, and where NZTA's speeds
 // apply.
 
-export const ROADS_URL = process.env.NEXT_PUBLIC_ROADS_URL ?? "/roads";
+const ROADS_URL = process.env.NEXT_PUBLIC_ROADS_URL ?? "/roads";
 
 /** Lanes, m: motorway and open road, and town streets at 50 or less. */
 const LANE = 3.5;
 const TOWN_LANE = 3.2;
+
 /** The road's surface, above the smoothed ground it's laid on, m. */
-export const ROAD_TOP = 0.25;
+const ROAD_TOP = 0.25;
 
 interface CarriagewayFile {
   road: string;
@@ -94,24 +95,29 @@ export class Carriageway {
     this.y = new Float32Array(count);
     this.z = new Float32Array(count);
     this.s = new Float32Array(count);
+
     for (let i = 0; i < count; i++) {
       const [x, z] = nztmToWorld(
         index.manifest,
         file.points[i * 3],
         file.points[i * 3 + 1]
       );
+
       this.x[i] = x;
       this.y[i] = file.points[i * 3 + 2] * scale + ROAD_TOP;
       this.z[i] = z;
+
       if (i > 0) {
         this.s[i] =
           this.s[i - 1] + Math.hypot(x - this.x[i - 1], z - this.z[i - 1]);
       }
     }
+
     this.length = this.s[count - 1];
 
     this.rightX = new Float32Array(count);
     this.rightZ = new Float32Array(count);
+
     for (let i = 0; i < count; i++) {
       const a = Math.max(i - 1, 0);
       const b = Math.min(i + 1, count - 1);
@@ -129,6 +135,7 @@ export class Carriageway {
     this.laneWidth = new Float32Array(count);
     file.spans.forEach(([from, lanes, total, flags, maxspeed], k) => {
       const to = file.spans[k + 1]?.[0] ?? count;
+
       for (let i = from; i < to; i++) {
         this.lanes[i] = lanes;
         this.total[i] = total;
@@ -152,22 +159,31 @@ export class Carriageway {
   locate(s: number, hint = -1): number {
     const S = this.s;
     const last = this.count - 2;
+
     if (s <= 0) return 0;
+
     if (s >= this.length) return last;
     let i = hint;
+
     if (i < 0 || i > last || Math.abs(S[i] - s) > 200) {
       // Bisect.
       let lo = 0;
       let hi = last;
+
       while (lo < hi) {
         const mid = (lo + hi + 1) >> 1;
+
         if (S[mid] <= s) lo = mid;
         else hi = mid - 1;
       }
+
       return lo;
     }
+
     while (i < last && S[i + 1] <= s) i++;
+
     while (i > 0 && S[i] > s) i--;
+
     return i;
   }
 
@@ -185,6 +201,7 @@ export class Carriageway {
     out.x = this.x[i] + (this.x[j] - this.x[i]) * t + rx * lateral;
     out.y = this.y[i] + (this.y[j] - this.y[i]) * t;
     out.z = this.z[i] + (this.z[j] - this.z[i]) * t + rz * lateral;
+
     return i;
   }
 
@@ -211,11 +228,14 @@ export class Roads {
       ([name, c]) => new Carriageway(name, c, file, index)
     );
     const byName = new Map(this.carriageways.map((c) => [c.name, c]));
+
     for (const [name, c] of Object.entries(file.carriageways)) {
       const carriageway = byName.get(name)!;
+
       if (c.into && byName.has(c.into[0])) {
         carriageway.into = { name: c.into[0], s: c.into[1] };
       }
+
       if (c.from && byName.has(c.from[0])) {
         carriageway.from = { name: c.from[0], s: c.from[1] };
       }
@@ -225,6 +245,8 @@ export class Roads {
 
 export async function loadRoads(index: TileIndex): Promise<Roads> {
   const response = await fetch(`${ROADS_URL}/roads.json`);
+
   if (!response.ok) throw new Error(`roads: ${response.status}`);
+
   return new Roads(await response.json(), index);
 }

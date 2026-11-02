@@ -1,5 +1,7 @@
+import { z } from "zod";
 import type { Bus } from "./buses";
 import { toNztm } from "./nztm";
+import { readJson } from "./schemas";
 import type { Line, Train } from "./trains";
 
 // Train and bus positions from Metlink's open data API
@@ -12,67 +14,100 @@ const API = "https://api.opendata.metlink.org.nz/v1";
 const TIMEOUT = 5_000;
 
 /** Metlink's GTFS route ids for the rail lines (route_type 2). */
-const LINES: Record<number, Line> = {
-  2: "KPL",
-  3: "MEL",
-  4: "WRL",
-  5: "HVL",
-  6: "JVL",
-};
+const LINES = new Map<number, Line>([
+  [2, "KPL"],
+  [3, "MEL"],
+  [4, "WRL"],
+  [5, "HVL"],
+  [6, "JVL"],
+]);
+
 /**
  * Routes that aren't buses or trains: the Days Bay ferry (on AIS, so it's
  * among the ships already) and the cable car.
  */
 const NOT_BUSES = new Set([8, 9]);
 
-interface Entity {
-  vehicle: {
-    position: { latitude: number; longitude: number; bearing?: number };
-    /** Epoch seconds. */
-    timestamp: number;
-    /** Out of service, there's no trip, or no route in it. */
-    trip?: { route_id?: number | string; direction_id?: number };
-    vehicle: { id: string };
-  };
-}
+const vehiclePositions = z.object({
+  entity: z.array(
+    z.object({
+      vehicle: z.object({
+        position: z.object({
+          latitude: z.number(),
+          longitude: z.number(),
+          bearing: z.number().optional(),
+        }),
+        /** Epoch seconds. */
+        timestamp: z.number(),
+        /** Out of service, there's no trip, or no route in it. */
+        trip: z
+          .object({
+            route_id: z.union([z.number(), z.string()]).optional(),
+            direction_id: z.number().optional(),
+          })
+          .optional(),
+        /** Usually a string, now and then a number. */
+        vehicle: z.object({
+          id: z.union([z.string(), z.number()]).transform(String),
+        }),
+      }),
+    })
+  ),
+});
+
+type Vehicle = z.infer<typeof vehiclePositions>["entity"][number]["vehicle"];
 
 /** Every vehicle reporting. */
-async function fetchVehicles(): Promise<Entity["vehicle"][]> {
+async function fetchVehicles(): Promise<Vehicle[]> {
   const key = process.env.METLINK_API_KEY;
+
   if (!key) throw new Error("METLINK_API_KEY isn't set");
+
   const response = await fetch(`${API}/gtfs-rt/vehiclepositions`, {
     headers: { "x-api-key": key, Accept: "application/json" },
     signal: AbortSignal.timeout(TIMEOUT),
   });
+
   if (!response.ok) {
     throw new Error(`metlink vehiclepositions: HTTP ${response.status}`);
   }
-  const { entity } = (await response.json()) as { entity: Entity[] };
+
+  const { entity } = await readJson(
+    response,
+    vehiclePositions,
+    "metlink vehiclepositions"
+  );
+
   return entity.map(({ vehicle }) => vehicle);
 }
 
 /** Where a vehicle is, in NZTM to the decimetre, and when. */
-function fix(v: Entity["vehicle"]) {
+function fix(v: Vehicle) {
   const [easting, northing] = toNztm(v.position.latitude, v.position.longitude);
+
   const position: [number, number] = [
     Math.round(easting * 10) / 10,
     Math.round(northing * 10) / 10,
   ];
+
   const time = v.timestamp * 1000;
+  const trail: [number, number, number][] = [[...position, time]];
+
   return {
     id: v.vehicle.id,
     direction: v.trip?.direction_id ?? 0,
     position,
     bearing: v.position.bearing ?? null,
     time,
-    trail: [[...position, time] as [number, number, number]],
+    trail,
   };
 }
 
 /** Every train in service, without trails. */
 export async function fetchTrains(): Promise<Train[]> {
   return (await fetchVehicles()).flatMap((v): Train[] => {
-    const line = LINES[Number(v.trip?.route_id)];
+    const line = LINES.get(Number(v.trip?.route_id));
+
     return line ? [{ ...fix(v), line }] : [];
   });
 }
@@ -81,8 +116,11 @@ export async function fetchTrains(): Promise<Train[]> {
 export async function fetchBuses(): Promise<Bus[]> {
   return (await fetchVehicles()).flatMap((v): Bus[] => {
     const route = v.trip?.route_id;
+
     if (route === undefined || route === "") return [];
-    if (LINES[Number(route)] || NOT_BUSES.has(Number(route))) return [];
+
+    if (LINES.has(Number(route)) || NOT_BUSES.has(Number(route))) return [];
+
     return [{ ...fix(v), route: String(route) }];
   });
 }

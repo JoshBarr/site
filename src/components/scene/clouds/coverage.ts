@@ -2,7 +2,7 @@ import { DataTexture } from "three/webgpu";
 import { clamp, texture, vec2 } from "three/tsl";
 
 /** The 2D coverage map spans this many metres before repeating. */
-export const WEATHER_SCALE = 24000;
+const WEATHER_SCALE = 24000;
 
 /**
  * Each layer samples the noise rotated, so the tiles don't line up into rows,
@@ -21,16 +21,19 @@ export function coverageMap(weather: DataTexture, xz, offset, angle: number) {
   const c = Math.cos(angle);
   const s = Math.sin(angle);
   const moved = xz.add(offset);
+
   const rotated = vec2(
     moved.x.mul(c).sub(moved.y.mul(s)),
     moved.x.mul(s).add(moved.y.mul(c))
   );
 
   const broad = texture(weather, rotated.div(WEATHER_SCALE));
+
   const fine = texture(
     weather,
     vec2(rotated.y, rotated.x.negate()).div(WEATHER_SCALE * 0.37)
   );
+
   // Blending two maps squeezes their range toward the middle; stretch it
   // back so the area over the threshold tracks the coverage value.
   const map = clamp(
@@ -38,33 +41,39 @@ export function coverageMap(weather: DataTexture, xz, offset, angle: number) {
     0,
     1
   );
+
   return { rotated, broad, fine, map };
 }
 
 /** The weather texture's red and green at uv, as the GPU samples it: bilinear, repeating. */
 function sampleWeather(weather: DataTexture, u: number, v: number) {
-  const { data, width, height } = weather.image as {
-    data: Uint8Array;
-    width: number;
-    height: number;
-  };
+  const { data, width, height } = weather.image;
+
+  if (!(data instanceof Uint8Array)) throw new Error("weather isn't bytes");
+
   const x = u * width - 0.5;
   const y = v * height - 0.5;
   const x0 = Math.floor(x);
   const y0 = Math.floor(y);
   const fx = x - x0;
   const fy = y - y0;
+
   const texel = (i: number, j: number, channel: number) => {
     const column = ((i % width) + width) % width;
     const row = ((j % height) + height) % height;
+
     return data[(row * width + column) * 4 + channel] / 255;
   };
+
   const channel = (c: number) => {
     const top = texel(x0, y0, c) * (1 - fx) + texel(x0 + 1, y0, c) * fx;
+
     const bottom =
       texel(x0, y0 + 1, c) * (1 - fx) + texel(x0 + 1, y0 + 1, c) * fx;
+
     return top * (1 - fy) + bottom * fy;
   };
+
   return { r: channel(0), g: channel(1) };
 }
 
@@ -83,11 +92,14 @@ export function coverageMapAt(
   const rx = mx * c - mz * s;
   const rz = mx * s + mz * c;
   const broad = sampleWeather(weather, rx / WEATHER_SCALE, rz / WEATHER_SCALE);
+
   const fine = sampleWeather(
     weather,
     rz / (WEATHER_SCALE * 0.37),
     -rx / (WEATHER_SCALE * 0.37)
   );
+
   const blended = (broad.r * 0.7 + fine.r * 0.3 - 0.5) * 1.9 + 0.5;
+
   return { broad, map: Math.min(Math.max(blended, 0), 1) };
 }

@@ -5,10 +5,7 @@ import { GetStaticProps } from "next";
 import Link from "next/link";
 import { getAllPosts, PostMetaWithFrontMatter } from "../lib/blog";
 import PostMetadata from "../components/PostMetadata";
-import { WorkItem, WorkItemType, IMG_HEIGHT } from "../components/WorkItem";
-import { Endorsement, EndorsementType } from "../components/Endorsement";
 import dynamic from "next/dynamic";
-import { allEndorsements, allWork } from "../lib/content";
 import { LogoVital } from "../components/logo-vital";
 import { LogoStedi } from "../components/logo-stedi";
 import { LogoXero } from "../components/logo-xero";
@@ -22,8 +19,6 @@ const WellingtonScene = dynamic(
 
 interface IndexPageProps {
   allPosts: PostMetaWithFrontMatter[];
-  allWork: WorkItemType[];
-  allEndorsements: EndorsementType[];
 }
 
 const CC_BY = (
@@ -67,11 +62,7 @@ const SCENE_CREDITS = (
   </>
 );
 
-const IndexPage: React.FC<IndexPageProps> = ({
-  allPosts,
-  allWork,
-  allEndorsements,
-}) => (
+const IndexPage: React.FC<IndexPageProps> = ({ allPosts }) => (
   <Layout theme="theme--hero" credits={SCENE_CREDITS}>
     <SEO title="Home" thumbnail={undefined} />
 
@@ -273,8 +264,6 @@ export const getStaticProps: GetStaticProps<IndexPageProps> = async () => {
     props: {
       isDark: true,
       allPosts,
-      allWork,
-      allEndorsements,
     },
   };
 };

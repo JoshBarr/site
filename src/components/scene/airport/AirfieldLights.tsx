@@ -40,10 +40,13 @@ import {
 
 /** Lamps sit this far above the ground, metres. */
 const LAMP_HEIGHT = 0.4;
+
 /** Glow size, metres, and never smaller than this many pixels. */
 const SIZE = 2;
+
 /** Of a sprite's width, what its core covers: where neighbours stack up. */
 const CORE = 0.5;
+
 /** Beyond this, metres, lights dim with distance as well. */
 const NEAR = 4000;
 
@@ -110,6 +113,7 @@ const KINDS = {
 /** World direction a bearing (degrees from grid north) points. */
 function facingOf(bearing: number): [number, number] {
   const r = (bearing * Math.PI) / 180;
+
   return [Math.sin(r), -Math.cos(r)];
 }
 
@@ -137,11 +141,13 @@ export function AirfieldLights({
   const sprite = useMemo(() => {
     // The runway's axis in the world.
     const [sx, sz] = nztmToWorld(index.manifest, ...RUNWAY.south);
+
     const [nx, nz] = nztmToWorld(
       index.manifest,
       RUNWAY.south[0] + RUNWAY.axis[0],
       RUNWAY.south[1] + RUNWAY.axis[1]
     );
+
     const axis = [nx - sx, nz - sz];
     const length = Math.hypot(axis[0], axis[1]);
     const [ax, az] = axis.map((v) => v / length);
@@ -151,6 +157,7 @@ export function AirfieldLights({
     // row x, z, spacing, count.
     const entries: { a: number[]; b: number[]; c: number[]; d: number[] }[] =
       [];
+
     const add = (
       [e, n, ground]: Light,
       { colour, pixels, brightness, row, on: switchOn }: Kind,
@@ -173,6 +180,7 @@ export function AirfieldLights({
         ],
       });
     };
+
     EDGE_LIGHTS.forEach((l) => add(l, KINDS.edge));
     TAXIWAY_LIGHTS.forEach((l) => add(l, KINDS.taxiway));
     THRESHOLD_LIGHTS.forEach(([e, n, g, f]) =>
@@ -186,11 +194,13 @@ export function AirfieldLights({
     const attribute = (key: "a" | "b" | "c" | "d") => {
       const data = new Float32Array(entries.length * 4);
       entries.forEach((entry, i) => data.set(entry[key], i * 4));
+
       return instancedBufferAttribute<"vec4">(
         new InstancedBufferAttribute(data, 4),
         "vec4"
       );
     };
+
     const a = attribute("a");
     const b = attribute("b");
     const c = attribute("c");
@@ -202,6 +212,7 @@ export function AirfieldLights({
       depthWrite: false,
       blending: AdditiveBlending,
     });
+
     material.fog = false;
     material.positionNode = position;
     const toCamera = cameraPosition.sub(position);
@@ -214,16 +225,19 @@ export function AirfieldLights({
     // per core's width, not a bar of glare. Taxiway lights stand in no
     // straight row; theirs is taken as square on.
     const row = vec3(d.x, 0, d.y);
+
     const square = mix(
       float(1),
       cross(toCamera.div(distance), row).length(),
       row.length()
     );
+
     const share = clamp(
       d.z.mul(square).div(scale.mul(CORE)),
       float(1).div(d.w),
       1
     );
+
     // Far off, they're points, not lamps.
     const far = clamp(float(NEAR).div(distance), 0, 1);
 
@@ -236,6 +250,7 @@ export function AirfieldLights({
     // pink band between.
     const elevation = atan(toCamera.y, level.length());
     const papi = smoothstep(-0.001, 0.001, elevation.sub(c.w));
+
     const colour = mix(
       b.xyz,
       vec3(...WHITE).mul(KINDS.papi.brightness),
@@ -254,6 +269,7 @@ export function AirfieldLights({
     object.count = entries.length;
     object.frustumCulled = false;
     object.renderOrder = 10;
+
     return object;
   }, [index, on]);
 

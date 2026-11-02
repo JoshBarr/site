@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import {
   Box3,
@@ -67,7 +67,7 @@ interface Resident {
   data: Uint16Array;
   /** Bands loaded. */
   bands: number;
-  mesh?: Mesh;
+  mesh?: Mesh<InstancedBufferGeometry>;
   lastUsed: number;
 }
 
@@ -98,9 +98,15 @@ export function Trees({
       (index) => {
         const { origin, rootSize } = terrain.manifest;
         const [e, n] = index.manifest.origin;
-        if (e !== origin[0] || n !== origin[1] || index.manifest.rootSize !== rootSize) {
+
+        if (
+          e !== origin[0] ||
+          n !== origin[1] ||
+          index.manifest.rootSize !== rootSize
+        ) {
           throw new Error("trees were built for a different terrain frame");
         }
+
         setIndex(index);
       },
       (e) => console.error(e)
@@ -127,6 +133,7 @@ function setBox(tile: TreeTile) {
     tile.maxGround * scale + tile.maxHeight * 1.5,
     tile.minZ + tile.size + BOUNDS_MARGIN
   );
+
   return box;
 }
 
@@ -166,9 +173,11 @@ function TreeTiles({
   useEffect(
     () => () => {
       state.disposed = true;
+
       for (const entry of state.resident.values()) {
         entry.mesh?.geometry.dispose();
       }
+
       state.resident.clear();
       group.clear();
       material.dispose();
@@ -189,13 +198,16 @@ function TreeTiles({
 
     const wanted: { tile: TreeTile; band: number; priority: number }[] = [];
     let loadedTrees = 0;
+
     for (const tile of index.tiles) {
       const entry = resident.get(tile.key);
+
       if (entry) loadedTrees += entry.data.length / 4;
       const distance = setBox(tile).distanceToPoint(cameraPosition);
       const share = drawnShare(distance);
       const inView = share > 0 && frustum.intersectsBox(box);
       const count = inView ? Math.ceil(tile.count * share) : 0;
+
       if (!count) {
         if (entry?.mesh) entry.mesh.visible = false;
         continue;
@@ -203,6 +215,7 @@ function TreeTiles({
 
       const loaded = entry ? entry.data.length / 4 : 0;
       const bandsLoaded = entry?.bands ?? 0;
+
       if (
         loaded < count &&
         bandsLoaded < bands.length &&
@@ -216,17 +229,19 @@ function TreeTiles({
           priority: bandsLoaded * 1e6 + distance,
         });
       }
+
       if (entry) {
         entry.lastUsed = state.frame;
+
         if (entry.mesh) {
           entry.mesh.visible = true;
-          (entry.mesh.geometry as InstancedBufferGeometry).instanceCount =
-            Math.min(count, loaded);
+          entry.mesh.geometry.instanceCount = Math.min(count, loaded);
         }
       }
     }
 
     wanted.sort((a, b) => a.priority - b.priority);
+
     for (const { tile, band } of wanted) {
       if (inFlight.size >= MAX_IN_FLIGHT) break;
       load(tile, band);
@@ -237,7 +252,9 @@ function TreeTiles({
       const idle = [...resident].filter(
         ([key, entry]) => entry.lastUsed < state.frame && !inFlight.has(key)
       );
+
       idle.sort(([, a], [, b]) => a.lastUsed - b.lastUsed);
+
       for (const [key, entry] of idle) {
         if (loadedTrees <= quality.maxTrees) break;
         loadedTrees -= entry.data.length / 4;
@@ -245,6 +262,7 @@ function TreeTiles({
         resident.delete(key);
       }
     }
+
     state.frame++;
   });
 
@@ -258,29 +276,38 @@ function TreeTiles({
     const { resident, inFlight, failed } = state;
     const { bands } = index.manifest;
     inFlight.add(tile.key);
+
     try {
       const start = band ? bandEnd(tile.count, bands[band - 1]) : 0;
       const end = bandEnd(tile.count, bands[band]);
       let added = new Uint16Array(0);
+
       // Small tiles can have an empty band, with no file.
       if (end > start) {
         const response = await fetch(index.url(tile, band));
+
         if (!response.ok) throw new Error(`${response.status}`);
         added = new Uint16Array(await response.arrayBuffer());
+
         if (added.length * 2 !== (end - start) * TREE_BYTES) {
           throw new Error("unexpected size");
         }
       }
+
       if (state.disposed) return;
 
       const previous = resident.get(tile.key);
       const data = new Uint16Array((previous?.data.length ?? 0) + added.length);
+
       if (previous) data.set(previous.data);
       data.set(added, previous?.data.length ?? 0);
+
       if (previous) remove(previous);
+
       const mesh = data.length
         ? createTileMesh(tile, data, material, quality.shadows)
         : undefined;
+
       if (mesh) group.add(mesh);
       resident.set(tile.key, {
         data,
@@ -317,7 +344,9 @@ function createTileMesh(
   // Culled per tile above; there's no position attribute to bound.
   mesh.frustumCulled = false;
   mesh.visible = false;
+
   if (shadows) castsNearShadow(mesh);
   else mesh.receiveShadow = true;
+
   return mesh;
 }
