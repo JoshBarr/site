@@ -874,7 +874,15 @@ export function Flights({
         distance * pixelAngle.value * MIN_PIXELS
       );
 
-      if (pose.ground) position.y += size * RIDE_HEIGHT[airframe.shape];
+      // Wheels on the ground as it's drawn now, not as it was when the path
+      // was built: finer tiles load after. Airborne fixes on the flare and
+      // dead reckoning past the last one can sit at or below the runway,
+      // which would sink the fuselage into it.
+      const ground = heightAt.current?.(pose.x, pose.z) ?? pose.y - pose.height;
+
+      const wheels = Math.max(ground, 0) + size * RIDE_HEIGHT[airframe.shape];
+
+      position.y = pose.ground ? wheels : Math.max(pose.y, wheels);
       euler.set(pose.pitch, -pose.heading, pose.bank);
       rotation.setFromEuler(euler);
       matrix.compose(position, rotation, scale.setScalar(size));
