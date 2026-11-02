@@ -68,8 +68,10 @@ export class OceanSimulation {
       t.magFilter = LinearFilter;
       t.minFilter = LinearMipmapLinearFilter;
       t.generateMipmaps = true;
+
       return t;
     };
+
     this.displacement = cascades.map(texture);
     this.derivatives = cascades.map(texture);
 
@@ -78,17 +80,19 @@ export class OceanSimulation {
 
   setConditions(conditions: OceanConditions) {
     const { h0, waves } = buildSpectrum(this.size, this.cascades, conditions);
+
     for (const [node, data] of [
       [this.h0, h0],
       [this.waves, waves],
     ] as const) {
-      (node.value.array as Float32Array).set(data);
+      node.value.array.set(data);
       node.value.needsUpdate = true;
     }
   }
 
   update(renderer: WebGPURenderer, time: number) {
     this.time.value = time;
+
     for (const pass of this.passes) renderer.compute(pass);
   }
 
@@ -130,11 +134,13 @@ export class OceanSimulation {
         .element(instanceIndex)
         .assign(vec4(dydz.add(ci(dxdx)), dzdz.add(ci(dxdz))));
     })().compute(count);
+
     this.passes.push(spectrum);
 
     // Stockham passes: Ns = 1, 2, ... n/2 along rows, then along columns.
     const stages = Math.log2(n);
     let src = 0;
+
     for (const horizontal of [true, false]) {
       for (let stage = 0; stage < stages; stage++) {
         const ns = 2 ** stage;
@@ -162,6 +168,7 @@ export class OceanSimulation {
           const k = j.mod(uint(ns));
           const angle = float(k).mul(Math.PI / ns);
           const w = vec2(cos(angle), sin(angle));
+
           const out = j
             .div(uint(ns))
             .mul(uint(ns * 2))
@@ -198,6 +205,7 @@ export class OceanSimulation {
           float(1),
           float(-1)
         );
+
         const p = a[src].element(i).mul(sign);
         const q = b[src].element(i).mul(sign);
         const lambda = this.choppiness;
@@ -216,6 +224,7 @@ export class OceanSimulation {
         );
         textureStore(this.derivatives[c], texel, vec4(p.w, q.x, dxdx, dzdz));
       })().compute(n * n);
+
       this.passes.push(assemble);
     });
   }

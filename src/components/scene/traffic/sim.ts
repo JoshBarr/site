@@ -22,36 +22,49 @@ import {
 /** Intelligent driver model: comfortable acceleration and braking, m/s². */
 const ACCELERATION = 1.1;
 const BRAKING = 2;
+
 /** How hard anyone brakes at most, m/s². */
 const EMERGENCY = 8;
+
 /** Steps longer than this are split, s; a frame longer still is cut short. */
 const STEP = 1 / 20;
 const MAX_FRAME = 0.25;
+
 /** Drivers aim for the speed this far ahead, m, and a couple of seconds on. */
 const LOOKAHEAD = 40;
 const LOOKAHEAD_TIME = 2;
+
 /** Lanes are left this far before they end, m. */
 const MERGE_AHEAD = 80;
+
 /** Sideways, changing lanes, m/s. */
 const LANE_CHANGE = 1.6;
+
 /** Each driver thinks about changing lanes about this often, s. */
 const CHANGE_EVERY = 12;
+
 /**
  * Of the traffic in a lane that turns off at a junction, how much takes
  * it: the rest moves over first. Where SH2 leaves SH1, it's SH2's share.
  */
 const TAKES_TURN = 0.3;
+
 /** Joining and leaving: fading in or out over, s, sliding in from, m left. */
 const FADE = 1.2;
 const SLIDE = 3;
+
 /** How often joining and leaving is decided, s. */
 const CONTROL = 0.5;
+
 /** A lane count changing this near a junction is the junction's, m. */
 const AT_JUNCTION = 40;
+
 /** Junctions closer together than this count as one, m. */
 const MIN_ZONE = 120;
+
 /** Off by more than this many vehicles, a stretch gains or loses one. */
 const TOLERANCE = 0.75;
+
 /** Speeds settle to new readings over this, s. */
 const SETTLE = 20;
 
@@ -82,6 +95,12 @@ export interface Car {
   leaving: boolean;
   /** 0..1, for the brake lights. */
   brake: number;
+  /**
+   * Front to front with the one ahead in its lane, m, over the lanes there:
+   * how far apart lights come along the road, lanes merged as they do from
+   * afar.
+   */
+  spacing: number;
   /** Segment it was on, for finding the next. */
   hint: number;
   /** The lane turning off ahead it's decided about, m along, and whether it's taking it. */
@@ -114,6 +133,9 @@ interface Zone {
   count: number;
 }
 
+/** A car's spacing with no one ahead, m: finite, for the GPU. */
+const NO_ONE_AHEAD = 1e4;
+
 const random = (a: number, b: number) => a + Math.random() * (b - a);
 
 /** Greys cars come in: white and silver mostly, then darker. */
@@ -121,6 +143,7 @@ const PAINT = [0.86, 0.86, 0.8, 0.66, 0.62, 0.5, 0.4, 0.22, 0.16, 0.08];
 
 function makeCar(town: boolean): Car {
   const truck = Math.random() < (town ? 0.03 : 0.07);
+
   return {
     s: 0,
     v: 0,
@@ -141,6 +164,7 @@ function makeCar(town: boolean): Car {
     exitAt: Infinity,
     leaving: false,
     brake: 0,
+    spacing: NO_ONE_AHEAD,
     hint: -1,
     plan: NaN,
     takes: false,
@@ -187,7 +211,7 @@ class Flow {
     this.target = new Float32Array(this.bins.count);
     this.density = new Float32Array(this.bins.count);
     this.eager = new Float32Array(this.bins.count).fill(1);
-    this.spacing = new Array(road.maxLanes).fill(0);
+    this.spacing = Array.from({ length: road.maxLanes }, () => 0);
 
     const { joins, leaves } = roads.junction;
     const marks = [{ s: 0, kind: joins }, ...road.junctions];
@@ -195,6 +219,7 @@ class Flow {
     marks.forEach((mark, k) => {
       const end = marks[k + 1] ?? { s: road.length, kind: leaves };
       const last = zones[zones.length - 1];
+
       if (last && mark.s - last.s0 < MIN_ZONE) {
         last.s1 = end.s;
         last.leaves = (end.kind & leaves) !== 0;
@@ -212,12 +237,15 @@ class Flow {
 
     for (let i = 1; i < road.count - 1; i++) {
       const delta = road.lanes[i] - road.lanes[i - 1];
+
       if (!delta) continue;
       const s = road.s[i];
       const kind = delta < 0 ? leaves : joins;
+
       const left = road.junctions.some(
         (j) => Math.abs(j.s - s) < AT_JUNCTION && (j.kind & kind) !== 0
       );
+
       this.changes.push({ s, delta, left, lanes: road.lanes[i] });
     }
   }
@@ -227,11 +255,14 @@ class Flow {
     const changes = this.changes;
     let lo = 0;
     let hi = changes.length;
+
     while (lo < hi) {
       const mid = (lo + hi) >> 1;
+
       if (changes[mid].s <= s) lo = mid + 1;
       else hi = mid;
     }
+
     return lo;
   }
 
@@ -239,11 +270,14 @@ class Flow {
   turnAhead(s: number, lane: number, reach: number) {
     for (let k = this.changeAfter(s); k < this.changes.length; k++) {
       const change = this.changes[k];
+
       if (change.s > s + reach) break;
+
       if (change.left && change.delta < 0 && lane < -change.delta) {
         return change;
       }
     }
+
     return null;
   }
 
@@ -252,7 +286,9 @@ class Flow {
     const d = this.diverges.find(
       (d) => d.byLane && Math.abs(d.s - change.s) < AT_JUNCTION
     );
+
     if (!d) return TAKES_TURN;
+
     return Math.min(
       (d.share * (change.lanes - change.delta)) / -change.delta,
       1
@@ -263,9 +299,12 @@ class Flow {
   pastAdded(s: number) {
     for (let k = this.changeAfter(s); k < this.changes.length; k++) {
       const change = this.changes[k];
+
       if (change.s > s + AT_JUNCTION * 1.5) break;
+
       if (change.left && change.delta > 0) s = change.s + 0.5;
     }
+
     return s;
   }
 
@@ -280,6 +319,7 @@ class Flow {
   /** How fast drivers want to go at `s`, m/s. */
   wantedAt(s: number) {
     const b = this.bin(s);
+
     return this.speed[b] * this.eager[b];
   }
 
@@ -298,19 +338,25 @@ class Flow {
   laneEnd(s: number, lane: number, reach: number) {
     for (let k = this.changeAfter(s); k < this.changes.length; k++) {
       const change = this.changes[k];
+
       if (change.s > s + reach) break;
+
       if (!change.left && change.lanes <= lane) return change.s;
     }
+
     return Infinity;
   }
 
   /** Vehicles there should be from s0 to s1, all lanes. */
   expected(s0: number, s1: number) {
     let sum = 0;
+
     for (let b = this.bin(s0); b <= this.bin(s1); b++) {
       const overlap = Math.min(s1, (b + 1) * BIN) - Math.max(s0, b * BIN);
+
       if (overlap > 0) sum += this.density[b] * this.bins.lanes[b] * overlap;
     }
+
     return sum;
   }
 
@@ -319,11 +365,14 @@ class Flow {
     const cars = this.cars;
     let lo = 0;
     let hi = cars.length;
+
     while (lo < hi) {
       const mid = (lo + hi) >> 1;
+
       if (cars[mid].s > s) lo = mid + 1;
       else hi = mid;
     }
+
     return lo;
   }
 
@@ -333,18 +382,21 @@ class Flow {
     const at = this.indexAt(s);
     let ahead: Car | null = null;
     let behind: Car | null = null;
+
     for (let i = at - 1; i >= 0 && i >= at - 60; i--) {
       if (cars[i].lane === lane && cars[i] !== skip) {
         ahead = cars[i];
         break;
       }
     }
+
     for (let i = at; i < cars.length && i < at + 60; i++) {
       if (cars[i].lane === lane && cars[i] !== skip) {
         behind = cars[i];
         break;
       }
     }
+
     return { ahead, behind };
   }
 
@@ -356,6 +408,7 @@ class Flow {
     const { ahead, behind } = this.neighbours(car.s, lane, skip);
     const gapAhead = ahead ? ahead.s - ahead.length - car.s : Infinity;
     const gapBehind = behind ? car.s - car.length - behind.s : Infinity;
+
     return (
       gapAhead > (MIN_GAP + car.v * 0.6) * slack &&
       gapBehind > (MIN_GAP + (behind?.v ?? 0) * 0.6) * slack
@@ -367,10 +420,12 @@ class Flow {
     const cars = this.cars;
     let i = cars.length;
     cars.push(car);
+
     while (i > 0 && cars[i - 1].s < car.s) {
       cars[i] = cars[i - 1];
       i--;
     }
+
     cars[i] = car;
   }
 
@@ -381,6 +436,7 @@ class Flow {
     car.lane = lane;
     car.v = this.speedAt(s) * car.keen;
     car.lateral = this.road.laneCentre(this.road.locate(s), lane);
+
     return car;
   }
 
@@ -390,13 +446,16 @@ class Flow {
    */
   fill(budget: number) {
     const cars: Car[] = [];
+
     for (let lane = 0; lane < this.road.maxLanes; lane++) {
       let s = this.road.length - random(0, 30);
+
       while (s > 0 && cars.length < budget) {
         if (this.lanesAt(s) <= lane) {
           s -= BIN;
           continue;
         }
+
         const car = this.start(s, lane);
         cars.push(car);
         const k = this.density[this.bin(s)];
@@ -404,7 +463,9 @@ class Flow {
         s -= spacing * random(0.7, 1.3);
       }
     }
+
     this.cars = cars.sort((a, b) => b.s - a.s);
+
     return cars.length;
   }
 
@@ -413,17 +474,22 @@ class Flow {
     const s = this.pastAdded(at);
     const lanes = this.lanesAt(s);
     const car = this.start(s, 0);
+
     for (let lane = 0; lane < lanes; lane++) {
       car.lane = lane;
+
       if (!this.fits(car, lane)) continue;
       const { ahead } = this.neighbours(s, lane);
+
       if (ahead) car.v = Math.min(car.v, ahead.v + 1);
       car.lateral = this.road.laneCentre(this.road.locate(s), lane);
       car.slide = -SLIDE;
       car.fade = 0;
       this.insert(car);
+
       return true;
     }
+
     return false;
   }
 
@@ -431,14 +497,18 @@ class Flow {
   feed(rearmost: (Car | null)[]) {
     for (let lane = 0; lane < this.lanesAt(0); lane++) {
       const last = rearmost[lane];
+
       if (!this.spacing[lane]) {
         const k = this.density[0];
         this.spacing[lane] =
           Math.max(1 / Math.max(k, 1e-4), 7) * random(0.6, 1.4);
       }
+
       const room = last ? last.s - last.length : Infinity;
+
       if (room > this.spacing[lane]) {
         const car = this.start(0, lane);
+
         if (last) car.v = Math.min(car.v, last.v + 2);
         car.fade = 0;
         this.cars.push(car);
@@ -459,9 +529,12 @@ export class Traffic {
     this.maxCars = maxCars;
     this.flows = roads.carriageways.map((c) => new Flow(c, roads, index));
     const byName = new Map(this.flows.map((f) => [f.road.name, f]));
+
     for (const flow of this.flows) {
       const { into, from } = flow.road;
+
       if (into) flow.into = { flow: byName.get(into.name)!, s: into.s };
+
       if (from) {
         const parent = byName.get(from.name)!;
         parent.diverges.push({
@@ -488,9 +561,11 @@ export class Traffic {
   setConditions(speeds: TrafficSpeeds | null, override: Override, date: Date) {
     for (const flow of this.flows) {
       fillSpeeds(flow.road, flow.bins, speeds, override, flow.target);
+
       if (!this.filled) flow.speed.set(flow.target);
       fillDensity(flow.bins, flow.target, date, flow.density, flow.eager);
     }
+
     // Where SH2 leaves SH1, as many turn off as SH2 should carry.
     for (const flow of this.flows) {
       for (const d of flow.diverges) {
@@ -503,9 +578,11 @@ export class Traffic {
         );
       }
     }
+
     if (!this.filled) {
       this.filled = true;
       let budget = this.maxCars;
+
       for (const flow of this.flows) budget -= flow.fill(budget);
     }
   }
@@ -514,24 +591,31 @@ export class Traffic {
     if (!this.filled) return;
     const dt = Math.min(frame, MAX_FRAME);
     const steps = Math.ceil(dt / STEP);
+
     for (let k = 0; k < steps; k++) this.advance(dt / steps);
     this.sinceControl += dt;
+
     if (this.sinceControl >= CONTROL) {
       this.sinceControl = 0;
       let room = this.maxCars - this.count;
+
       for (const flow of this.flows) room -= this.control(flow, room);
     }
   }
 
   private advance(dt: number) {
     const settle = Math.min(dt / SETTLE, 1);
+
     for (const { speed, target } of this.flows) {
       for (let b = 0; b < speed.length; b++) {
         speed[b] += (target[b] - speed[b]) * settle;
       }
     }
+
     const moving: [Flow, Car][] = [];
+
     for (const flow of this.flows) this.drive(flow, dt, moving);
+
     for (const [flow, car] of moving) {
       car.off = false;
       flow.insert(car);
@@ -545,34 +629,46 @@ export class Traffic {
   private drive(flow: Flow, dt: number, moving: [Flow, Car][]) {
     const { road } = flow;
     const cars = flow.cars;
+
     // Keep front-first order: cars only pass each other in other lanes.
     for (let i = 1; i < cars.length; i++) {
       const car = cars[i];
       let j = i;
+
       while (j > 0 && cars[j - 1].s < car.s) {
         cars[j] = cars[j - 1];
         j--;
       }
+
       cars[j] = car;
     }
 
     /** The car last moved in each lane: ahead of the next one there. */
-    const leaders: (Car | null)[] = new Array(road.maxLanes).fill(null);
+    const leaders: (Car | null)[] = Array.from(
+      { length: road.maxLanes },
+      () => null
+    );
+
     let dropped = false;
+
     for (const car of cars) {
       const lanesHere =
         road.lanes[car.hint < 0 ? road.locate(car.s) : car.hint];
+
       if (car.lane >= lanesHere) car.lane = Math.max(lanesHere - 1, 0);
       const end = flow.laneEnd(car.s, car.lane, MERGE_AHEAD);
       const turn = flow.turnAhead(car.s, car.lane, MERGE_AHEAD);
+
       if (turn && turn.s !== car.plan) {
         car.plan = turn.s;
         car.takes = Math.random() < flow.takesAt(turn);
       }
+
       if (end < Infinity && car.lane > 0) {
         // Its lane's ending: over when there's room, taking less as it
         // runs out, as drivers zip in.
         const slack = Math.min(Math.max((end - car.s) / MERGE_AHEAD, 0.15), 1);
+
         if (flow.fits(car, car.lane - 1, car, slack)) car.lane--;
       } else if (turn && !car.takes) {
         // Its lane turns off, and it isn't: over to the right.
@@ -580,6 +676,7 @@ export class Traffic {
           Math.max((turn.s - car.s) / MERGE_AHEAD, 0.15),
           1
         );
+
         if (flow.fits(car, car.lane + 1, car, slack)) car.lane++;
       } else if (Math.random() < dt / CHANGE_EVERY) {
         this.considerChange(flow, car, leaders);
@@ -587,15 +684,24 @@ export class Traffic {
 
       const leader = leaders[car.lane];
       const ahead = car.s + LOOKAHEAD + car.v * LOOKAHEAD_TIME;
+
       const v0 = Math.max(
         Math.min(flow.wantedAt(car.s), flow.wantedAt(ahead)) * car.keen,
         0.5
       );
+
       let gap = leader ? leader.s - leader.length - car.s : Infinity;
+
+      car.spacing = leader
+        ? (leader.s - car.s) / Math.max(lanesHere, 1)
+        : NO_ONE_AHEAD;
+
       // Still in a lane that's ending, with no room to leave it: stop short.
       const stop = flow.laneEnd(car.s, car.lane, MERGE_AHEAD);
+
       if (stop < Infinity) gap = Math.min(gap, stop - 3 - car.s);
       const dv = leader ? car.v - leader.v : 0;
+
       const wanted =
         MIN_GAP +
         Math.max(
@@ -603,10 +709,12 @@ export class Traffic {
           car.v * HEADWAY +
             (car.v * dv) / (2 * Math.sqrt(ACCELERATION * BRAKING))
         );
+
       let a =
         gap > 0.1
           ? ACCELERATION * (1 - (car.v / v0) ** 4 - (wanted / gap) ** 2)
           : -EMERGENCY;
+
       a = Math.min(Math.max(a, -EMERGENCY), ACCELERATION);
       car.v = Math.max(car.v + a * dt, 0);
       const before = car.s;
@@ -623,12 +731,14 @@ export class Traffic {
         sideways
       );
       const slide = (SLIDE / FADE) * dt;
+
       if (car.leaving) {
         car.slide = Math.max(car.slide - slide, -SLIDE);
         car.fade -= dt / FADE;
       } else {
         car.slide = Math.min(car.slide + slide, 0);
         car.fade = Math.min(car.fade + dt / FADE, 1);
+
         if (car.s >= car.exitAt) car.leaving = true;
       }
 
@@ -640,7 +750,9 @@ export class Traffic {
       // Past a change in lanes: renumbered, or off with the lane.
       for (let k = flow.changeAfter(before); k < flow.changes.length; k++) {
         const change = flow.changes[k];
+
         if (change.s > car.s) break;
+
         if (!change.left) {
           // Still in a lane that's ended on the right: in, regardless.
           if (car.lane >= change.lanes) car.lane = change.lanes - 1;
@@ -656,41 +768,53 @@ export class Traffic {
           const d = flow.diverges.find(
             (d) => d.byLane && Math.abs(d.s - change.s) < AT_JUNCTION
           );
+
           if (d) {
             car.off = dropped = true;
             car.s = Math.max(car.s - d.s, 0);
             this.moveOnto(d.into, car, moving, car.lane);
             break;
           }
+
           car.leaving = true;
           car.exitAt = change.s;
         }
       }
+
       if (car.off) continue;
+
       if (car.s >= road.length) {
         car.off = dropped = true;
+
         // On into the road it merges with, in the kerb lane.
         if (flow.into && !car.leaving) {
           const next = flow.into.flow;
           car.s = next.pastAdded(flow.into.s + car.s - road.length);
           this.moveOnto(next, car, moving, 0);
         }
+
         continue;
       }
+
       // Turning off onto another carriageway, from the left lanes.
       for (const d of flow.diverges) {
         if (d.byLane || before >= d.s || car.s < d.s || car.lane > 1) continue;
+
         if (car.leaving) continue;
+
         if (Math.random() < d.share / Math.min(lanesHere, 2)) {
           car.off = dropped = true;
           car.s -= d.s;
           this.moveOnto(d.into, car, moving);
         }
       }
+
       // Leaving, it's out of the way already.
       if (!car.off && !car.leaving) leaders[car.lane] = car;
     }
+
     if (dropped) flow.cars = cars.filter((car) => !car.off);
+
     if (!flow.fed) flow.feed(leaders);
   }
 
@@ -705,25 +829,32 @@ export class Traffic {
   /** Into the faster lane beside, or back to the left when there's room. */
   private considerChange(flow: Flow, car: Car, leaders: (Car | null)[]) {
     const lanes = flow.lanesAt(car.s);
+
     const gapIn = (lane: number) => {
       const leader = leaders[lane];
+
       return leader ? leader.s - leader.length - car.s : Infinity;
     };
+
     const own = gapIn(car.lane);
     let best = car.lane;
     let bestGain = 20;
+
     for (const lane of [car.lane - 1, car.lane + 1]) {
       if (lane < 0 || lane >= lanes) continue;
+
       // Keep left unless passing.
       const gain =
         Math.min(gapIn(lane), 500) -
         Math.min(own, 500) +
         (lane < car.lane ? 15 : -15);
+
       if (gain > bestGain) {
         best = lane;
         bestGain = gain;
       }
     }
+
     if (best !== car.lane && flow.fits(car, best, car)) car.lane = best;
   }
 
@@ -733,15 +864,21 @@ export class Traffic {
    */
   private control(flow: Flow, room: number) {
     const { zones, cars } = flow;
+
     for (const zone of zones) zone.count = 0;
     let z = zones.length - 1;
+
     for (const car of cars) {
       while (z > 0 && car.s < zones[z].s0) z--;
+
       if (!car.leaving && car.exitAt === Infinity) zones[z].count++;
     }
+
     let joined = 0;
+
     for (const zone of zones) {
       const expected = flow.expected(zone.s0, zone.s1);
+
       if (zone.count < expected - TOLERANCE && zone.joins) {
         if (joined < room && flow.join(Math.min(zone.s0 + 5, zone.s1))) {
           joined++;
@@ -749,16 +886,23 @@ export class Traffic {
       } else if (zone.count > expected + TOLERANCE && zone.leaves) {
         // The car furthest along, kerb lane first, turns off at the end.
         let pick: Car | null = null;
+
         for (let i = flow.indexAt(zone.s1); i < cars.length; i++) {
           const car = cars[i];
+
           if (car.s < zone.s0) break;
+
           if (car.leaving || car.exitAt !== Infinity) continue;
+
           if (!pick || car.lane < pick.lane) pick = car;
+
           if (pick.lane === 0) break;
         }
+
         if (pick) pick.exitAt = Math.max(zone.s1, pick.s + 10);
       }
     }
+
     return joined;
   }
 }

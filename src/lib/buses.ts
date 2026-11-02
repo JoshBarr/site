@@ -34,8 +34,9 @@ export interface BusesResponse {
  * which is drawn a little behind live.
  */
 export const TRAIL = 3 * 60_000;
+
 /** A bus not heard from in this long has finished its trip, or gone dark. */
-export const STALE = 5 * 60_000;
+const STALE = 5 * 60_000;
 
 /** Whether a fix is too old to show. */
 export function isStale({ time }: Pick<Bus, "time">) {

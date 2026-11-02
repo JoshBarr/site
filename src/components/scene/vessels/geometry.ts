@@ -8,12 +8,16 @@ function deckOutline(segments = 6) {
     [0.5, 0.5],
     [0.5, -0.15],
   ];
+
   for (let i = 1; i < segments; i++) {
     const angle = (i / segments) * (Math.PI / 2);
     starboard.push([0.5 * Math.cos(angle), -0.15 - 0.35 * Math.sin(angle)]);
   }
-  const port = starboard.map(([x, z]) => [-x, z] as [number, number]);
-  return [...starboard, [0, -0.5] as [number, number], ...port.reverse()];
+
+  const port = starboard.map(([x, z]): [number, number] => [-x, z]);
+  const stern: [number, number] = [0, -0.5];
+
+  return [...starboard, stern, ...port.reverse()];
 }
 
 /**
@@ -26,6 +30,7 @@ export function createHullGeometry() {
   const keel = outline.map(([x, z]) => [x * 0.6, z * 0.92] as const);
   const position: number[] = [];
   const deck: number[] = [];
+
   const triangle = (onDeck: number, ...points: number[][]) => {
     for (const p of points) position.push(...p);
     deck.push(onDeck, onDeck, onDeck);
@@ -51,6 +56,7 @@ export function createHullGeometry() {
   );
   geometry.setAttribute("deck", new BufferAttribute(new Float32Array(deck), 1));
   geometry.computeVertexNormals();
+
   return geometry;
 }
 
@@ -78,5 +84,6 @@ export function createWakeGeometry() {
   );
   geometry.setIndex([0, 2, 1, 1, 2, 3]);
   geometry.computeVertexNormals();
+
   return geometry;
 }

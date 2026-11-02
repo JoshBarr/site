@@ -1,5 +1,7 @@
+import { z } from "zod";
 import { fetchBuses } from "./metlink";
-import { canStore, getRedis } from "./redis";
+import { canStore, getRedis, getStored } from "./redis";
+import { point, trailPoint } from "./schemas";
 import { Bus, isStale, MAP_BOUNDS, TRAIL } from "./buses";
 
 // The buses as last fetched from Metlink, kept in Upstash Redis so they're
@@ -8,6 +10,7 @@ import { Bus, isStale, MAP_BOUNDS, TRAIL } from "./buses";
 
 /** The latest `Snapshot`. Never expires: it's the last known good. */
 const SNAPSHOT = "buses:snapshot";
+
 /** Held by whoever's refreshing, for REFRESH. */
 const LOCK = "buses:lock";
 
@@ -23,7 +26,23 @@ interface Snapshot {
   buses: Bus[];
 }
 
+const stored = z.object({
+  time: z.number(),
+  buses: z.array(
+    z.object({
+      id: z.string(),
+      route: z.string(),
+      direction: z.number(),
+      position: point,
+      bearing: z.number().nullable(),
+      time: z.number(),
+      trail: z.array(trailPoint),
+    })
+  ),
+}) satisfies z.ZodType<Snapshot>;
+
 const [WEST, SOUTH, EAST, NORTH] = MAP_BOUNDS;
+
 const onMap = ({ position: [e, n] }: Bus) =>
   e > WEST && e < EAST && n > SOUTH && n < NORTH;
 
@@ -32,16 +51,21 @@ async function refresh(previous: Snapshot | null): Promise<Snapshot> {
   const now = Date.now();
   const since = now - TRAIL;
   const before = new Map(previous?.buses.map((b) => [b.id, b]));
+
   const buses = (await fetchBuses()).filter(onMap).map((bus) => {
     // A bus that's started another trip leaves the last one's trail behind.
     const known = before.get(bus.id);
+
     const sameTrip =
       known?.route === bus.route && known.direction === bus.direction;
+
     const trail = (sameTrip ? known.trail : []).filter(
       ([, , time]) => time > since && time < bus.time
     );
+
     return { ...bus, trail: [...trail, ...bus.trail] };
   });
+
   return { time: now, buses };
 }
 
@@ -52,11 +76,13 @@ async function refresh(previous: Snapshot | null): Promise<Snapshot> {
  */
 export async function loadBuses(): Promise<Bus[]> {
   let snapshot: Snapshot | null = null;
-  if (!canStore) {
+
+  if (!canStore()) {
     snapshot = await refresh(null);
   } else {
     const redis = getRedis();
-    snapshot = await redis.get<Snapshot>(SNAPSHOT);
+    snapshot = await getStored(SNAPSHOT, stored);
+
     if (
       (!snapshot || Date.now() - snapshot.time >= REFRESH) &&
       (await redis.set(LOCK, 1, { nx: true, px: REFRESH })) === "OK"
@@ -71,6 +97,7 @@ export async function loadBuses(): Promise<Bus[]> {
   }
 
   const since = Date.now() - TRAIL;
+
   return (snapshot?.buses ?? [])
     .filter((bus) => !isStale(bus))
     .map((bus) => ({

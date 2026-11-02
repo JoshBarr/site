@@ -56,11 +56,8 @@ export default function ArticlePage({ source, frontMatter }: ArticleProps) {
 }
 
 export const getStaticProps: GetStaticProps<ArticleProps> = async (req) => {
-  const slug = req.params.slug;
-
-  console.log(req.params);
-
-  const pageData = await getPostBySlug(slug);
+  const slug = req.params?.slug;
+  const pageData = slug ? await getPostBySlug(slug) : undefined;
 
   if (!pageData) {
     return {

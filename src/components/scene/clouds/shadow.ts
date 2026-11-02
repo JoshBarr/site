@@ -38,29 +38,35 @@ import {
 // up to the map's plane.
 
 const MAP_SIZE = 256;
+
 /** Width of ground the map covers, m. Beyond it, haze hides the shadows. */
 const EXTENT = 40000;
 const TEXEL = EXTENT / MAP_SIZE;
+
 /**
  * Seconds between redraws. Drawing the map is a pass of its own, which
  * costs more than its few texels; the clouds drift a few metres between
  * redraws, under shadows blurred over hundreds.
  */
 const REFRESH = 0.2;
+
 /**
  * Rays toward the sun, spread around each texel. Averaging their depth
  * through the cloud blurs it, so the shadow keeps a dark core and fades out
  * past the cloud's edge.
  */
 const TAPS = 4;
+
 /** How far the taps spread, as a fraction of a layer's cloud size. */
 const SPREAD = 0.06;
+
 /**
  * Samples along each tap's ray through a layer, staggered between taps so
  * together they cover the depth of the layer.
  */
 const LOW_SAMPLES = 4;
 const MID_SAMPLES = 3;
+
 /**
  * Less than the clouds' own erosion (0.5 on average), so a shadow spreads a
  * little wider than its cloud.
@@ -78,6 +84,7 @@ export function createCloudShadowMap(toSun) {
     type: HalfFloatType,
     depthBuffer: false,
   });
+
   const centre = uniform(new Vector2());
   // Keeps the slant through a layer finite as the sun sets; by then its
   // light has faded out anyway.
@@ -99,12 +106,15 @@ export function createCloudShadowMap(toSun) {
     const dy = layer.shape.y.sub(base).div(samples);
     const spread = style.scale * SPREAD;
     const depth = float(0).toVar();
+
     for (let tap = 0; tap < TAPS; tap++) {
       const angle = ((tap + 0.5) / TAPS) * Math.PI * 2;
       const stagger = (tap + 0.5) / TAPS;
+
       const origin = c.add(
         vec2(Math.cos(angle) * spread, Math.sin(angle) * spread)
       );
+
       for (let i = 0; i < samples; i++) {
         const y = base.add(dy.mul(i + stagger));
         const xz = origin.add(slope.mul(y.sub(plane)));
@@ -114,6 +124,7 @@ export function createCloudShadowMap(toSun) {
         );
       }
     }
+
     // Each sample stands for dy of height, dy / ray.y of ray.
     return exp(depth.mul(dy.div(ray.y)).div(TAPS).mul(-EXTINCTION));
   };
@@ -123,6 +134,7 @@ export function createCloudShadowMap(toSun) {
   const material = new NodeMaterial();
   material.fragmentNode = Fn(() => {
     const c = centre.add(uv().sub(0.5).mul(EXTENT));
+
     return vec4(
       through(c, low, LOW_STYLE, LOW_SAMPLES),
       through(c, mid, MID_STYLE, MID_SAMPLES),
@@ -141,11 +153,13 @@ export function createCloudShadowMap(toSun) {
       // Ground above the low cloud's base is partly or wholly over it.
       const under = mix(1, map.r, smoothstep(low.shape.y, low.shape.x, p.y));
       const edge = max(abs(at.x.sub(0.5)), abs(at.y.sub(0.5)));
+
       return mix(under.mul(map.g), 1, smoothstep(0.4, 0.5, edge));
     },
 
     update(renderer: WebGPURenderer, x: number, z: number, delta: number) {
       sinceDrawn += delta;
+
       if (sinceDrawn < REFRESH) return;
       sinceDrawn = 0;
       // On whole texels, so the shadows don't crawl as the camera moves.

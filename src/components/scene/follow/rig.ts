@@ -1,6 +1,6 @@
 import { PerspectiveCamera, Vector3 } from "three/webgpu";
 import { RUNWAY } from "../airport/airfield";
-import { Category, getSnapshot, next, subject, Subject } from "./store";
+import { Category, getSnapshot, next, subject } from "./store";
 
 // Where the camera goes to follow a vehicle, shot by shot:
 //
@@ -15,6 +15,7 @@ import { Category, getSnapshot, next, subject, Subject } from "./store";
 // one vehicle to the next.
 
 export type ToWorld = (easting: number, northing: number) => [number, number];
+
 /** Lowest the camera may be at x, z. */
 export type FloorAt = (x: number, z: number) => number;
 
@@ -30,12 +31,16 @@ export const DEFAULT_FOV = 50;
 
 /** Seconds without word of the subject before moving on to another. */
 const LOST = 5;
+
 /** Seconds for the camera to settle most of the way onto its shot. */
 const SETTLE = 0.8;
+
 /** And its aim, onto the subject. */
 const AIM = 0.2;
+
 /** Seconds for the lens to settle. */
 const ZOOM = 1;
+
 /** Seconds for the shot to swing most of the way round a turn. */
 const TURN: Record<Category, number> = {
   bus: 2.5,
@@ -43,39 +48,50 @@ const TURN: Record<Category, number> = {
   ship: 4,
   plane: 1.5,
 };
+
 /** Moving to a new subject: seconds, at least and at most, and m/s. */
 const FLIGHT_MIN = 1.5;
 const FLIGHT_MAX = 5;
 const FLIGHT_SPEED = 2500;
+
 /** Height of the arc flown, as a fraction of the way, and at most, m. */
 const ARC = 0.25;
 const ARC_MAX = 1500;
 
 /** Overhead: looking down this steeply, degrees. */
 const OVERHEAD_ELEVATION = 38;
+
 /** From this far round from dead ahead, degrees, drifting either way by DRIFT. */
 const OVERHEAD_AROUND = 145;
 const DRIFT = 20;
+
 /** Seconds for the drift to go back and forth. */
 const DRIFT_PERIOD = 60;
 
 /** Slower than this, m/s, a ship is stopped and circled. */
 const UNDER_WAY = 0.5;
+
 /** Seconds to circle a stopped ship. */
 const ORBIT = 120;
 
 /** On the ground slower than this, m/s, an aircraft is taxiing. */
 const TAXI_SPEED = 20;
+
 /** On the ground and gaining speed this fast, m/s², it's taking off. */
 const ROLLING = 0.3;
+
 /** Climbing this fast, m/s, it's taking off or going around. */
 const CLIMBING = 2;
+
 /** Descending this fast, m/s, it may be landing. */
 const DESCENDING = 1;
+
 /** Below this, m, a climb is still the take-off; above, the cruise. */
 const CLIMB_OUT = 1500;
+
 /** Descending below this, m, anywhere, it's landing. */
 const LOW = 300;
+
 /**
  * Lined up on Wellington's runway, from this far out to TOUCHDOWN past the
  * threshold, m, and this far off the centreline, plus SPLAY of the way out,
@@ -86,6 +102,7 @@ const TOUCHDOWN = 350;
 const FINAL_ACROSS = 600;
 const SPLAY = 0.1;
 const FINAL_ALIGNED = (25 * Math.PI) / 180;
+
 /** Landing, the shot looks down a glide this steep, radians. */
 const GLIDE = (3 * Math.PI) / 180;
 
@@ -93,8 +110,10 @@ type PlaneMode = "taxi" | "takeoff" | "cruise" | "landing";
 
 const radians = (degrees: number) => (degrees * Math.PI) / 180;
 const wrap = (angle: number) => Math.atan2(Math.sin(angle), Math.cos(angle));
+
 const clamp = (v: number, lo: number, hi: number) =>
   Math.min(Math.max(v, lo), hi);
+
 /** How far to ease toward something this frame, settling over `time`. */
 const ease = (delta: number, time: number) => 1 - Math.exp(-delta / time);
 const smootherstep = (u: number) => u * u * u * (u * (u * 6 - 15) + 10);
@@ -102,20 +121,25 @@ const smootherstep = (u: number) => u * u * u * (u * (u * 6 - 15) + 10);
 /** 0..1 from a string, so each vehicle keeps its side. */
 function hash(text: string) {
   let h = 2166136261;
+
   for (let i = 0; i < text.length; i++) {
     h = Math.imul(h ^ text.charCodeAt(i), 16777619);
   }
+
   return (h >>> 0) / 2 ** 32;
 }
 
 /** Wellington's runway in world space. */
 function runwayIn(toWorld: ToWorld) {
   const [sx, sz] = toWorld(...RUNWAY.south);
+
   const [ex, ez] = toWorld(
     RUNWAY.south[0] + RUNWAY.axis[0],
     RUNWAY.south[1] + RUNWAY.axis[1]
   );
+
   const [ax, az] = [ex - sx, ez - sz];
+
   return {
     south: [sx, sz] as const,
     /** Along runway 34, unit. */
@@ -126,6 +150,7 @@ function runwayIn(toWorld: ToWorld) {
     course: Math.atan2(ax, -az),
   };
 }
+
 type Runway = ReturnType<typeof runwayIn>;
 
 const shot = (): Shot => ({
@@ -177,13 +202,16 @@ export class FollowRig {
   /** The shot for this frame, or null with nothing followed. */
   update(camera: PerspectiveCamera, delta: number): Shot | null {
     const { following } = getSnapshot();
+
     if (!following) {
       this.key = null;
       subject.fresh = false;
+
       return null;
     }
 
     const key = `${following.category}:${following.id}`;
+
     if (key !== this.key) {
       this.key = key;
       this.ready = false;
@@ -203,9 +231,12 @@ export class FollowRig {
     if (!subject.fresh) {
       // Gone: off the map, or out of its data. Hold, then try another.
       this.lost += delta;
+
       if (this.lost > LOST) next();
+
       return this.shot;
     }
+
     subject.fresh = false;
     this.lost = 0;
 
@@ -244,11 +275,13 @@ export class FollowRig {
       this.rig.target.lerp(this.wanted.target, ease(delta, AIM));
       this.rig.fov += (this.wanted.fov - this.rig.fov) * ease(delta, ZOOM);
     }
+
     const { position } = this.rig;
     position.y = Math.max(position.y, this.floorAt(position.x, position.z));
 
     // Flying in from where the camera was, over the top.
     const out = this.shot;
+
     if (this.flight < this.duration) {
       this.flight += delta;
       const u = Math.min(this.flight / this.duration, 1);
@@ -271,12 +304,14 @@ export class FollowRig {
       out.target.copy(this.rig.target);
       out.fov = this.rig.fov;
     }
+
     return out;
   }
 
   /** Sets `wanted` for this frame. */
   private aim() {
     const h = this.heading;
+
     switch (this.category) {
       case "bus":
       case "train":
@@ -285,9 +320,13 @@ export class FollowRig {
         return this.astern(h);
       case "plane": {
         this.mode = this.planeMode(this.mode);
+
         if (this.mode === "taxi") return this.overhead(h);
+
         if (this.mode === "takeoff") return this.alongside(h, 1);
+
         if (this.mode === "cruise") return this.alongside(h, -1);
+
         return this.approach(h);
       }
     }
@@ -319,9 +358,11 @@ export class FollowRig {
   private astern(h: number) {
     const size = Math.max(subject.length, 8);
     const underWay = subject.speed > UNDER_WAY;
+
     const bearing = underWay
       ? h + Math.PI
       : h + Math.PI + (this.time * 2 * Math.PI) / ORBIT;
+
     const back = clamp(2 * size + 40, 50, 700);
     const up = clamp(0.35 * size + 12, 10, 150);
     const ahead = underWay ? size * 0.6 : 0;
@@ -395,10 +436,13 @@ export class FollowRig {
     const along = dx * axis[0] + dz * axis[1];
     const off = Math.abs(dx * across[0] + dz * across[1]);
     const north = Math.cos(subject.heading - course) > 0;
+
     const angle = Math.abs(
       wrap(subject.heading - course - (north ? 0 : Math.PI))
     );
+
     const out = north ? RUNWAY.threshold34 - along : along - RUNWAY.threshold16;
+
     return (
       angle < FINAL_ALIGNED &&
       out > -TOUCHDOWN &&
@@ -410,14 +454,20 @@ export class FollowRig {
   /** What it's doing, from what it was doing. */
   private planeMode(mode: PlaneMode | null): PlaneMode {
     const { ground, speed, climb, accel, height } = subject;
+
     if (ground) {
       if (speed < TAXI_SPEED) return "taxi";
+
       if (mode === "landing" || mode === "takeoff") return mode;
+
       // Down without being seen coming in.
       if (mode === "cruise") return "landing";
+
       return accel > ROLLING ? "takeoff" : "taxi";
     }
+
     if (mode === "landing") return climb > CLIMBING * 2 ? "cruise" : mode;
+
     if (
       mode === "takeoff" ||
       ((mode === null || mode === "taxi") &&
@@ -426,9 +476,11 @@ export class FollowRig {
     ) {
       return height < CLIMB_OUT && climb > -DESCENDING ? "takeoff" : "cruise";
     }
+
     if (climb < -DESCENDING && (height < LOW || this.onFinal())) {
       return "landing";
     }
+
     return "cruise";
   }
 }

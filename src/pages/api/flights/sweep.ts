@@ -1,4 +1,4 @@
-import type { NextApiRequest, NextApiResponse } from "next";
+import type { NextApiRequest, NextApiResponse, PageConfig } from "next";
 import {
   canStore,
   fetchAirspace,
@@ -9,7 +9,7 @@ import { canVerify, verifyQStash } from "../../../lib/qstash";
 export const config = {
   // QStash signs the raw body.
   api: { bodyParser: false },
-};
+} satisfies PageConfig;
 
 /**
  * Stores what's in the air every couple of minutes, called by a QStash
@@ -20,17 +20,22 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<{ stored: number } | { error: string }>
 ) {
-  if (!canStore || !canVerify) {
+  if (!canStore() || !canVerify()) {
     res.status(503).json({ error: "sweep not configured" });
+
     return;
   }
+
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
     res.status(405).json({ error: "POST only" });
+
     return;
   }
+
   if (!(await verifyQStash(req))) {
     res.status(401).json({ error: "invalid signature" });
+
     return;
   }
 

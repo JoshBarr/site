@@ -10,7 +10,6 @@ import {
   InterleavedBufferAttribute,
   Matrix4,
   MeshStandardNodeMaterial,
-  Node,
   NormalBlending,
   Quaternion,
   Sprite,
@@ -63,6 +62,7 @@ const MAX_CARS = MAX_TRAINS * 8;
  * fix takes a while to reach the page.
  */
 const DELAY = 45_000;
+
 /**
  * Seconds over which a train that's fallen behind (it waited at its last
  * fix for the next) makes the time up, at up to three times the pace.
@@ -72,11 +72,14 @@ const CATCH_UP = 10;
 /** Light pink-purple, against the scene's greys: it's data, like the others. */
 const TRAIL_COLOR = new Color(0.9, 0.62, 1);
 const TRAIL_OPACITY = 0.45;
+
 /** Pixels. */
 const TRAIL_WIDTH = 2;
 const MAX_TRAIL_SEGMENTS = 16384;
+
 /** Above the railhead, m: inside the cars, so it comes out behind them. */
 const TRAIL_HEIGHT = 2;
+
 /**
  * Behind a train its trail fades out by age, s: whole at the train, gone
  * this far back.
@@ -98,6 +101,7 @@ const LINE_NAMES: Record<Line, string> = {
 const MAX_LIGHTS = MAX_TRAINS * 2;
 const LIGHT_SIZE = 0.8;
 const LIGHT_PIXELS = 7;
+
 /** Above the railhead, m. */
 const LIGHT_HEIGHT = 1.2;
 const HEAD = new Color(1, 0.95, 0.85);
@@ -111,8 +115,10 @@ function createCars() {
   tints.setUsage(DynamicDrawUsage);
   const windowsLit = uniform(0);
   const part = attribute<"float">("part", "float");
+
   const isPart = (p: number) =>
     part.greaterThan(p - 0.5).and(part.lessThan(p + 0.5));
+
   const material = new MeshStandardNodeMaterial({ roughness: 0.55 });
   material.colorNode = select(
     isPart(BODY),
@@ -134,6 +140,7 @@ function createCars() {
   mesh.frustumCulled = false;
   mesh.count = 0;
   castsNearShadow(mesh);
+
   return { mesh, tints, windowsLit };
 }
 
@@ -157,7 +164,11 @@ export function createRunTrails({
   width: number;
   fade: number;
 }) {
-  const playheads = uniformArray(new Array(runs).fill(0), "float");
+  const playheads = uniformArray<"float">(
+    Array.from({ length: runs }, () => 0),
+    "float"
+  );
+
   const material = new TrailMaterial({
     color,
     linewidth: width,
@@ -165,22 +176,26 @@ export function createRunTrails({
     transparent: true,
     depthWrite: false,
   });
+
   material.blending = NormalBlending;
   material.alphaToCoverage = false;
   // Its fog would be the template quad's, not the line's: hazed below.
   material.fog = false;
 
   const geometry = new LineSegmentsGeometry();
+
   const segments = new InstancedInterleavedBuffer(
     new Float32Array(maxSegments * 6),
     6,
     1
   );
+
   const times = new InstancedInterleavedBuffer(
     new Float32Array(maxSegments * 2),
     2,
     1
   );
+
   const owner = new InstancedBufferAttribute(new Float32Array(maxSegments), 1);
   geometry.setAttribute(
     "instanceStart",
@@ -212,18 +227,20 @@ export function createRunTrails({
       attribute<T>(start, type),
       attribute<T>(finish, type)
     );
+
   const at = varying(end("float", "instanceTimeStart", "instanceTimeEnd"));
+
   const seen = varying(
     hazeTransmittance(
       cameraPosition,
       end("vec3", "instanceStart", "instanceEnd")
     )
   );
+
   const playhead = varying(
-    playheads.element(
-      attribute<"float">("instanceTrain", "float").toInt()
-    ) as unknown as Node<"float">
+    playheads.element(attribute<"float">("instanceTrain", "float").toInt())
   );
+
   material.opacityNode = step(at, playhead)
     .mul(float(1).sub(playhead.sub(at).div(fade)).clamp(0, 1))
     .mul(opacity)
@@ -233,6 +250,7 @@ export function createRunTrails({
   lines.frustumCulled = false;
   // After the sea (1).
   lines.renderOrder = 3;
+
   return { lines, segments, times, owner, playheads, material };
 }
 
@@ -243,15 +261,18 @@ export function createRunTrails({
 export function createRunLights(count: number) {
   const light = new InstancedBufferAttribute(new Float32Array(count * 4), 4);
   const tint = new InstancedBufferAttribute(new Float32Array(count * 3), 3);
+
   for (const a of [light, tint]) a.setUsage(DynamicDrawUsage);
 
   const at = instancedBufferAttribute<"vec4">(light, "vec4");
   const position = at.xyz;
+
   const material = new SpriteNodeMaterial({
     transparent: true,
     depthWrite: false,
     blending: AdditiveBlending,
   });
+
   material.fog = false;
   material.positionNode = position;
   material.scaleNode = max(
@@ -269,6 +290,7 @@ export function createRunLights(count: number) {
   sprite.count = 0;
   sprite.frustumCulled = false;
   sprite.renderOrder = 10;
+
   return { sprite, light, tint };
 }
 
@@ -302,6 +324,7 @@ export function Trains({
   const trains = useTrains();
   const epoch = useMemo(() => Date.now(), []);
   const cars = useMemo(createCars, []);
+
   const trails = useMemo(
     () =>
       createRunTrails({
@@ -314,6 +337,7 @@ export function Trains({
       }),
     []
   );
+
   const sprites = useMemo(() => createRunLights(MAX_LIGHTS), []);
   const routes = useRef(new Map<string, Point[] | null>());
   const playheads = useRef(new Map<string, number>());
@@ -322,21 +346,28 @@ export function Trains({
     // Ways between fixes are found once, and kept while they're in use.
     const previous = routes.current;
     const kept = new Map<string, Point[] | null>();
+
     const cached: Routes = (key, find) => {
       const route = kept.has(key)
         ? kept.get(key)!
         : previous.has(key)
           ? previous.get(key)!
           : find();
+
       kept.set(key, route);
+
       return route;
     };
+
     const peak = isPeak();
+
     const result = trains
       .slice(0, MAX_TRAINS)
       .map((train) => follow(train, network, index, epoch, cached, peak))
       .filter((run): run is Run => run !== null);
+
     routes.current = kept;
+
     return result;
   }, [trains, network, index, epoch]);
 
@@ -344,27 +375,27 @@ export function Trains({
     "train",
     useMemo(
       () =>
-        runs.map(
-          ({ train, fixes }): Candidate => ({
-            id: train.id,
-            label: LINE_NAMES[train.line],
-            moving: fixes[fixes.length - 1].s - fixes[0].s > MOVING,
-          })
-        ),
+        runs.map(({ train, fixes }): Candidate => ({
+          id: train.id,
+          label: LINE_NAMES[train.line],
+          moving: fixes[fixes.length - 1].s - fixes[0].s > MOVING,
+        })),
       [runs]
     )
   );
 
   useEffect(() => {
-    const positions = trails.segments.array as Float32Array;
-    const stamps = trails.times.array as Float32Array;
-    const owners = trails.owner.array as Float32Array;
+    const positions = trails.segments.array;
+    const stamps = trails.times.array;
+    const owners = trails.owner.array;
     let n = 0;
     runs.forEach(({ points, times }, train) => {
       for (let i = 0; i < points.length - 1 && n < MAX_TRAIL_SEGMENTS; i++) {
         const [ax, ay, az] = points[i];
         const [bx, by, bz] = points[i + 1];
+
         if (Number.isNaN(times[i]) || Number.isNaN(times[i + 1])) continue;
+
         if (ax === bx && az === bz) continue;
         const lift = RAIL_TOP + TRAIL_HEIGHT;
         positions.set([ax, ay + lift, az, bx, by + lift, bz], n * 6);
@@ -375,9 +406,10 @@ export function Trains({
     });
     trails.segments.needsUpdate = trails.times.needsUpdate = true;
     trails.owner.needsUpdate = true;
-    (trails.lines.geometry as LineSegmentsGeometry).instanceCount = n;
+    trails.lines.geometry.instanceCount = n;
 
     const present = new Set(runs.map(({ train }) => train.id));
+
     for (const id of playheads.current.keys()) {
       if (!present.has(id)) playheads.current.delete(id);
     }
@@ -390,7 +422,7 @@ export function Trains({
   useEffect(
     () => () => {
       cars.mesh.geometry.dispose();
-      (cars.mesh.material as MeshStandardNodeMaterial).dispose();
+      cars.mesh.material.dispose();
       cars.mesh.dispose();
       trails.lines.geometry.dispose();
       trails.material.dispose();
@@ -403,6 +435,7 @@ export function Trains({
     const target = (Date.now() - DELAY - epoch) / 1000;
     const { light, tint } = sprites;
     let lit = 0;
+
     const show = (at: Vector3, tone: Color, intensity: number) => {
       if (intensity <= 0 || lit >= MAX_LIGHTS) return;
       light.setXYZW(lit, at.x, at.y + RAIL_TOP + LIGHT_HEIGHT, at.z, intensity);
@@ -418,19 +451,23 @@ export function Trains({
       // Run on toward now less DELAY; wait at the last fix for the next,
       // then make the time up.
       let playhead = playheads.current.get(train.id);
+
       if (playhead === undefined) {
         playhead = Math.min(target, latest);
       } else {
         const rate =
           1 + Math.min(Math.max((target - playhead) / CATCH_UP, 0), 2);
+
         playhead = Math.min(playhead + delta * rate, target, latest);
       }
+
       playheads.current.set(train.id, playhead);
       trails.playheads.array[i] = playhead;
 
       // The fix is taken as the middle of the train; it runs toward +s.
       const head = distanceAt(run, playhead) + run.length / 2;
       let offset = 0;
+
       for (const car of run.cars) {
         if (count >= MAX_CARS) break;
         pointAt(run, head - offset, front);
@@ -438,9 +475,11 @@ export function Trains({
         centre.addVectors(front, back).multiplyScalar(0.5);
         centre.y += RAIL_TOP;
         along.subVectors(front, back);
+
         if (along.lengthSq() > 1e-6) {
           rotation.setFromUnitVectors(FORWARD, along.normalize());
         }
+
         matrix.compose(
           centre,
           rotation,

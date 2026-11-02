@@ -38,6 +38,7 @@ async function decodeTile(
   { encoding }: BuildingsManifest
 ) {
   await MeshoptDecoder.ready;
+
   const [
     magic,
     vertexCount,
@@ -48,11 +49,13 @@ async function decodeTile(
     lightCount,
     lightBytes,
   ] = new Uint32Array(buffer, 0, 8);
+
   if (magic !== MAGIC) throw new Error("not a building tile");
   const indexStart = HEADER_BYTES + padded(vertexBytes);
   const lightStart = indexStart + padded(indexBytes);
 
   let lights: Float32Array | null = null;
+
   if (lightCount) {
     const raw = new Uint16Array(lightCount * (LIGHT_BYTES / 2));
     MeshoptDecoder.decodeVertexBuffer(
@@ -61,14 +64,20 @@ async function decodeTile(
       LIGHT_BYTES,
       new Uint8Array(buffer, lightStart, lightBytes)
     );
-    const decode = (q: number, { min, range }: { min: number; range: number }) =>
-      (q / 65535) * range + min;
+
+    const decode = (
+      q: number,
+      { min, range }: { min: number; range: number }
+    ) => (q / 65535) * range + min;
+
     lights = new Float32Array(lightCount * 8);
+
     for (let i = 0; i < lightCount; i++) {
       const [x, z, ground, height, seed, wall, top, drawn] = raw.subarray(
         i * 8,
         i * 8 + 8
       );
+
       lights.set(
         [
           tile.minX + (x / 65535) * (tile.maxX - tile.minX),
@@ -84,6 +93,7 @@ async function decodeTile(
       );
     }
   }
+
   if (!indexCount) return { geometry: null, lights };
 
   const vertices = new Uint16Array(vertexCount * (VERTEX_BYTES / 2));
@@ -93,8 +103,10 @@ async function decodeTile(
     VERTEX_BYTES,
     new Uint8Array(buffer, HEADER_BYTES, vertexBytes)
   );
+
   const indices =
     indexSize === 4 ? new Uint32Array(indexCount) : new Uint16Array(indexCount);
+
   MeshoptDecoder.decodeIndexBuffer(
     new Uint8Array(indices.buffer),
     indexCount,
@@ -113,6 +125,7 @@ async function decodeTile(
     new InterleavedBufferAttribute(interleaved, 2, 4, true)
   );
   geometry.setIndex(new BufferAttribute(indices, 1));
+
   return { geometry, lights };
 }
 
@@ -193,9 +206,12 @@ export class BuildingCache {
     // Loaded but waiting on its siblings to be drawn: don't evict it, or
     // a view over budget would never finish loading.
     const entry = this.resident.get(tile.key);
+
     if (entry) entry.lastUsed = this.frame;
+
     if (this.ready(tile) || this.inFlight.has(tile.key)) return;
     const pending = this.wanted.get(tile.key);
+
     if (!pending || priority < pending.priority) {
       this.wanted.set(tile.key, { tile, priority });
     }
@@ -204,7 +220,9 @@ export class BuildingCache {
   /** The tile's objects, if loaded; marks it as in use this frame. */
   use(tile: BuildingTile): TileObjects | undefined {
     const entry = this.resident.get(tile.key);
+
     if (entry) entry.lastUsed = this.frame;
+
     return entry;
   }
 
@@ -213,10 +231,12 @@ export class BuildingCache {
     const queue = [...this.wanted.values()].sort(
       (a, b) => a.priority - b.priority
     );
+
     for (const { tile } of queue) {
       if (this.inFlight.size >= this.maxInFlight) break;
       this.load(tile);
     }
+
     this.wanted.clear();
     this.evict();
     this.frame++;
@@ -224,20 +244,27 @@ export class BuildingCache {
 
   private async load(tile: BuildingTile) {
     this.inFlight.add(tile.key);
+
     try {
       const response = await fetch(this.index.url(tile));
+
       if (!response.ok) throw new Error(`${response.status}`);
+
       const { geometry, lights: data } = await decodeTile(
         await response.arrayBuffer(),
         tile,
         this.index.manifest
       );
+
       if (this.disposed) {
         geometry?.dispose();
+
         return;
       }
+
       const object = new Group();
       let mesh: Mesh | undefined;
+
       if (geometry) {
         mesh = new Mesh(geometry, this.material);
         // Positions are 0..1 across the tile's bounds.
@@ -248,7 +275,9 @@ export class BuildingCache {
         mesh.frustumCulled = false;
         object.add(mesh);
       }
+
       const lights = data ? createLights(data, this.lightsMaterial) : undefined;
+
       if (lights) object.add(lights);
       object.visible = false;
       this.setup({ object, mesh, lights });
@@ -273,11 +302,14 @@ export class BuildingCache {
 
   private evict() {
     if (this.residentTriangles <= this.maxTriangles) return;
+
     const idle = [...this.resident].filter(
       ([, entry]) =>
         entry.lastUsed < this.frame && entry.level >= this.index.maxLevel
     );
+
     idle.sort(([, a], [, b]) => a.lastUsed - b.lastUsed);
+
     for (const [key, entry] of idle) {
       if (this.residentTriangles <= this.maxTriangles) break;
       this.remove(entry);
@@ -294,6 +326,7 @@ export class BuildingCache {
 
   dispose() {
     this.disposed = true;
+
     for (const entry of this.resident.values()) this.remove(entry);
     this.resident.clear();
   }
@@ -317,6 +350,7 @@ function setBox(tile: BuildingTile, verticalScale: number) {
   const b = tile.bounds;
   box.min.set(b.minX, b.minGround * verticalScale - 50, b.minZ);
   box.max.set(b.maxX, b.maxGround * verticalScale + b.maxRel, b.maxZ);
+
   return box;
 }
 
@@ -354,23 +388,28 @@ export function selectTiles(
       distance < index.tileSize(tile.level) * lodFactor
     ) {
       const children = tile.children.filter(inView);
+
       for (const child of children) {
         const d = setBox(child, verticalScale).distanceToPoint(cameraPosition);
         cache.request(child, child.level * 1e6 + d);
       }
+
       if (children.every((child) => cache.ready(child))) {
         children.forEach(visit);
+
         return;
       }
     }
 
     // Coarse levels first, then nearest first.
     cache.request(tile, tile.level * 1e6 + distance);
+
     if (cache.ready(tile)) out.push(tile);
   };
 
   for (const root of index.roots) {
     if (inView(root)) visit(root);
   }
+
   return out;
 }

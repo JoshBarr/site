@@ -12,6 +12,7 @@ import { Client } from "@upstash/qstash";
 const SCHEDULE_ID = "flights-sweep";
 
 const origin = process.argv[2];
+
 if (!origin?.startsWith("https://")) {
   console.error("usage: schedule.mjs https://<production origin>");
   process.exit(1);
@@ -19,6 +20,7 @@ if (!origin?.startsWith("https://")) {
 
 const client = new Client();
 const destination = new URL("/api/flights/sweep", origin).href;
+
 await client.schedules.create({
   scheduleId: SCHEDULE_ID,
   destination,
@@ -31,6 +33,7 @@ await client.schedules.create({
 });
 
 const schedule = await client.schedules.get(SCHEDULE_ID);
+
 console.log(
   `${schedule.scheduleId}: ${schedule.cron} → ${schedule.destination}`
 );

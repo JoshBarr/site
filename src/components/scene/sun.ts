@@ -2,7 +2,7 @@
 // timezone and across daylight saving. NOAA general solar position equations:
 // https://gml.noaa.gov/grad/solcalc/solareqns.PDF (accurate to ~0.1°).
 
-export const WELLINGTON = { latitude: -41.2865, longitude: 174.7762 };
+const WELLINGTON = { latitude: -41.2865, longitude: 174.7762 };
 
 const RAD = Math.PI / 180;
 
@@ -19,10 +19,12 @@ export function sunPosition(
 ): SunPosition {
   const start = Date.UTC(date.getUTCFullYear(), 0, 1);
   const dayOfYear = Math.floor((date.getTime() - start) / 86400000);
+
   const hours =
     date.getUTCHours() +
     date.getUTCMinutes() / 60 +
     date.getUTCSeconds() / 3600;
+
   const daysInYear = date.getUTCFullYear() % 4 === 0 ? 366 : 365;
 
   // Fractional year, radians.
@@ -50,9 +52,11 @@ export function sunPosition(
   const hourAngle = (solarMinutes / 4 - 180) * RAD;
 
   const lat = latitude * RAD;
+
   const cosZenith =
     Math.sin(lat) * Math.sin(declination) +
     Math.cos(lat) * Math.cos(declination) * Math.cos(hourAngle);
+
   const zenith = Math.acos(Math.min(1, Math.max(-1, cosZenith)));
 
   const azimuth = Math.atan2(
@@ -75,6 +79,7 @@ export function sunDirection({
 }: SunPosition): [number, number, number] {
   const az = azimuth * RAD;
   const alt = altitude * RAD;
+
   return [
     Math.cos(alt) * Math.sin(az),
     Math.sin(alt),

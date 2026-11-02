@@ -121,8 +121,10 @@ export function Landmarks({
     // Ground heights are from the DEM; the terrain is drawn exaggerated.
     const place = ([e, n, ground]: Site): Point => {
       const [x, z] = nztmToWorld(index.manifest, e, n);
+
       return [x, ground * verticalScale.value, z];
     };
+
     const westWind = WEST_WIND.map(place);
     const millCreek = MILL_CREEK.map(place);
     const brooklyn = [place(BROOKLYN)];
@@ -130,6 +132,7 @@ export function Landmarks({
     const mtVictoria = place(MT_VICTORIA);
     // Booms (+x in the crane's frame) out over the harbour, square to the wharf.
     const seaward = ((WHARF_BEARING - 90) * Math.PI) / 180;
+
     const cranes: PlacedCrane[] = CRANES.map((site, i) => ({
       position: place(site),
       rotation: Math.PI / 2 - seaward,

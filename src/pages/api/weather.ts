@@ -10,11 +10,14 @@ export default async function handler(
   res: NextApiResponse<Conditions | { error: string }>
 ) {
   const conditions = await getConditions();
+
   if (!conditions) {
     res.setHeader("Cache-Control", "public, s-maxage=60");
     res.status(502).json({ error: "weather unavailable" });
+
     return;
   }
+
   res.setHeader(
     "Cache-Control",
     "public, s-maxage=1800, stale-while-revalidate=3600"

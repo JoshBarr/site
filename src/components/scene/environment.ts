@@ -22,6 +22,7 @@ export const overcast = uniform(0);
 /** Overcast amount for a cloud cover fraction: full cover reads as a lid. */
 export function overcastFor(cloudCover: number) {
   const t = Math.min(Math.max((cloudCover - 0.7) / 0.3, 0), 1);
+
   return t * t * (3 - 2 * t);
 }
 
@@ -58,11 +59,15 @@ export const sunShadow = shadow(sunLight, sunLight.shadow);
  * scene, so it lights nothing; whoever owns the casters aims and fits it.
  */
 export const nearShadowLight = new DirectionalLight();
+
 nearShadowLight.shadow.camera.layers.set(NEAR_SHADOW_LAYER);
+
 nearShadowLight.shadow.autoUpdate = false;
+
 // Once, empty, so it reads as lit until something fits it.
 nearShadowLight.shadow.needsUpdate = true;
-export const nearShadow = shadow(nearShadowLight, nearShadowLight.shadow);
+
+const nearShadow = shadow(nearShadowLight, nearShadowLight.shadow);
 
 /**
  * The sun let through the clouds at a surface (1 clear, 0 shadowed). Under
@@ -70,6 +75,7 @@ export const nearShadow = shadow(nearShadowLight, nearShadowLight.shadow);
  * so the shadows fade out as the deck closes.
  */
 export const cloudShadowMap = createCloudShadowMap(sunDirection);
+
 export const cloudShadow = mix(
   cloudShadowMap.sample(positionWorld),
   1,
@@ -77,6 +83,8 @@ export const cloudShadow = mix(
 );
 
 // Lit materials get all three; outside the near map's square it reads as lit.
+// SAFETY: shadow() makes a float node, the light's shadow factor; it's typed
+// as a ShadowNode, which TSL's operators don't take.
 sunLight.shadow.shadowNode = float(sunShadow as any)
   .mul(nearShadow as any)
   .mul(cloudShadow);

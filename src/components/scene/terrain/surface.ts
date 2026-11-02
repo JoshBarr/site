@@ -20,9 +20,11 @@ import { AirfieldMaps, shadeAirfield } from "../airport/surface";
 /** Must match SLOPE_SCALE in detailWorker. */
 const DETAIL_SLOPE_SCALE = 4;
 export const DETAIL_SIZE = 256;
+
 /** Metres per repeat of the detail map for shrubs; trees are larger. */
 const SHRUB_PERIOD = 80;
 const TREE_PERIOD = 190;
+
 /** Crown heights the bumps are lit as, in metres. */
 const SHRUB_HEIGHT = 1.5;
 const TREE_HEIGHT = 5;
@@ -34,6 +36,7 @@ const FOREST = 0.04;
 const URBAN = 0.1;
 const ROCK = 0.2;
 const SAND = 0.26;
+
 /** Roofs range from black iron to white membrane around this. */
 const ROOF = 0.12;
 
@@ -54,6 +57,7 @@ export function createLandcoverBounds() {
 /** Slope of the detail map's canopy, in metres per metre, at a scale. */
 function canopySlope(sample, period: number, height: number) {
   const perMetre = (DETAIL_SIZE / period / DETAIL_SLOPE_SCALE) * height;
+
   return sample.gb.sub(0.5).mul(perMetre);
 }
 
@@ -79,27 +83,31 @@ export function shadeSurface(
         texture(detail, vec2(world.y, world.x.negate()).div(period * 1.618)).a
       )
       .mul(0.5);
+
   const broad = blotches(SHRUB_PERIOD * 7.3);
   const fine = blotches(SHRUB_PERIOD * 1.37);
 
   // Land cover, with its edges wobbled so they don't read as map polygons.
   const wobble = vec2(broad, fine).sub(0.5).mul(70);
-  const uv = world
-    .add(wobble)
-    .sub(landcoverBounds.xy)
-    .div(landcoverBounds.zw);
+
+  const uv = world.add(wobble).sub(landcoverBounds.xy).div(landcoverBounds.zw);
+
   const cover = texture(landcover, uv).rgb;
+
   // Fade out at the map's edge rather than stopping on a line.
   const inside = smoothstep(0, 0.03, uv.x)
     .mul(smoothstep(1, 0.97, uv.x))
     .mul(smoothstep(0, 0.03, uv.y))
     .mul(smoothstep(1, 0.97, uv.y));
+
   const sharpen = (v) =>
     smoothstep(0.3, 0.7, v.add(fine.sub(0.5).mul(0.5))).mul(inside);
+
   const forest = sharpen(cover.r).mul(open);
   const urban = sharpen(cover.b).mul(open);
   // Scrub fills gullies wherever the map says nothing else.
   const gullies = smoothstep(0.42, 0.3, relief.add(broad.sub(0.5).mul(0.15)));
+
   const scrub = max(
     sharpen(cover.g),
     gullies.mul(float(1).sub(urban)).mul(float(1).sub(forest)).mul(0.8)
@@ -109,6 +117,7 @@ export function shadeSurface(
   const steep = smoothstep(0.78, 0.6, normal.y)
     .mul(float(1).sub(urban))
     .mul(float(1).sub(forest));
+
   const shore = smoothstep(1.5, 0.5, height).mul(float(1).sub(urban));
 
   // Crowns: small shrubs, and trees on a larger, turned grid.
@@ -126,6 +135,7 @@ export function shadeSurface(
     .mul(float(1).sub(steep.mul(0.6)))
     .mul(float(1).sub(building))
     .mul(float(1).sub(airport.paved));
+
   const slope = shrubSlope.mul(bushiness).add(treeWorld.mul(forest));
   const detailed = normalize(vec3(normal).sub(vec3(slope.x, 0, slope.y)));
 
@@ -147,11 +157,13 @@ export function shadeSurface(
   albedo = mix(albedo, float(SAND), shore);
   albedo = mix(albedo, albedo.mul(airport.mowing), airport.field);
   albedo = mix(albedo, airport.albedo, airport.paved);
+
   // Roofs, each its own shade (near enough: the blotches are roof-sized),
   // outlined where the footprint's edge is filtered.
   const roof = float(ROOF).mul(
     mix(0.35, 1.9, texture(detail, world.div(37)).a)
   );
+
   albedo = mix(albedo, roof, building);
   albedo = albedo.mul(
     float(1).sub(building.mul(float(1).sub(building)).mul(1.6))

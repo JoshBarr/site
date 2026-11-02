@@ -105,6 +105,7 @@ export const E_44: TurbineModel = {
 
 /** Wind shear exponent: speed grows as height^α over open hills. */
 const SHEAR = 0.143;
+
 /** Height the forecast wind is given at, m. */
 const REFERENCE_HEIGHT = 10;
 
@@ -114,6 +115,7 @@ export function windAtHub(model: TurbineModel, surfaceWind: number) {
 
 /** Fully feathered: blades edge-on to the wind. */
 export const FEATHERED = (85 * Math.PI) / 180;
+
 /** Slow freewheeling while parked or waiting for wind. */
 const IDLE_RPM = 1;
 
@@ -135,6 +137,7 @@ export function operatingPoint(
 
   // Below rated: hold the tip speed ratio, within the speed range.
   const omega = (model.tipSpeedRatio * wind) / model.rotorRadius;
+
   let rpm = Math.min(
     Math.max((omega * 60) / (2 * Math.PI), model.minRpm),
     model.maxRpm
@@ -150,6 +153,7 @@ export function operatingPoint(
       (wind - model.cutOut) / (model.stormEnd - model.cutOut),
       1
     );
+
     rpm = rpm * (1 - t) + IDLE_RPM * t;
     pitch = pitch * (1 - t) + FEATHERED * t;
   }
@@ -168,8 +172,10 @@ export function shouldRun(
 ) {
   // Storm control keeps an Enercon turning through the storm.
   const stop = model.stormEnd ?? model.cutOut;
+
   if (running) {
     return averageWind > model.cutIn - 0.5 && averageWind < stop;
   }
+
   return averageWind > model.cutIn && averageWind < stop - 4;
 }

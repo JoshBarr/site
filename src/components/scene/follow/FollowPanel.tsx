@@ -65,6 +65,7 @@ export const FollowPanel: React.FC<{ style?: React.CSSProperties }> = ({
       <span style={{ opacity: 0.7, padding: "0 4px" }}>Follow</span>
       {CATEGORIES.map((category) => {
         const active = following?.category === category;
+
         return (
           <button
             key={category}

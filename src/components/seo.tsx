@@ -27,7 +27,7 @@ interface SEOProps {
   };
 }
 
-const SEO = ({ description, title, thumbnail, data }: SEOProps) => {
+const SEO = ({ description, title }: SEOProps) => {
   const siteTitle = config.metadata.title;
   const pageDescription = description || config.metadata.description;
 

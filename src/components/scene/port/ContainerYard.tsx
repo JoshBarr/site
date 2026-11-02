@@ -25,13 +25,17 @@ const TWENTY = 6.06;
 const WIDTH = 2.44;
 const STANDARD = 2.59;
 const HIGH_CUBE = 2.9;
+
 /** Straddle carriers need about this between rows; ends nearly touch. */
 const ROW_GAP = 1.6;
 const END_GAP = 0.6;
+
 /** Share of slots standing empty. */
 const EMPTY = 0.2;
+
 /** Share of stacks made of pairs of twenty-footers. */
 const TWENTIES = 0.3;
+
 /** Monochrome, like the ships' cargo: light to dark greys. */
 const SHADES = [
   "#a6a6a6",
@@ -75,23 +79,29 @@ function stack(index: TileIndex, yard: YardBlock[], wharfBearing: number) {
 
     const lanes = Math.max(1, Math.floor((long + END_GAP) / (FORTY + END_GAP)));
     const rows = Math.max(1, Math.floor((wide + ROW_GAP) / (WIDTH + ROW_GAP)));
+
     for (let lane = 0; lane < lanes; lane++) {
       for (let row = 0; row < rows; row++) {
         if (next() < EMPTY) continue;
+
         const tiers = Math.min(
           block.tiers,
           1 + Math.floor(block.tiers * next() ** 0.8)
         );
+
         const twenties = next() < TWENTIES;
         const a = (lane - (lanes - 1) / 2) * (FORTY + END_GAP);
         const b = (row - (rows - 1) / 2) * (WIDTH + ROW_GAP);
+
         const slots = twenties
           ? [-(TWENTY / 2 + 0.04), TWENTY / 2 + 0.04]
           : [0];
 
         let top = y;
+
         for (let tier = 0; tier < tiers; tier++) {
           const height = next() < 0.5 ? HIGH_CUBE : STANDARD;
+
           for (const offset of slots) {
             // Never quite stacked square.
             const along = a + offset + (next() - 0.5) * 0.2;
@@ -109,11 +119,13 @@ function stack(index: TileIndex, yard: YardBlock[], wharfBearing: number) {
               0
             );
           }
+
           top += height;
         }
       }
     }
   }
+
   return { place: new Float32Array(place), box: new Float32Array(box) };
 }
 
@@ -136,10 +148,12 @@ export function ContainerYard({
 
     const p = attribute("place", "vec4");
     const b = attribute("box", "vec4");
+
     const material = new MeshStandardNodeMaterial({
       roughness: 0.7,
       metalness: 0,
     });
+
     material.positionNode = rotateY(
       positionGeometry.mul(vec3(b.x, b.y, WIDTH)),
       p.w
@@ -152,13 +166,14 @@ export function ContainerYard({
     // Boxes are placed in the shader; the geometry's bounds mean nothing.
     object.frustumCulled = false;
     castsNearShadow(object);
+
     return object;
   }, [index, yard, wharfBearing]);
 
   useEffect(
     () => () => {
       mesh.geometry.dispose();
-      (mesh.material as MeshStandardNodeMaterial).dispose();
+      mesh.material.dispose();
     },
     [mesh]
   );

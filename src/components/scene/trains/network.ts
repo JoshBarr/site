@@ -5,7 +5,7 @@ import { verticalScale } from "../terrain/Terrain";
 // scripts/trains/build_rail.mjs): where trains can be put and how they get
 // from one fix to the next.
 
-export const RAIL_URL = process.env.NEXT_PUBLIC_RAIL_URL ?? "/rail";
+const RAIL_URL = process.env.NEXT_PUBLIC_RAIL_URL ?? "/rail";
 
 /** Railhead above the track bed (the smoothed ground), m. */
 export const RAIL_TOP = 0.65;
@@ -36,6 +36,7 @@ export interface Candidate {
 
 /** Grid cell for finding tracks near a point, m. */
 const CELL = 64;
+
 /**
  * How strongly a fix is drawn to the left-hand track of a double line, m
  * per m to the left, up to LEFT_REACH: trains keep left in New Zealand,
@@ -43,8 +44,10 @@ const CELL = 64;
  */
 const LEFT_BIAS = 1;
 const LEFT_REACH = 2.5;
+
 /** Added to a track's score when it runs across the way the train's going. */
 const ACROSS = 25;
+
 /**
  * Sharpest change of direction allowed from one piece of track to the
  * next, as a cosine: through a turnout, but not back down the other leg.
@@ -60,8 +63,10 @@ class Heap {
     const items = this.items;
     items.push([cost, value]);
     let i = items.length - 1;
+
     while (i > 0) {
       const parent = (i - 1) >> 1;
+
       if (items[parent][0] <= items[i][0]) break;
       [items[parent], items[i]] = [items[i], items[parent]];
       i = parent;
@@ -71,20 +76,26 @@ class Heap {
     const items = this.items;
     const top = items[0];
     const last = items.pop()!;
+
     if (items.length) {
       items[0] = last;
       let i = 0;
+
       for (;;) {
         const l = 2 * i + 1;
         const r = l + 1;
         let m = i;
+
         if (l < items.length && items[l][0] < items[m][0]) m = l;
+
         if (r < items.length && items[r][0] < items[m][0]) m = r;
+
         if (m === i) break;
         [items[m], items[i]] = [items[i], items[m]];
         i = m;
       }
     }
+
     return top;
   }
 }
@@ -111,14 +122,17 @@ export class RailNetwork {
     this.flags = file.flags;
     const count = file.nodes.length / 3;
     this.points = new Float32Array(count * 3);
+
     for (let i = 0; i < count; i++) {
       const [x, z] = nztmToWorld(
         manifest,
         file.nodes[i * 3],
         file.nodes[i * 3 + 1]
       );
+
       this.points.set([x, file.nodes[i * 3 + 2] * scale, z], i * 3);
     }
+
     this.ways = file.ways.map(([flags, ...points]) => ({ flags, points }));
     this.platforms = file.platforms.map(({ ground, ring }) => ({
       ground: ground * scale,
@@ -128,6 +142,7 @@ export class RailNetwork {
     const edges = this.ways.flatMap(({ points }) =>
       points.slice(1).map((b, k) => [points[k], b])
     );
+
     this.wayOf = Int32Array.from(
       this.ways.flatMap(({ points }, w) => points.slice(1).map(() => w))
     );
@@ -142,6 +157,7 @@ export class RailNetwork {
       this.edgesAt[b].push(e);
       const [ax, , az] = this.point(a);
       const [bx, , bz] = this.point(b);
+
       for (
         let i = Math.floor(Math.min(ax, bx) / CELL);
         i <= Math.floor(Math.max(ax, bx) / CELL);
@@ -153,6 +169,7 @@ export class RailNetwork {
           j++
         ) {
           const key = `${i},${j}`;
+
           if (!this.grid.has(key)) this.grid.set(key, []);
           this.grid.get(key)!.push(e);
         }
@@ -162,18 +179,21 @@ export class RailNetwork {
 
   point(i: number): Point {
     const p = this.points;
+
     return [p[i * 3], p[i * 3 + 1], p[i * 3 + 2]];
   }
 
   /** x/z from point a to b. */
   private delta(a: number, b: number): [number, number] {
     const p = this.points;
+
     return [p[b * 3] - p[a * 3], p[b * 3 + 2] - p[a * 3 + 2]];
   }
 
   private at(edge: number, t: number): Snap {
     const a = this.point(this.start[edge]);
     const b = this.point(this.end[edge]);
+
     return {
       edge,
       t,
@@ -199,6 +219,7 @@ export class RailNetwork {
     const seen = new Set<number>();
     const i0 = Math.floor((x - reach) / CELL);
     const j0 = Math.floor((z - reach) / CELL);
+
     for (let i = i0; i <= Math.floor((x + reach) / CELL); i++) {
       for (let j = j0; j <= Math.floor((z + reach) / CELL); j++) {
         for (const e of this.grid.get(`${i},${j}`) ?? []) {
@@ -207,30 +228,38 @@ export class RailNetwork {
           const [dx, dz] = this.delta(this.start[e], this.end[e]);
           const [ax, , az] = this.point(this.start[e]);
           const length = this.length[e] || 1e-6;
+
           const t = Math.min(
             Math.max(((x - ax) * dx + (z - az) * dz) / (length * length), 0),
             1
           );
+
           const px = ax + dx * t - x;
           const pz = az + dz * t - z;
           const distance = Math.hypot(px, pz);
+
           if (distance > reach) continue;
           let score = distance;
+
           if (heading) {
             const along = Math.abs(dx * heading[0] + dz * heading[1]) / length;
+
             if (along < 0.7) score += ACROSS;
             // Left of the heading in world x/z (z is south).
             const left = px * heading[1] - pz * heading[0];
             score -=
               LEFT_BIAS * Math.min(Math.max(left, -LEFT_REACH), LEFT_REACH);
           }
+
           const way = this.wayOf[e];
+
           if (score < (best.get(way)?.score ?? Infinity)) {
             best.set(way, { snap: this.at(e, t), score });
           }
         }
       }
     }
+
     return [...best.values()].sort((a, b) => a.score - b.score);
   }
 
@@ -241,6 +270,7 @@ export class RailNetwork {
    */
   route(from: Snap, to: Snap, limit: number): Point[] | null {
     const ends = (s: Snap): Point => [s.x, s.y, s.z];
+
     if (from.edge === to.edge) return [ends(from), ends(to)];
 
     // States: arrived at the end of edge e going forward (2e), or at its
@@ -248,21 +278,26 @@ export class RailNetwork {
     const cost = new Map<number, number>();
     const previous = new Map<number, number>();
     const open = new Heap();
+
     const reach = (state: number, c: number, from: number) => {
       if (c >= (cost.get(state) ?? Infinity) || c > limit) return;
       cost.set(state, c);
       previous.set(state, from);
       open.push(c, state);
     };
+
     const length = this.length[from.edge];
     reach(from.edge * 2, (1 - from.t) * length, -1);
     reach(from.edge * 2 + 1, from.t * length, -1);
 
     let best = Infinity;
     let finish = -1;
+
     while (open.size) {
       const [c, state] = open.pop();
+
       if (c > (cost.get(state) ?? Infinity)) continue;
+
       if (c >= best) break;
       const e = state >> 1;
       const backward = state & 1;
@@ -274,28 +309,38 @@ export class RailNetwork {
       for (const f of this.edgesAt[node]) {
         if (f === e) continue;
         const forward = this.start[f] === node;
+
         const [ox, oz] = forward
           ? this.delta(node, this.end[f])
           : this.delta(node, this.start[f]);
+
         const outLength = this.length[f] || 1e-6;
+
         if ((ix * ox + iz * oz) / (inLength * outLength) < TURN) continue;
+
         if (f === to.edge) {
           const total = c + (forward ? to.t : 1 - to.t) * outLength;
+
           if (total < best) {
             best = total;
             finish = state;
           }
+
           continue;
         }
+
         reach(f * 2 + (forward ? 0 : 1), c + outLength, state);
       }
     }
+
     if (finish < 0) return null;
 
     const nodes: Point[] = [];
+
     for (let s = finish; s >= 0; s = previous.get(s)!) {
       nodes.push(this.point(s & 1 ? this.start[s >> 1] : this.end[s >> 1]));
     }
+
     return [ends(from), ...nodes.reverse(), ends(to)];
   }
 
@@ -311,16 +356,21 @@ export class RailNetwork {
     let forward = dx * heading[0] + dz * heading[1] >= 0;
     let left = (forward ? 1 - from.t : from.t) * this.length[e];
     let travelled = 0;
+
     for (;;) {
       const node = forward ? this.end[e] : this.start[e];
+
       if (travelled + left >= distance) {
         const t = forward
           ? 1 - (left - (distance - travelled)) / (this.length[e] || 1)
           : (left - (distance - travelled)) / (this.length[e] || 1);
+
         const at = this.at(e, Math.min(Math.max(t, 0), 1));
         points.push([at.x, at.y, at.z]);
+
         return points;
       }
+
       travelled += left;
       points.push(this.point(node));
 
@@ -329,21 +379,26 @@ export class RailNetwork {
       const [ix, iz] = this.delta(other, node);
       let next = -1;
       let straightest = TURN;
+
       for (const f of this.edgesAt[node]) {
         if (f === e) continue;
         const out = this.start[f] === node;
+
         const [ox, oz] = out
           ? this.delta(node, this.end[f])
           : this.delta(node, this.start[f]);
+
         const cosine =
           (ix * ox + iz * oz) /
           ((this.length[e] || 1e-6) * (this.length[f] || 1e-6));
+
         if (cosine > straightest) {
           straightest = cosine;
           next = f;
           forward = out;
         }
       }
+
       if (next < 0) return points;
       e = next;
       left = this.length[e];
@@ -353,6 +408,8 @@ export class RailNetwork {
 
 export async function loadRailNetwork(index: TileIndex) {
   const response = await fetch(`${RAIL_URL}/network.json`);
+
   if (!response.ok) throw new Error(`rail network: HTTP ${response.status}`);
+
   return new RailNetwork(await response.json(), index);
 }

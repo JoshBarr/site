@@ -28,17 +28,22 @@ import {
 
 /** Light lands this far around where it's given out (Gaussian sigma), m. */
 const SPREAD = 700;
+
 /** It thins out above the city over this height, m. */
 const REACH = 2000;
+
 /**
  * Of the light given out per m² of ground, the haze sends this much back
  * toward the eye; streets and car parks add their share to the windows'.
  */
 const HAZE_GLOW = 0.24;
+
 /** And the cloud base, which is far whiter and denser. */
 const CLOUD_GLOW = 0.64;
+
 /** Wellington's street lights are LED now: a near-white, slightly cool glow. */
 const COLOUR = vec3(0.92, 0.95, 1);
+
 /** Samples along a ray, and the furthest they go, m. */
 const STEPS = 5;
 const MAX_DISTANCE = 20000;
@@ -46,19 +51,21 @@ const MAX_DISTANCE = 20000;
 /** Map cells across the terrain root: the finest building tiles'. */
 const CELLS = 128;
 
-const map = new DataTexture(
-  new Uint8Array(CELLS * CELLS),
-  CELLS,
-  CELLS,
-  RedFormat,
-  UnsignedByteType
-);
+const pixels = new Uint8Array(CELLS * CELLS);
+
+const map = new DataTexture(pixels, CELLS, CELLS, RedFormat, UnsignedByteType);
+
 map.magFilter = LinearFilter;
+
 map.minFilter = LinearFilter;
+
 map.needsUpdate = true;
+
 const mapNode = texture(map);
+
 /** World size of the map, which covers the terrain root, centred. */
 const mapSize = uniform(1);
+
 /** Windowed wall per m² of ground where the map reads 1. */
 const mapPeak = uniform(0);
 
@@ -73,11 +80,13 @@ export function setCityLights(
 ) {
   const cell = size / CELLS;
   const density = new Float32Array(CELLS * CELLS);
+
   for (const { x, y, windowWall } of tiles) {
     const cx = Math.floor((x * CELLS) / grid);
     const cy = Math.floor((y * CELLS) / grid);
     // Spread evenly over the cells a coarser tile covers.
     const span = Math.max(CELLS / grid, 1);
+
     for (let j = 0; j < span; j++) {
       for (let i = 0; i < span; i++) {
         density[(cy + j) * CELLS + cx + i] +=
@@ -85,12 +94,14 @@ export function setCityLights(
       }
     }
   }
+
   const blurred = blur(density, CELLS, SPREAD / cell);
   const peak = blurred.reduce((a, b) => Math.max(a, b), 1e-6);
-  const data = map.image.data as Uint8Array;
-  for (let i = 0; i < data.length; i++) {
-    data[i] = Math.round((blurred[i] / peak) * 255);
+
+  for (let i = 0; i < pixels.length; i++) {
+    pixels[i] = Math.round((blurred[i] / peak) * 255);
   }
+
   map.needsUpdate = true;
   mapSize.value = size;
   mapPeak.value = peak;
@@ -99,32 +110,42 @@ export function setCityLights(
 /** Separable Gaussian blur of a square grid. */
 function blur(grid: Float32Array, cells: number, sigma: number) {
   const radius = Math.ceil(sigma * 3);
+
   const kernel = Array.from({ length: radius * 2 + 1 }, (_, i) =>
     Math.exp(-((i - radius) ** 2) / (2 * sigma * sigma))
   );
+
   const total = kernel.reduce((a, b) => a + b);
+
   const pass = (from: Float32Array, horizontal: boolean) => {
     const to = new Float32Array(from.length);
+
     for (let y = 0; y < cells; y++) {
       for (let x = 0; x < cells; x++) {
         let sum = 0;
+
         for (let k = -radius; k <= radius; k++) {
           const sx = horizontal ? x + k : x;
           const sy = horizontal ? y : y + k;
+
           if (sx < 0 || sy < 0 || sx >= cells || sy >= cells) continue;
           sum += from[sy * cells + sx] * kernel[k + radius];
         }
+
         to[y * cells + x] = sum / total;
       }
     }
+
     return to;
   };
+
   return pass(pass(grid, true), false);
 }
 
 /** The city's light reaching world point p from below, per m², linear. */
-export function cityLight(p) {
+function cityLight(p) {
   const uv = p.xz.div(mapSize).add(0.5);
+
   return COLOUR.mul(
     mapNode
       .sample(uv)
@@ -152,13 +173,17 @@ export function hazeGlow(from, to) {
   const direction = normalize(ray);
   let sum: any = vec3(0);
   let weights: any = float(1e-12);
+
   for (let i = 0; i < STEPS; i++) {
     const p = from.add(direction.mul(length.mul((i + 0.5) / STEPS)));
+
     const weight = hazeDensity
       .mul(exp(max(p.y, 0).div(hazeHeight).negate()))
       .mul(hazeTransmittance(from, p));
+
     sum = sum.add(cityLight(p).mul(weight));
     weights = weights.add(weight);
   }
+
   return sum.div(weights).mul(HAZE_GLOW);
 }

@@ -16,6 +16,7 @@ const ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../.."
 );
+
 const TERRAIN = path.join(ROOT, "public/terrain");
 const OUT = path.join(ROOT, "src/components/scene/landmarks/sites.ts");
 
@@ -32,6 +33,7 @@ const MT_VICTORIA_NODE = 296684884;
 
 async function loadOsm() {
   const cached = process.argv.indexOf("--osm");
+
   if (cached > 0)
     return JSON.parse(await readFile(process.argv[cached + 1], "utf8"));
 
@@ -44,7 +46,9 @@ async function loadOsm() {
     },
     body: new URLSearchParams({ data: QUERY }),
   });
+
   if (!response.ok) throw new Error(`overpass: ${response.status}`);
+
   return response.json();
 }
 
@@ -52,15 +56,18 @@ const { groundHeight: sampleGround } = await createGroundSampler(TERRAIN);
 
 async function groundHeight(easting, northing) {
   const height = await sampleGround(easting, northing);
+
   if (height === undefined) {
     throw new Error(`no terrain under ${easting}, ${northing}`);
   }
+
   return height;
 }
 
 // --- Sort the nodes into sites. ---
 
 const osm = await loadOsm();
+
 const sites = {
   westWind: [],
   millCreek: [],
@@ -74,6 +81,7 @@ for (const element of osm.elements) {
   const node = { ...element, ...element.center };
   const { tags = {} } = node;
   let site;
+
   if (node.id === MT_VICTORIA_NODE) site = "mtVictoria";
   else if (tags.name === "Kaukau TV/FM transmitter") site = "kaukau";
   else if (tags["generator:source"] !== "wind") continue;
@@ -94,6 +102,7 @@ const expected = {
   kaukau: 1,
   mtVictoria: 1,
 };
+
 for (const [name, count] of Object.entries(expected)) {
   if (sites[name].length !== count) {
     console.warn(`${name}: expected ${count}, found ${sites[name].length}`);
@@ -111,6 +120,7 @@ const format = (list) =>
 
 const single = (list) => {
   const [{ e, n, ground }] = list;
+
   return `[${e.toFixed(1)}, ${n.toFixed(1)}, ${ground.toFixed(1)}]`;
 };
 

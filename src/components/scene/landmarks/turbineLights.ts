@@ -10,6 +10,7 @@ export function turbineLights(
   positions: Point[]
 ): ObstructionLight[] {
   const height = towerTop(model) + nacelleTop(model) + 0.4;
+
   return positions.map(([x, y, z]) => ({
     position: [x, y + height, z],
     flashing: true,

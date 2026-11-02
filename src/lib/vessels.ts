@@ -33,15 +33,19 @@ export interface VesselsResponse {
 
 /** Faster than this (m/s) is under way rather than drifting at a mooring. */
 export const UNDER_WAY = 0.5;
+
 /** A ship under way that's gone quiet could be anywhere by now. */
 export const STALE_UNDER_WAY = 10 * 60_000;
+
 /**
  * One at a mooring or anchor is likely still there. Plenty go quiet at their
  * berth, or are only heard now and then, so this spans a quiet night.
  */
 export const STALE_STATIONARY = 12 * 3600_000;
+
 /** How far back trails go: by then they've faded out. */
 export const TRAIL = 15 * 60_000;
+
 /**
  * Reports further apart than this aren't joined in a trail: the ship could
  * have gone any way between them.
@@ -51,5 +55,6 @@ export const TRAIL_GAP = 4 * 60_000;
 /** Whether a report is too old to show. */
 export function isStale({ speed, time }: Pick<Vessel, "speed" | "time">) {
   const age = Date.now() - time;
+
   return age > (speed > UNDER_WAY ? STALE_UNDER_WAY : STALE_STATIONARY);
 }

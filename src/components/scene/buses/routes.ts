@@ -6,7 +6,7 @@ import type { Point } from "../trains/network";
 // scripts/buses/build_routes.mjs): the roads each route's trips drive, as
 // polylines a bus can be put on and run along, without a road network.
 
-export const BUSES_URL = process.env.NEXT_PUBLIC_BUSES_URL ?? "/buses";
+const BUSES_URL = process.env.NEXT_PUBLIC_BUSES_URL ?? "/buses";
 
 interface RoutesFile {
   chains: number[][];
@@ -42,10 +42,12 @@ export class IndexedShape implements Shape {
   constructor(points: Point[]) {
     this.points = points;
     this.s = [0];
+
     for (let i = 1; i < points.length; i++) {
       const [ax, ay, az] = points[i - 1];
       const [bx, by, bz] = points[i];
       this.s.push(this.s[i - 1] + Math.hypot(bx - ax, by - ay, bz - az));
+
       for (
         let gx = Math.floor(Math.min(ax, bx) / CELL);
         gx <= Math.floor(Math.max(ax, bx) / CELL);
@@ -57,6 +59,7 @@ export class IndexedShape implements Shape {
           gz++
         ) {
           const key = `${gx},${gz}`;
+
           if (!this.grid.has(key)) this.grid.set(key, []);
           this.grid.get(key)!.push(i - 1);
         }
@@ -75,6 +78,7 @@ export class IndexedShape implements Shape {
   near(x: number, z: number, radius: number): Projection[] {
     const found: Projection[] = [];
     const seen = new Set<number>();
+
     for (
       let gx = Math.floor((x - radius) / CELL);
       gx <= Math.floor((x + radius) / CELL);
@@ -93,12 +97,16 @@ export class IndexedShape implements Shape {
           const dx = bx - ax;
           const dz = bz - az;
           const length = Math.hypot(dx, dz);
+
           if (length < 1e-6) continue;
+
           const t = Math.min(
             Math.max(((x - ax) * dx + (z - az) * dz) / length ** 2, 0),
             1
           );
+
           const distance = Math.hypot(x - ax - dx * t, z - az - dz * t);
+
           if (distance > radius) continue;
           found.push({
             s: this.s[i] + (this.s[i + 1] - this.s[i]) * t,
@@ -113,12 +121,15 @@ export class IndexedShape implements Shape {
     // run along the shape.
     found.sort((a, b) => a.s - b.s);
     const passes: Projection[] = [];
+
     for (const p of found) {
       const last = passes[passes.length - 1];
+
       if (last && p.s - last.s < radius * 2) {
         if (p.distance < last.distance) passes[passes.length - 1] = p;
       } else passes.push(p);
     }
+
     return passes.sort((a, b) => a.distance - b.distance);
   }
 }
@@ -136,17 +147,20 @@ export class BusRoutes {
     this.chains = file.chains.map((deltas) => {
       const points: Point[] = [];
       let last = previous;
+
       for (let k = 0; k < deltas.length; k += 3) {
         const q = [
           last[0] + deltas[k],
           last[1] + deltas[k + 1],
           last[2] + deltas[k + 2],
         ];
+
         if (k === 0) previous = q;
         last = q;
         const [x, z] = nztmToWorld(manifest, q[0] / 10, q[1] / 10);
         points.push([x, (q[2] / 10) * scale, z]);
       }
+
       return points;
     });
     this.encoded = file.shapes;
@@ -156,18 +170,22 @@ export class BusRoutes {
   /** A shape, put together from its chains the first time it's wanted. */
   private shape(i: number) {
     let shape = this.shapes.get(i);
+
     if (!shape) {
       const points: Point[] = [];
       let ref = 0;
+
       for (const delta of this.encoded[i]) {
         ref += delta;
         const chain = this.chains[Math.abs(ref) - 1];
         const along = ref > 0 ? chain : [...chain].reverse();
         points.push(...(points.length ? along.slice(1) : along));
       }
+
       shape = new IndexedShape(points);
       this.shapes.set(i, shape);
     }
+
     return shape;
   }
 
@@ -179,12 +197,17 @@ export class BusRoutes {
   /** The ways a route's trips go in a direction, or none if it's unknown. */
   shapesFor(route: string, direction: number): IndexedShape[] {
     const shapes = this.routes[route]?.directions[direction ? 1 : 0] ?? [];
+
     return shapes.map((i) => this.shape(i));
   }
 }
 
 export async function loadBusRoutes(index: TileIndex) {
   const response = await fetch(`${BUSES_URL}/routes.json`);
+
   if (!response.ok) throw new Error(`bus routes: ${response.status}`);
+
+  // SAFETY: routes.json is built by scripts/buses/build_routes.mjs as a
+  // RoutesFile, and deployed with the app.
   return new BusRoutes((await response.json()) as RoutesFile, index);
 }

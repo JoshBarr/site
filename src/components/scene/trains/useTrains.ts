@@ -24,6 +24,7 @@ export function useTrains() {
       if (!document.hidden) {
         try {
           const response = await fetch("/api/trains");
+
           if (response.ok) {
             const body: TrainsResponse = await response.json();
             const skew = Date.now() - body.time;
@@ -36,12 +37,16 @@ export function useTrains() {
         } catch (e) {
           console.error("[trains]", e);
         }
+
         known = known.filter((train) => !isStale(train));
+
         if (stopped) return;
         setTrains(known);
       }
+
       timer = setTimeout(poll, POLL);
     };
+
     poll();
 
     return () => {

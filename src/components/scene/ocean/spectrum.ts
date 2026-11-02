@@ -36,6 +36,7 @@ export function createCascades(sizes: number[]): Cascade[] {
   // Each cascade hands off to the next a few wavelengths above its own
   // fundamental, where the smaller patch resolves those waves well.
   const boundaries = sizes.map((size) => ((2 * Math.PI) / size) * 6);
+
   return sizes.map((size, i) => ({
     size,
     kMin: i === 0 ? 0 : boundaries[i],
@@ -59,6 +60,7 @@ export function peakPeriod({ windSpeed, fetch }: OceanConditions) {
  */
 export function significantHeight({ windSpeed, fetch }: OceanConditions) {
   const u = Math.max(windSpeed, 0.5);
+
   return Math.min(0.0016 * u * Math.sqrt(fetch / G), (0.21 * u * u) / G);
 }
 
@@ -66,9 +68,11 @@ function jonswap(omega: number, windSpeed: number, fetch: number) {
   const alpha = 0.076 * Math.pow((windSpeed * windSpeed) / (fetch * G), 0.22);
   const peak = peakOmega(windSpeed, fetch);
   const sigma = omega <= peak ? 0.07 : 0.09;
+
   const r = Math.exp(
     -((omega - peak) ** 2) / (2 * sigma * sigma * peak * peak)
   );
+
   return (
     ((alpha * G * G) / omega ** 5) *
     Math.exp(-1.25 * (peak / omega) ** 4) *
@@ -83,6 +87,7 @@ function spreadNormalisation(s: number) {
       -0.000564 * s ** 4 + 0.00776 * s ** 3 - 0.044 * s ** 2 + 0.192 * s + 0.163
     );
   }
+
   return (
     -4.8e-8 * s ** 4 +
     1.07e-5 * s ** 3 -
@@ -97,7 +102,9 @@ function spreading(theta: number, omega: number, peak: number, swell: number) {
     omega > peak
       ? 9.77 * Math.pow(Math.abs(omega / peak), -2.5)
       : 6.97 * Math.pow(Math.abs(omega / peak), 5);
+
   s += 16 * Math.tanh(Math.min(peak / omega, 20)) * swell * swell;
+
   return (
     spreadNormalisation(s) * Math.pow(Math.abs(Math.cos(theta / 2)), 2 * s)
   );
@@ -106,17 +113,21 @@ function spreading(theta: number, omega: number, peak: number, swell: number) {
 /** Seeded so the sea doesn't reshuffle when the wind changes. */
 function gaussianRandom(seed: number) {
   let state = seed >>> 0;
+
   const next = () => {
     state = (state + 0x6d2b79f5) >>> 0;
     let t = state;
     t = Math.imul(t ^ (t >>> 15), t | 1);
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+
   return () => {
     const u = Math.max(next(), 1e-12);
     const v = next();
     const r = Math.sqrt(-2 * Math.log(u));
+
     return [r * Math.cos(2 * Math.PI * v), r * Math.sin(2 * Math.PI * v)];
   };
 }
@@ -167,18 +178,22 @@ export function buildSpectrum(
         waves.set([kx, kz, omega, k > 0 ? 1 / k : 0], base + i * 4);
 
         let a = 0;
+
         if (k > 1e-6 && k >= cascade.kMin && k < cascade.kMax) {
           const theta = Math.atan2(kz, kx) - windAngle;
           const dOmegaDk = G / (2 * omega);
+
           const energy =
             (jonswap(omega, windSpeed, conditions.fetch) *
               spreading(theta, omega, peak, conditions.swell) *
               dOmegaDk) /
             k;
+
           // h~(k) sums h0(k) and conj(h0(-k)), so each contributes half
           // the energy: E|h~|² = S(k) dk².
           a = Math.sqrt((energy * dk * dk) / 4);
         }
+
         amplitude[i * 2] = xi1 * a;
         amplitude[i * 2 + 1] = xi2 * a;
       }

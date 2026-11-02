@@ -14,13 +14,16 @@ class Builder {
   triangle(inside: Vec, tail: number, a: Vec, b: Vec, c: Vec) {
     const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
     const v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+
     const normal = [
       u[1] * v[2] - u[2] * v[1],
       u[2] * v[0] - u[0] * v[2],
       u[0] * v[1] - u[1] * v[0],
     ];
+
     const out = [0, 1, 2].map((k) => (a[k] + b[k] + c[k]) / 3 - inside[k]);
     const facing = normal[0] * out[0] + normal[1] * out[1] + normal[2] * out[2];
+
     for (const p of facing < 0 ? [a, c, b] : [a, b, c])
       this.position.push(...p);
     this.tail.push(tail, tail, tail);
@@ -32,16 +35,21 @@ class Builder {
    */
   tube(rings: [number, number, number][], x = 0, tail = 0) {
     const sides = 8;
+
     const ring = ([z, r, y]: [number, number, number]) =>
       Array.from({ length: sides }, (_, i): Vec => {
         const angle = ((i + 0.5) / sides) * 2 * Math.PI;
+
         return [x + Math.cos(angle) * r, y + Math.sin(angle) * r, z];
       });
+
     const points = rings.map(ring);
+
     for (let i = 0; i < rings.length - 1; i++) {
       const [z0, , y0] = rings[i];
       const [z1, , y1] = rings[i + 1];
       const inside: Vec = [x, (y0 + y1) / 2, (z0 + z1) / 2];
+
       for (let j = 0; j < sides; j++) {
         const k = (j + 1) % sides;
         const [a, b] = [points[i][j], points[i][k]];
@@ -50,10 +58,12 @@ class Builder {
         this.triangle(inside, tail, b, d, c);
       }
     }
+
     for (const end of [0, rings.length - 1]) {
       const [z, , y] = rings[end];
       const centre: Vec = [x, y, z];
       const inside: Vec = [x, y, z + (end === 0 ? 1 : -1)];
+
       for (let j = 0; j < sides; j++) {
         const next = points[end][(j + 1) % sides];
         this.triangle(inside, tail, centre, points[end][j], next);
@@ -66,21 +76,24 @@ class Builder {
    * moved by `thickness`, joined round the sides.
    */
   slab(outline: Vec[], thickness: Vec, tail = 0) {
-    const other = outline.map(
-      (p): Vec => [
-        p[0] + thickness[0],
-        p[1] + thickness[1],
-        p[2] + thickness[2],
-      ]
-    );
+    const other = outline.map((p): Vec => [
+      p[0] + thickness[0],
+      p[1] + thickness[1],
+      p[2] + thickness[2],
+    ]);
+
     const all = [...outline, ...other];
-    const inside = [0, 1, 2].map(
-      (k) => all.reduce((sum, p) => sum + p[k], 0) / all.length
-    ) as Vec;
+
+    const mean = (k: number) =>
+      all.reduce((sum, p) => sum + p[k], 0) / all.length;
+
+    const inside: Vec = [mean(0), mean(1), mean(2)];
+
     for (let i = 1; i < outline.length - 1; i++) {
       this.triangle(inside, tail, outline[0], outline[i], outline[i + 1]);
       this.triangle(inside, tail, other[0], other[i], other[i + 1]);
     }
+
     outline.forEach((a, i) => {
       const j = (i + 1) % outline.length;
       this.triangle(inside, tail, a, outline[j], other[i]);
@@ -143,6 +156,7 @@ class Builder {
       new BufferAttribute(new Float32Array(this.tail), 1)
     );
     geometry.computeVertexNormals();
+
     return geometry;
   }
 }
@@ -159,6 +173,7 @@ export function createJetGeometry() {
     [0.5, 0.008, 0.03],
   ]);
   b.wings(-0.035, [-0.1, 0.12], 0.475, [0.13, 0.2], 0.012);
+
   for (const x of [-0.17, 0.17]) {
     b.tube(
       [
@@ -169,8 +184,10 @@ export function createJetGeometry() {
       x
     );
   }
+
   b.wings(0.012, [0.36, 0.48], 0.17, [0.45, 0.5], 0.008);
   b.fin(0.03, [0.28, 0.48], 0.17, [0.43, 0.5], 0.012);
+
   return b.build();
 }
 
@@ -186,6 +203,7 @@ export function createPropGeometry() {
     [0.5, 0.008, 0.04],
   ]);
   b.wings(0.045, [-0.13, 0.0], 0.55, [-0.1, -0.03], 0.014);
+
   for (const x of [-0.17, 0.17]) {
     b.tube(
       [
@@ -196,8 +214,10 @@ export function createPropGeometry() {
       x
     );
   }
+
   b.fin(0.035, [0.28, 0.48], 0.19, [0.41, 0.5], 0.012);
   b.wings(0.22, [0.41, 0.5], 0.18, [0.45, 0.5], 0.008, 1);
+
   return b.build();
 }
 
@@ -214,15 +234,18 @@ export function createHelicopterGeometry() {
     [0.5, 0.01, 0.065],
   ]);
   b.fin(0.04, [0.4, 0.5], 0.12, [0.45, 0.5], 0.012);
+
   for (const angle of [Math.PI / 4, -Math.PI / 4]) {
     const [c, s] = [Math.cos(angle), Math.sin(angle)];
     const half = 0.45;
     const width = 0.015;
+
     const blade = (u: number, v: number): Vec => [
       c * u - s * v,
       0.15,
       s * u + c * v - 0.15,
     ];
+
     b.slab(
       [
         blade(-half, -width),
@@ -233,5 +256,6 @@ export function createHelicopterGeometry() {
       [0, 0.006, 0]
     );
   }
+
   return b.build();
 }

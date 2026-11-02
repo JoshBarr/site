@@ -43,13 +43,17 @@ export interface Wind {
 
 /** Thin parts are drawn at least this many pixels wide. */
 const MIN_PIXELS = 0.9;
+
 /** Gusts, as a fraction of the mean wind. */
 const TURBULENCE = 0.15;
+
 /** How long the controller averages wind over to start or stop, s. */
 const START_AVERAGING = 30;
+
 /** Nacelles slew once the averaged misalignment passes this, and stop near zero. */
 const YAW_DEADBAND = (8 * Math.PI) / 180;
 const YAW_SETTLED = (1 * Math.PI) / 180;
+
 /** Fastest pitch change, radians per second. */
 const PITCH_RATE = (6 * Math.PI) / 180;
 
@@ -105,6 +109,7 @@ export function WindTurbines({
     () => createTurbineMeshes(model, positions),
     [model, positions]
   );
+
   useEffect(() => () => parts.dispose(), [parts]);
 
   // Per-turbine variety: exposure on its ridge, how it sits to the wind.
@@ -138,6 +143,7 @@ export function WindTurbines({
         const wind = hubWind * variety[i].exposure;
         const running = shouldRun(model, wind, false);
         const { rpm, pitch } = operatingPoint(model, wind, running);
+
         return {
           yaw:
             from + variety[i].yawOffset + (random(i * 7) - 0.5) * YAW_DEADBAND,
@@ -157,18 +163,20 @@ export function WindTurbines({
     const towardX = -Math.sin(from);
     const towardZ = Math.cos(from);
     const travel = Math.max(hubWind, 1);
-    const spin = parts.blades.geometry.getAttribute(
-      "pose"
-    ) as InstancedBufferAttribute;
-    const facing = parts.nacelles.geometry.getAttribute(
-      "pose"
-    ) as InstancedBufferAttribute;
+
+    const spin = parts.blades.geometry.getAttribute("pose");
+    const facing = parts.nacelles.geometry.getAttribute("pose");
+
+    if (!(spin instanceof InstancedBufferAttribute)) return;
+
+    if (!(facing instanceof InstancedBufferAttribute)) return;
 
     state.current.forEach((turbine, i) => {
       const { exposure, yawOffset, phase } = variety[i];
       const [x, , z] = positions[i];
       const delay = (x * towardX + z * towardZ) / travel;
       const fluctuation = 0.65 * gust(t - delay, 0) + 0.35 * gust(t, phase);
+
       const wind = Math.max(
         hubWind * exposure * (1 + TURBULENCE * fluctuation),
         0
@@ -193,14 +201,17 @@ export function WindTurbines({
         const error = wrap(from + yawOffset + wander - turbine.yaw);
         turbine.misalignment +=
           (error - turbine.misalignment) * (1 - Math.exp(-dt / 15));
+
         if (!turbine.yawing && Math.abs(turbine.misalignment) > YAW_DEADBAND) {
           turbine.yawing = true;
         }
+
         if (turbine.yawing) {
           const step = ((model.yawRate * Math.PI) / 180) * dt;
           turbine.yaw = wrap(
             turbine.yaw + Math.sign(error) * Math.min(Math.abs(error), step)
           );
+
           if (Math.abs(error) < YAW_SETTLED) turbine.yawing = false;
         }
       }
@@ -208,6 +219,7 @@ export function WindTurbines({
       // The meshes face +z; turn that to face the bearing (x east, z south).
       const heading = Math.PI - turbine.yaw;
       facing.setX(i, heading);
+
       for (let b = 0; b < 3; b++) {
         spin.setXYZ(
           i * 3 + b,
@@ -249,6 +261,7 @@ function instanced(
   const poseAttribute = new InstancedBufferAttribute(pose, 4);
   poseAttribute.setUsage(DynamicDrawUsage);
   geometry.setAttribute("pose", poseAttribute);
+
   return count;
 }
 
@@ -264,6 +277,7 @@ function createTurbineMeshes(
   const pixel = cameraPosition
     .distance(top.add(vec3(0, model.hubAbove, 0)))
     .mul(pixelAngle);
+
   const widen = (width: number) =>
     max(float(1), pixel.mul(MIN_PIXELS).div(width));
 
@@ -293,16 +307,21 @@ function createTurbineMeshes(
   // Blades: pitch about the span, cone, spin about the shaft, then the
   // shaft's tilt and the nacelle's yaw.
   const bladeWiden = widen(typicalChord(model));
+
   const orient = (v, withOffsets: boolean) => {
     let p: any = rotateY(v, pose.z.negate());
     p = rotateX(p, model.cone);
     p = rotateZ(p, pose.y.negate());
+
     if (withOffsets) p = p.add(vec3(0, 0, model.overhang));
     p = rotateX(p, -model.tilt);
+
     if (withOffsets) p = p.add(vec3(0, model.hubAbove, 0));
     p = rotateY(p, pose.x);
+
     return withOffsets ? p.add(top) : p;
   };
+
   const bladeMaterial = material();
   bladeMaterial.positionNode = orient(
     positionGeometry.mul(vec3(bladeWiden, 1, bladeWiden)),
@@ -323,6 +342,7 @@ function createTurbineMeshes(
     // Instances are placed in the shader; the geometry's bounds mean nothing.
     object.frustumCulled = false;
     castsNearShadow(object);
+
     return object;
   };
 
@@ -337,7 +357,7 @@ function createTurbineMeshes(
     dispose() {
       for (const object of [towers, nacelles, blades]) {
         object.geometry.dispose();
-        (object.material as MeshStandardNodeMaterial).dispose();
+        object.material.dispose();
       }
     },
   };

@@ -34,8 +34,9 @@ export interface TrainsResponse {
  * which is drawn a little behind live.
  */
 export const TRAIL = 3 * 60_000;
+
 /** A train not heard from in this long has gone out of service, or dark. */
-export const STALE = 5 * 60_000;
+const STALE = 5 * 60_000;
 
 /**
  * The terrain root the scene covers, NZTM [west, south, east, north]:

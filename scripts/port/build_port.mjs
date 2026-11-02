@@ -19,6 +19,7 @@ const ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../.."
 );
+
 const TERRAIN = path.join(ROOT, "public/terrain");
 const OUT = path.join(ROOT, "src/components/scene/port/terminal.ts");
 
@@ -67,6 +68,7 @@ const YARD = [
 
 async function loadOsm() {
   const cached = process.argv.indexOf("--osm");
+
   if (cached > 0)
     return JSON.parse(await readFile(process.argv[cached + 1], "utf8"));
 
@@ -79,7 +81,9 @@ async function loadOsm() {
     },
     body: new URLSearchParams({ data: QUERY }),
   });
+
   if (!response.ok) throw new Error(`overpass: ${response.status}`);
+
   return response.json();
 }
 
@@ -87,18 +91,22 @@ const { groundHeight: sampleGround } = await createGroundSampler(TERRAIN);
 
 async function groundHeight(easting, northing) {
   const height = await sampleGround(easting, northing);
+
   if (height === undefined) {
     throw new Error(`no terrain under ${easting}, ${northing}`);
   }
+
   return height;
 }
 
 const radians = (degrees) => (degrees * Math.PI) / 180;
+
 // Unit vectors (east, north) along the wharf and seaward across it.
 const along = [
   Math.sin(radians(WHARF_BEARING)),
   Math.cos(radians(WHARF_BEARING)),
 ];
+
 const seaward = [
   Math.sin(radians(WHARF_BEARING - 90)),
   Math.cos(radians(WHARF_BEARING - 90)),
@@ -107,6 +115,7 @@ const seaward = [
 // --- Cranes: on one rail, so set them on a common line along the wharf. ---
 
 const osm = await loadOsm();
+
 const nodes = osm.elements
   .filter(
     (e) =>
@@ -115,28 +124,35 @@ const nodes = osm.elements
       e.tags["seamark:crane:category"] === "container"
   )
   .map((node) => toNztm(node.lat, node.lon));
+
 if (nodes.length !== 2) {
   console.warn(`cranes: expected 2, found ${nodes.length}`);
 }
+
 const mean = [0, 1].map(
   (i) => nodes.reduce((sum, p) => sum + p[i], 0) / nodes.length
 );
+
 const cranes = [];
+
 for (const [e, n] of nodes) {
   const t = (e - mean[0]) * along[0] + (n - mean[1]) * along[1];
   const ce = mean[0] + along[0] * t;
   const cn = mean[1] + along[1] * t;
   cranes.push({ t, e: ce, n: cn, ground: await groundHeight(ce, cn) });
 }
+
 // North to south along the wharf.
 cranes.sort((a, b) => a.t - b.t);
 
 // --- Blocks: stood on the lowest ground under them, so none float. ---
 
 const blocks = [];
+
 for (const block of YARD) {
   const [e, n] = block.centre;
   let ground = Infinity;
+
   for (const [a, s] of [
     [0, 0],
     [-1, -1],
@@ -154,6 +170,7 @@ for (const block of YARD) {
       )
     );
   }
+
   blocks.push({ ...block, ground });
 }
 

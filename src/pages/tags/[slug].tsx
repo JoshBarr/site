@@ -1,5 +1,4 @@
 import React from "react";
-import Link from "next/link";
 import Layout from "../../components/layout";
 import SEO from "../../components/seo";
 import { GetStaticPaths, GetStaticProps } from "next";
@@ -13,7 +12,7 @@ interface TagsPageProps {
   posts: PostMetaWithFrontMatter[];
 }
 
-const Tags: React.FC<TagsPageProps> = ({ name, slug, count, posts }) => (
+const Tags: React.FC<TagsPageProps> = ({ name, posts }) => (
   <Layout>
     <SEO title="Tags" thumbnail={undefined} />
     <div className="container generic-page ">
@@ -39,14 +38,10 @@ export default Tags;
 export const getStaticProps: GetStaticProps<TagsPageProps> = async (req) => {
   const postsByTag = await getAllPostsByTag();
 
-  const tag = postsByTag.find((tagGroup) => tagGroup.slug === req.params.slug);
+  const tag = postsByTag.find((tagGroup) => tagGroup.slug === req.params?.slug);
 
   if (!tag) {
-    return {
-      redirect: "/tags",
-      // bug(types): redirects shouldn't require all props to be set
-      props: {} as any,
-    };
+    return { redirect: { destination: "/tags", permanent: false } };
   }
 
   return {

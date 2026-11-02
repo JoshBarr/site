@@ -1,0 +1,11 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
+  // Pages, the Next config, Vitest and oxlint are found by knip's plugins.
+  // These are run some other way.
+  "entry": [
+    // Run by scripts/build_assets.sh, or by hand.
+    "scripts/**/*.mjs",
+  ],
+  // Vendored, unchanged: see tools/oxlint/anti-slop/UPSTREAM.md.
+  "ignore": ["tools/oxlint/anti-slop/**"],
+}

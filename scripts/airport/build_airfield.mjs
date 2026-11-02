@@ -21,6 +21,7 @@ const ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../.."
 );
+
 const TERRAIN = path.join(ROOT, "public/terrain");
 const OUT_TS = path.join(ROOT, "src/components/scene/airport/airfield.ts");
 const OUT_DIR = path.join(ROOT, "public/airport");
@@ -31,14 +32,18 @@ out geom;`;
 
 /** Taxiways aren't tagged with a width; WLG's are code C/D, about 23 m. */
 const TAXIWAY_WIDTH = 23;
+
 /** Texture extent beyond the aerodrome boundary, metres. */
 const MARGIN = 16;
+
 /** Metres per texel of the line and ground textures. */
 const LINE_TEXEL = 1;
 const GROUND_TEXEL = 2;
+
 /** Encoded range of the line offsets and of the paving's signed distance. */
 const LINE_RANGE = 4;
 const PAVE_RANGE = 8;
+
 /** Runway-holding bars run across the taxiway, this deep. */
 const HOLDING_DEPTH = 1.2;
 
@@ -47,12 +52,14 @@ const EDGE_SPACING = 60;
 const TAXI_EDGE_SPACING = 30;
 const THRESHOLD_SPACING = 3;
 const END_LIGHTS = 8;
+
 /** PAPI boxes: 9 m apart; from the runway outward, these angles (degrees). */
 const PAPI_SPACING = 9;
 const PAPI_ANGLES = [3.5, 3 + 10 / 60, 2 + 50 / 60, 2.5];
 
 async function loadOsm() {
   const cached = process.argv.indexOf("--osm");
+
   if (cached > 0)
     return JSON.parse(await readFile(process.argv[cached + 1], "utf8"));
 
@@ -65,7 +72,9 @@ async function loadOsm() {
     },
     body: new URLSearchParams({ data: QUERY }),
   });
+
   if (!response.ok) throw new Error(`overpass: ${response.status}`);
+
   return response.json();
 }
 
@@ -76,8 +85,10 @@ function stitch(ways) {
   const pending = ways.filter((w) => w.length >= 2);
   const rings = [];
   const same = (a, b) => a[0] === b[0] && a[1] === b[1];
+
   while (pending.length) {
-    let ring = [...pending.pop()];
+    const ring = [...pending.pop()];
+
     while (!same(ring[0], ring.at(-1))) {
       const i = pending.findIndex(
         (w) =>
@@ -86,22 +97,27 @@ function stitch(ways) {
           same(w.at(-1), ring[0]) ||
           same(w[0], ring[0])
       );
+
       if (i < 0) break; // Clipped or broken: filling closes it anyway.
       const [way] = pending.splice(i, 1);
-      if (same(way[0], ring.at(-1))) ring = [...ring, ...way.slice(1)];
+
+      if (same(way[0], ring.at(-1))) ring.push(...way.slice(1));
       else if (same(way.at(-1), ring.at(-1)))
-        ring = [...ring, ...way.slice(0, -1).reverse()];
-      else if (same(way.at(-1), ring[0])) ring = [...way.slice(0, -1), ...ring];
-      else ring = [...way.slice(1).reverse(), ...ring];
+        ring.push(...way.slice(0, -1).reverse());
+      else if (same(way.at(-1), ring[0])) ring.unshift(...way.slice(0, -1));
+      else ring.unshift(...way.slice(1).reverse());
     }
+
     rings.push(ring);
   }
+
   return rings;
 }
 
 /** Rings of an area: a closed way, or a multipolygon's members. */
 function rings(element) {
   if (element.type === "way") return [project(element.geometry)];
+
   return stitch(
     element.members
       .filter((m) => m.type === "way" && m.geometry)
@@ -113,11 +129,13 @@ function rings(element) {
 
 const osm = await loadOsm();
 const elements = osm.elements;
-const tagged = (aeroway) =>
-  elements.filter((e) => e.tags?.aeroway === aeroway);
+
+const tagged = (aeroway) => elements.filter((e) => e.tags?.aeroway === aeroway);
 
 const aerodrome = tagged("aerodrome").find((e) => e.tags.icao === "NZWN");
+
 if (!aerodrome) throw new Error("no NZWN aerodrome");
+
 const aerodromeRings = stitch(
   aerodrome.members
     .filter((m) => m.role === "outer" && m.geometry)
@@ -135,14 +153,17 @@ const north = pavement.reduce((a, b) => (b[1] > a[1] ? b : a));
 const length = Math.hypot(north[0] - south[0], north[1] - south[1]);
 const axis = [(north[0] - south[0]) / length, (north[1] - south[1]) / length];
 const along = ([e, n]) => (e - south[0]) * axis[0] + (n - south[1]) * axis[1];
+
 /** Positive to the east of the centreline. */
 const across = ([e, n]) => (e - south[0]) * axis[1] - (n - south[1]) * axis[0];
+
 const at = (a, c) => [
   south[0] + axis[0] * a + axis[1] * c,
   south[1] + axis[1] * a - axis[0] * c,
 ];
 
 const stopwayAlong = stopways.flatMap((w) => project(w.geometry).map(along));
+
 const stopway = [
   Math.max(0, -Math.min(...stopwayAlong)),
   Math.max(0, Math.max(...stopwayAlong) - length),
@@ -151,6 +172,7 @@ const stopway = [
 const thresholds = Object.fromEntries(
   tagged("threshold").map((t) => [t.tags.ref, along(toNztm(t.lat, t.lon))])
 );
+
 if (thresholds["34"] === undefined || thresholds["16"] === undefined) {
   throw new Error("missing a threshold");
 }
@@ -160,13 +182,20 @@ if (thresholds["34"] === undefined || thresholds["16"] === undefined) {
 const all = aerodromeRings.flat();
 const west = Math.floor(Math.min(...all.map((p) => p[0])) - MARGIN);
 const southEdge = Math.floor(Math.min(...all.map((p) => p[1])) - MARGIN);
+
 // Whole ground texels, so both textures span the same bounds.
-const cols = Math.ceil(
-  (Math.max(...all.map((p) => p[0])) + MARGIN - west) / GROUND_TEXEL
-) * (GROUND_TEXEL / LINE_TEXEL);
-const rows = Math.ceil(
-  (Math.max(...all.map((p) => p[1])) + MARGIN - southEdge) / GROUND_TEXEL
-) * (GROUND_TEXEL / LINE_TEXEL);
+const cols =
+  Math.ceil(
+    (Math.max(...all.map((p) => p[0])) + MARGIN - west) / GROUND_TEXEL
+  ) *
+  (GROUND_TEXEL / LINE_TEXEL);
+
+const rows =
+  Math.ceil(
+    (Math.max(...all.map((p) => p[1])) + MARGIN - southEdge) / GROUND_TEXEL
+  ) *
+  (GROUND_TEXEL / LINE_TEXEL);
+
 const northEdge = southEdge + rows * LINE_TEXEL;
 const east = west + cols * LINE_TEXEL;
 
@@ -179,29 +208,41 @@ const texel = (i, j) => [
 /** Even-odd fill of rings, sampled at texel centres. */
 function fill(ringList, out) {
   const inside = new Uint8Array(cols * rows);
+
   for (let j = 0; j < rows; j++) {
     const n = northEdge - (j + 0.5) * LINE_TEXEL;
     const crossings = [];
+
     for (const ring of ringList) {
       for (let k = 0; k < ring.length; k++) {
         const a = ring[k];
         const b = ring[(k + 1) % ring.length];
+
         if (a[1] > n !== b[1] > n) {
           crossings.push(a[0] + ((n - a[1]) / (b[1] - a[1])) * (b[0] - a[0]));
         }
       }
     }
+
     crossings.sort((a, b) => a - b);
+
     for (let k = 0; k + 1 < crossings.length; k += 2) {
-      const i0 = Math.max(0, Math.ceil((crossings[k] - west) / LINE_TEXEL - 0.5));
+      const i0 = Math.max(
+        0,
+        Math.ceil((crossings[k] - west) / LINE_TEXEL - 0.5)
+      );
+
       const i1 = Math.min(
         cols - 1,
         Math.floor((crossings[k + 1] - west) / LINE_TEXEL - 0.5)
       );
+
       for (let i = i0; i <= i1; i++) inside[j * cols + i] ^= 1;
     }
   }
+
   if (out) for (let k = 0; k < inside.length; k++) out[k] |= inside[k];
+
   return inside;
 }
 
@@ -219,19 +260,24 @@ function stamp(a, b, reach, distance, nearest) {
   const dx = b[0] - a[0];
   const dy = b[1] - a[1];
   const length2 = dx * dx + dy * dy || 1;
+
   for (let j = j0; j <= j1; j++) {
     for (let i = i0; i <= i1; i++) {
       const [px, py] = texel(i, j);
+
       const t = Math.min(
         Math.max(((px - a[0]) * dx + (py - a[1]) * dy) / length2, 0),
         1
       );
+
       const qx = a[0] + t * dx;
       const qy = a[1] + t * dy;
       const d = Math.hypot(px - qx, py - qy);
       const k = j * cols + i;
+
       if (d < distance[k]) {
         distance[k] = d;
+
         if (nearest) {
           nearest[k * 2] = qx - px;
           nearest[k * 2 + 1] = qy - py;
@@ -241,19 +287,21 @@ function stamp(a, b, reach, distance, nearest) {
   }
 }
 
-const segments = (points) =>
-  points.slice(1).map((p, k) => [points[k], p]);
+const segments = (points) => points.slice(1).map((p, k) => [points[k], p]);
 
 // Taxiway centrelines, and the areas mapped as polygons.
 const taxiways = tagged("taxiway");
+
 const centrelines = taxiways
   .filter((w) => w.tags.area !== "yes")
   .map((w) => ({ way: w, points: project(w.geometry) }));
+
 const paveRings = [
   ...tagged("apron").flatMap(rings),
   ...tagged("helipad").flatMap(rings),
   ...taxiways.filter((w) => w.tags.area === "yes").flatMap(rings),
 ];
+
 const concreteRings = tagged("apron")
   .filter((e) => e.tags.surface === "concrete")
   .flatMap(rings);
@@ -262,6 +310,7 @@ const size = cols * rows;
 const taxiDistance = new Float32Array(size).fill(Infinity);
 const taxiNearest = new Float32Array(size * 2);
 const halfWidth = TAXIWAY_WIDTH / 2;
+
 for (const { points } of centrelines) {
   for (const [a, b] of segments(points)) {
     stamp(a, b, halfWidth + PAVE_RANGE, taxiDistance, taxiNearest);
@@ -271,42 +320,57 @@ for (const { points } of centrelines) {
 // Paving as a union of polygons and taxiway corridors: signed depth, inside
 // positive.
 const paveInside = new Uint8Array(size);
+
 for (const ring of paveRings) fill([ring], paveInside);
+
 const edgeDistance = new Float32Array(size).fill(Infinity);
+
 for (const ring of paveRings) {
   for (const [a, b] of segments([...ring, ring[0]])) {
     stamp(a, b, PAVE_RANGE + 1, edgeDistance);
   }
 }
+
 const paveDepth = new Float32Array(size);
+
 for (let k = 0; k < size; k++) {
   const polygon = paveInside[k]
     ? Math.min(edgeDistance[k], PAVE_RANGE)
     : -Math.min(edgeDistance[k], PAVE_RANGE);
+
   const corridor = halfWidth - taxiDistance[k];
   paveDepth[k] = Math.max(polygon, corridor);
 }
+
 const pavedAt = ([e, n]) => {
   const i = Math.floor((e - west) / LINE_TEXEL);
   const j = Math.floor((northEdge - n) / LINE_TEXEL);
+
   if (i < 0 || j < 0 || i >= cols || j >= rows) return -PAVE_RANGE;
+
   return paveDepth[j * cols + i];
 };
 
 // Runway-holding positions: a bar across the taxiway at each.
 const nodeWays = new Map();
+
 for (const { way, points } of centrelines) {
   way.nodes.forEach((id, k) => {
     if (!nodeWays.has(id)) nodeWays.set(id, { points, k });
   });
 }
+
 const holdingDistance = new Float32Array(size).fill(Infinity);
+
 const holds = tagged("holding_position").filter((h) =>
   ["runway", "ILS"].includes(h.tags["holding_position:type"])
 );
+
 let holdingBars = 0;
+
 for (const hold of holds) {
   const found = nodeWays.get(hold.id);
+
   if (!found) continue;
   const { points, k } = found;
   const a = points[Math.max(k - 1, 0)];
@@ -325,6 +389,7 @@ for (const hold of holds) {
 
 const aerodromeInside = fill(aerodromeRings);
 const concreteInside = new Uint8Array(size);
+
 for (const ring of concreteRings) fill([ring], concreteInside);
 
 // --- Encode. ---
@@ -332,16 +397,19 @@ for (const ring of concreteRings) fill([ring], concreteInside);
 const byte = (v) => Math.round(Math.min(Math.max(v, 0), 1) * 255);
 
 const lines = Buffer.alloc(size * 3);
+
 for (let k = 0; k < size; k++) {
   // Offset to the nearest centreline point in world x (east) and z (south).
   let x = taxiNearest[k * 2];
   let z = -taxiNearest[k * 2 + 1];
   const d = Math.hypot(x, z);
+
   if (!Number.isFinite(taxiDistance[k])) x = z = LINE_RANGE;
   else if (d > LINE_RANGE) {
     x *= LINE_RANGE / d;
     z *= LINE_RANGE / d;
   }
+
   lines[k * 3] = byte(0.5 + x / (2 * LINE_RANGE));
   lines[k * 3 + 1] = byte(0.5 + z / (2 * LINE_RANGE));
   lines[k * 3 + 2] = byte(holdingDistance[k] / LINE_RANGE);
@@ -351,11 +419,13 @@ const scale = GROUND_TEXEL / LINE_TEXEL;
 const groundCols = cols / scale;
 const groundRows = rows / scale;
 const ground = Buffer.alloc(groundCols * groundRows * 3);
+
 for (let j = 0; j < groundRows; j++) {
   for (let i = 0; i < groundCols; i++) {
     let depth = 0;
     let field = 0;
     let concrete = 0;
+
     for (let v = 0; v < scale; v++) {
       for (let u = 0; u < scale; u++) {
         const k = (j * scale + v) * cols + i * scale + u;
@@ -364,6 +434,7 @@ for (let j = 0; j < groundRows; j++) {
         concrete += concreteInside[k];
       }
     }
+
     const n = scale * scale;
     const p = (j * groundCols + i) * 3;
     ground[p] = byte(0.5 + depth / n / (2 * PAVE_RANGE));
@@ -373,19 +444,25 @@ for (let j = 0; j < groundRows; j++) {
 }
 
 await mkdir(OUT_DIR, { recursive: true });
+
 const png = (data, width, height, file) =>
   sharp(data, { raw: { width, height, channels: 3 } })
     .png({ compressionLevel: 9, adaptiveFiltering: true })
     .toFile(path.join(OUT_DIR, file));
+
 await png(lines, cols, rows, "lines.png");
+
 await png(ground, groundCols, groundRows, "ground.png");
 
 // --- Lights. ---
 
 const { groundHeight: sampleGround } = await createGroundSampler(TERRAIN);
+
 async function groundHeight([e, n]) {
   const height = await sampleGround(e, n);
+
   if (height === undefined) throw new Error(`no terrain under ${e}, ${n}`);
+
   return height;
 }
 
@@ -395,14 +472,19 @@ const northward = bearing(axis);
 const southward = (northward + 180) % 360;
 
 const lights = { edge: [], threshold: [], end: [], taxiway: [], papi: [] };
+
 const push = async (list, point, ...rest) =>
   list.push([...point, await groundHeight(point), ...rest]);
 
 // Edge lights a metre off the pavement, both sides, end to end.
 const edgeCount = Math.ceil(length / EDGE_SPACING);
+
 for (let k = 0; k <= edgeCount; k++) {
   for (const side of [-1, 1]) {
-    await push(lights.edge, at((k / edgeCount) * length, side * (width / 2 + 1)));
+    await push(
+      lights.edge,
+      at((k / edgeCount) * length, side * (width / 2 + 1))
+    );
   }
 }
 
@@ -412,11 +494,13 @@ for (const [a, facing] of [
   [thresholds["16"], northward],
 ]) {
   const count = Math.round(width / THRESHOLD_SPACING);
+
   for (let k = 0; k < count; k++) {
     const c = -width / 2 + (k + 0.5) * (width / count);
     await push(lights.threshold, at(a, c), facing);
   }
 }
+
 for (const [a, facing] of [
   [0, northward],
   [length, southward],
@@ -435,12 +519,15 @@ for (const node of tagged("navigationaid").filter(
   const point = toNztm(node.lat, node.lon);
   const a = along(point);
   const c = across(point);
+
   const serves =
     Math.abs(a - thresholds["34"]) < Math.abs(a - thresholds["16"])
       ? "34"
       : "16";
+
   const facing = serves === "34" ? southward : northward;
   const side = Math.sign(c);
+
   for (let k = 0; k < 4; k++) {
     const offset = (k - 1.5) * PAPI_SPACING;
     await push(lights.papi, at(a, c + side * offset), facing, PAPI_ANGLES[k]);
@@ -453,38 +540,50 @@ const onRunway = (p) =>
   Math.abs(across(p)) < width / 2 + 10 &&
   along(p) > -stopway[0] - 10 &&
   along(p) < length + stopway[1] + 10;
+
 const taxiLights = [];
+
 for (const { points } of centrelines) {
   let carried = 0;
+
   for (const [a, b] of segments(points)) {
     const d = Math.hypot(b[0] - a[0], b[1] - a[1]);
     const normal = [-(b[1] - a[1]) / d, (b[0] - a[0]) / d];
+
     for (let s = carried; s < d; s += TAXI_EDGE_SPACING) {
       const t = s / d;
       const centre = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+
       for (const side of [-1, 1]) {
         const p = [
           centre[0] + normal[0] * side * (halfWidth + 1),
           centre[1] + normal[1] * side * (halfWidth + 1),
         ];
+
         if (pavedAt(p) > -0.5 || onRunway(p)) continue;
+
         if (taxiLights.some((q) => Math.hypot(q[0] - p[0], q[1] - p[1]) < 12))
           continue;
         taxiLights.push(p);
       }
     }
+
     carried = (carried - d) % TAXI_EDGE_SPACING;
+
     if (carried < 0) carried += TAXI_EDGE_SPACING;
   }
 }
+
 for (const p of taxiLights) await push(lights.taxiway, p);
 
 // --- Write. ---
 
 const f1 = (v) => v.toFixed(1);
 const f2 = (v) => v.toFixed(2);
+
 const rowsOf = (list, format) =>
   list.map((entry) => `  [${format(entry).join(", ")}],`).join("\n");
+
 const point = ([e, n, g]) => [f1(e), f1(n), f2(g)];
 
 await writeFile(
@@ -571,9 +670,11 @@ console.log(
     thresholds["16"]
   )}, stopways ${stopway.map(f1).join("/")}`
 );
+
 console.log(
   `textures ${cols}x${rows} (lines), ${groundCols}x${groundRows} (ground); ${holdingBars} holding bars`
 );
+
 console.log(
   Object.entries(lights)
     .map(([name, list]) => `${name}: ${list.length}`)

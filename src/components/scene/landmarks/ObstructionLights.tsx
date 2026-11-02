@@ -32,16 +32,20 @@ export interface ObstructionLight {
 
 /** Flashes per minute for flashing lights, as seen at Wellington's farms. */
 const FLASHES_PER_MINUTE = 2;
+
 /** How long each flash stays lit, in seconds. */
 const FLASH_SECONDS = 1;
+
 /** Each light runs this much fast or slow, so they drift in and out of step. */
 const RATE_SPREAD = 0.08;
 
 /** Deterministic 0..1 noise from an integer, so lights keep their timing. */
 function hash(i: number, salt: number) {
   const s = Math.sin(i * 127.1 + salt * 311.7) * 43758.5453;
+
   return s - Math.floor(s);
 }
+
 /**
  * Never smaller than this many pixels across. Real ones are a pixel or two
  * at range but dazzle; a screen can't, so they're drawn big and soft instead.
@@ -63,14 +67,17 @@ export function ObstructionLights({ lights }: { lights: ObstructionLight[] }) {
         i * 3
       );
     });
+
     const light = instancedBufferAttribute<"vec4">(
       new InstancedBufferAttribute(data, 4),
       "vec4"
     );
+
     const clock = instancedBufferAttribute<"vec3">(
       new InstancedBufferAttribute(timing, 3),
       "vec3"
     );
+
     const position = light.xyz;
 
     const material = new SpriteNodeMaterial({
@@ -78,6 +85,7 @@ export function ObstructionLights({ lights }: { lights: ObstructionLight[] }) {
       depthWrite: false,
       blending: AdditiveBlending,
     });
+
     // They glow rather than fog. Haze dims them, but only partly: they're far
     // brighter than anything they're seen against.
     material.fog = false;
@@ -91,9 +99,11 @@ export function ObstructionLights({ lights }: { lights: ObstructionLight[] }) {
     const period = 60 / FLASHES_PER_MINUTE;
     // Seconds into this light's cycle.
     const t = fract(time.mul(clock.y).div(period).add(clock.x)).mul(period);
+
     const flash = smoothstep(0, 0.1, t).mul(
       float(1).sub(smoothstep(FLASH_SECONDS * 0.7, FLASH_SECONDS, t))
     );
+
     const on = mix(float(1), flash, light.w).mul(
       step(clock.z, obstructionLights)
     );
@@ -110,6 +120,7 @@ export function ObstructionLights({ lights }: { lights: ObstructionLight[] }) {
     object.count = lights.length;
     object.frustumCulled = false;
     object.renderOrder = 10;
+
     return object;
   }, [lights]);
 

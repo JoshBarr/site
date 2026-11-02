@@ -11,7 +11,10 @@ export class TrailMaterial extends Line2NodeMaterial {
     this.transparent = false;
     super.setupDiffuseColor(builder);
     this.transparent = true;
+
     if (this.opacityNode) {
+      // SAFETY: opacity is a float, whatever node sets it; materials type
+      // opacityNode as any node.
       diffuseColor.a.mulAssign(this.opacityNode as Node<"float">);
     }
   }

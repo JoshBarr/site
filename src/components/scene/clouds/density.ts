@@ -30,7 +30,7 @@ import { coverageMap, LOW_ANGLE, MID_ANGLE } from "./coverage";
  * offset is a drift in metres that the wind advances each frame. For cirrus,
  * shape is (altitude, coverage, -, -).
  */
-export function createLayerUniforms() {
+function createLayerUniforms() {
   return {
     shape: uniform(new Vector4(1000, 1600, 0, 1)),
     offset: uniform(new Vector2()),
@@ -50,30 +50,35 @@ export const NOISE_SIZE = 64;
 export const WEATHER_SIZE = 256;
 
 function createNoise() {
+  const shapeData = new Uint8Array(NOISE_SIZE ** 3 * 4);
+  const weatherData = new Uint8Array(WEATHER_SIZE ** 2 * 4);
+
   const shape = new Data3DTexture(
-    new Uint8Array(NOISE_SIZE ** 3 * 4),
+    shapeData,
     NOISE_SIZE,
     NOISE_SIZE,
     NOISE_SIZE
   );
+
   shape.format = RGBAFormat;
   shape.wrapS = shape.wrapT = shape.wrapR = RepeatWrapping;
   shape.minFilter = shape.magFilter = LinearFilter;
   shape.needsUpdate = true;
 
   const weather = new DataTexture(
-    new Uint8Array(WEATHER_SIZE ** 2 * 4),
+    weatherData,
     WEATHER_SIZE,
     WEATHER_SIZE,
     RGBAFormat
   );
+
   weather.wrapS = weather.wrapT = RepeatWrapping;
   weather.magFilter = LinearFilter;
   weather.minFilter = LinearMipmapLinearFilter;
   weather.generateMipmaps = true;
   weather.needsUpdate = true;
 
-  return { shape, weather };
+  return { shape, weather, shapeData, weatherData };
 }
 
 /**
@@ -85,12 +90,14 @@ export const cloudNoise = createNoise();
 
 /** Extinction per metre at full density. */
 export const EXTINCTION = 0.035;
+
 /** Cloud body noise repeats every this many metres. */
 const SHAPE_SCALE = 3200;
 const DETAIL_SCALE = 520;
 
 export const remap = (v, a, b, c, d) =>
   c.add(v.sub(a).div(b.sub(a)).mul(d.sub(c)));
+
 export const saturate = (v) => clamp(v, 0, 1);
 
 export interface LayerStyle {
@@ -108,6 +115,7 @@ export const LOW_STYLE: LayerStyle = {
   angle: LOW_ANGLE,
   scale: SHAPE_SCALE,
 };
+
 export const MID_STYLE: LayerStyle = {
   flatTop: 0.5,
   angle: MID_ANGLE,
@@ -153,14 +161,17 @@ export function layerDensity(
     // edge would still let the map's peaks through at no cover, so the last
     // few percent fade out to clear sky.
     const coverage = shape.z;
+
     const region = smoothstep(
       float(1).sub(coverage).sub(0.12),
       float(1).sub(coverage).add(0.12),
       map
     ).mul(saturate(coverage.mul(20)));
+
     const cloudiness = region
       .mul(mix(0.55, 0.9, coverage))
       .mul(float(1).sub(h.mul(0.45)));
+
     const closing = lid ?? float(0);
 
     If(cloudiness.greaterThan(0.01).or(closing.greaterThan(0.01)), () => {
@@ -170,10 +181,12 @@ export function layerDensity(
           .sub(0.5)
           .mul(scale * 0.6)
       );
+
       const body = texture3D(
         shapeNoise,
         vec3(drifted.x, p.y, drifted.y).div(scale)
       ).r;
+
       const base = saturate(
         remap(
           body.mul(profile),
@@ -195,22 +208,27 @@ export function layerDensity(
             float(1)
           )
         );
+
       let value: any = base;
+
       if (!cheap) {
         const detail = texture3D(
           shapeNoise,
           vec3(drifted.x, p.y, drifted.y).div(DETAIL_SCALE)
         );
+
         value = erode(
           detail.g.mul(0.625).add(detail.b.mul(0.25)).add(detail.a.mul(0.125))
         );
       } else if (erosion > 0) {
         value = erode(float(erosion));
       }
+
       // Overcast closes the low layer into an unbroken stratus deck.
       if (lid) {
         value = max(value, closing.mul(profile).mul(mix(0.5, 0.8, base)));
       }
+
       density.assign(value.mul(shape.w));
     });
   });

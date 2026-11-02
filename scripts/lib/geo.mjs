@@ -18,6 +18,7 @@ export function toNztm(lat, lon) {
   const n = F / (2 - F);
   const e = Math.sqrt(F * (2 - F));
   const radius = (A / (1 + n)) * (1 + n ** 2 / 4 + n ** 4 / 64);
+
   const alpha = [
     n / 2 - (2 / 3) * n ** 2 + (5 / 16) * n ** 3,
     (13 / 48) * n ** 2 - (3 / 5) * n ** 3,
@@ -26,9 +27,11 @@ export function toNztm(lat, lon) {
 
   const phi = (lat * Math.PI) / 180;
   const dLon = (lon * Math.PI) / 180 - LON0;
+
   const t = Math.sinh(
     Math.atanh(Math.sin(phi)) - e * Math.atanh(e * Math.sin(phi))
   );
+
   const xi0 = Math.atan2(t, Math.cos(dLon));
   const eta0 = Math.atanh(Math.sin(dLon) / Math.sqrt(1 + t * t));
 
@@ -48,6 +51,7 @@ export function fromWebMercator(x, y) {
   const R = 6378137;
   const lon = (x / R) * (180 / Math.PI);
   const lat = (2 * Math.atan(Math.exp(y / R)) - Math.PI / 2) * (180 / Math.PI);
+
   return [lat, lon];
 }
 
@@ -61,12 +65,14 @@ export async function createGroundSampler(terrainDir) {
   const manifest = JSON.parse(
     await readFile(path.join(terrainDir, "manifest.json"), "utf8")
   );
+
   const { origin, rootSize, tileCells, apron, encoding } = manifest;
   const levels = manifest.levels.map((l) => l.level).sort((a, b) => b - a);
   const tiles = new Map();
 
   const loadTile = (level, x, y) => {
     const key = `${level}/${x}/${y}`;
+
     if (!tiles.has(key)) {
       tiles.set(
         key,
@@ -76,6 +82,7 @@ export async function createGroundSampler(terrainDir) {
           .catch(() => null)
       );
     }
+
     return tiles.get(key);
   };
 
@@ -89,15 +96,19 @@ export async function createGroundSampler(terrainDir) {
       const tx = Math.floor(wx / size);
       const ty = Math.floor(wz / size);
       const tile = await loadTile(level, tx, ty);
+
       if (!tile) continue;
 
       const { data, info } = tile;
+
       const height = (i, j) => {
         const p = (j * info.width + i) * info.channels;
+
         return (
           ((data[p] << 8) | data[p + 1]) / encoding.scale - encoding.offset
         );
       };
+
       const u = ((wx - tx * size) / size) * tileCells + apron;
       const v = ((wz - ty * size) / size) * tileCells + apron;
       const i = Math.floor(u);
@@ -106,8 +117,10 @@ export async function createGroundSampler(terrainDir) {
       const fv = v - j;
       const top = height(i, j) * (1 - fu) + height(i + 1, j) * fu;
       const bottom = height(i, j + 1) * (1 - fu) + height(i + 1, j + 1) * fu;
+
       return top * (1 - fv) + bottom * fv;
     }
+
     return undefined;
   }
 

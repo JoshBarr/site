@@ -5,6 +5,7 @@ import { useEffect } from "react";
 // one is; the camera rig frames it, and the panel picks which.
 
 export type Category = "bus" | "train" | "ship" | "plane";
+
 export const CATEGORIES: Category[] = ["bus", "train", "ship", "plane"];
 
 export interface Candidate {
@@ -21,7 +22,7 @@ export interface Following {
   label: string;
 }
 
-export interface FollowSnapshot {
+interface FollowSnapshot {
   following: Following | null;
   counts: Record<Category, number>;
 }
@@ -66,27 +67,33 @@ export const subject: Subject & {
 };
 
 const candidates = new Map<Category, Candidate[]>();
+
 /** Followed since each category's list last went round, so Next doesn't repeat. */
 const visited = new Map<Category, Set<string>>();
 const listeners = new Set<() => void>();
 
-const countsOf = () =>
-  Object.fromEntries(
-    CATEGORIES.map((category) => [
-      category,
-      candidates.get(category)?.length ?? 0,
-    ])
-  ) as Record<Category, number>;
+const countsOf = (): Record<Category, number> => {
+  const count = (category: Category) => candidates.get(category)?.length ?? 0;
+
+  return {
+    bus: count("bus"),
+    train: count("train"),
+    ship: count("ship"),
+    plane: count("plane"),
+  };
+};
 
 let snapshot: FollowSnapshot = { following: null, counts: countsOf() };
 
 function update(following: Following | null) {
   snapshot = { following, counts: countsOf() };
+
   for (const listener of listeners) listener();
 }
 
 export function subscribe(listener: () => void) {
   listeners.add(listener);
+
   return () => {
     listeners.delete(listener);
   };
@@ -97,6 +104,7 @@ export const getSnapshot = () => snapshot;
 /** The id of the followed vehicle, if it's one of `category`. */
 export function followed(category: Category) {
   const { following } = snapshot;
+
   return following?.category === category ? following.id : null;
 }
 
@@ -122,17 +130,23 @@ export function publish(at: Partial<Subject> & Pick<Subject, "x" | "y" | "z">) {
 function pick(category: Category, avoid?: string): Following | null {
   const list = candidates.get(category) ?? [];
   let seen = visited.get(category);
+
   if (!seen) visited.set(category, (seen = new Set()));
   let pool = list.filter(({ id }) => id !== avoid && !seen.has(id));
+
   if (!pool.length) {
     seen.clear();
     pool = list.filter(({ id }) => id !== avoid);
   }
+
   const moving = pool.filter((c) => c.moving);
+
   if (moving.length) pool = moving;
+
   if (!pool.length) return null;
   const { id, label } = pool[Math.floor(Math.random() * pool.length)];
   seen.add(id);
+
   return { category, id, label };
 }
 
@@ -147,6 +161,7 @@ export function follow(category: Category) {
 /** On to another of the same category. */
 export function next() {
   const { following } = snapshot;
+
   if (following) update(pick(following.category, following.id));
 }
 
@@ -160,9 +175,11 @@ export function useFollowCandidates(category: Category, list: Candidate[]) {
     candidates.set(category, list);
     // Labels can fill in later, a route once it's known.
     const { following } = snapshot;
+
     const current =
       following?.category === category &&
       list.find(({ id }) => id === following.id);
+
     update(
       current && current.label !== following.label
         ? { ...following, label: current.label }

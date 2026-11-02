@@ -5,9 +5,6 @@
   "version": "0.1.0",
   "author": "Josh Barr <josh@joshbarr.com>",
   "dependencies": {
-    "@neon/config": "^1.10.0",
-    "@neon/env": "^1.6.8",
-    "@neondatabase/serverless": "1.2.0",
     "@react-spring/web": "10.0.2",
     "@react-three/drei": "10.7.9",
     "@react-three/fiber": "9.8.2",
@@ -17,8 +14,6 @@
     "change-case": "5.4.4",
     "fs-extra": "^11.3.0",
     "gray-matter": "4.0.3",
-    "kysely": "0.29.7",
-    "kysely-neon": "3.0.0",
     "lil-gui": "0.20.0",
     "next": "16.4.2",
     "next-mdx-remote": "^5.0.0",
@@ -26,7 +21,8 @@
     "react-dom": "19.3.1",
     "three": "0.186.1",
     "typescript": "7.0.2",
-    "yaml": "^2.8.1"
+    "yaml": "^2.8.1",
+    "zod": "4.6.7"
   },
   "keywords": [],
   "license": "MIT",
@@ -34,19 +30,31 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
-    "format": "prettier --write \"src/**/*.js\"",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run lint && npm run format:check && npm run typecheck && npm run knip && npm test",
     "build:assets": "bash scripts/build_assets.sh",
-    "db:migrate": "node --env-file=.env.local scripts/db/migrate.mts"
+    "knip": "knip"
   },
   "devDependencies": {
+    "@oxlint/plugins": "1.90.0",
     "@types/node": "24.19.2",
     "@types/react": "19.3.0",
     "@types/three": "0.186.0",
-    "dotenv": "^8.2.0",
     "draco3d": "1.5.9",
+    "knip": "6.44.1",
     "meshoptimizer": "1.1.1",
-    "prettier": "^3.6.2",
-    "run.env": "^1.1.0"
+    "msw": "3.0.3",
+    "oxfmt": "0.75.0",
+    "oxlint": "1.90.0",
+    "sharp": "0.35.5",
+    "vite": "8.3.5",
+    "vitest": "5.0.5"
   },
   "repository": {
     "type": "git",
