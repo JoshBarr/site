@@ -29,9 +29,10 @@ const CC_BY = (
 
 const SCENE_CREDITS = (
   <>
-    The Wellington scene is adapted from: elevation and tree canopy from Toitū
-    Te Whenua Land Information New Zealand, {CC_BY}; 3D buildings © Wellington
-    City Council and AAM Ltd, {CC_BY}; map data ©{" "}
+    The Wellington scene is adapted from: elevation, tree canopy and building
+    heights from Toitū Te Whenua Land Information New Zealand, {CC_BY}; 3D
+    buildings © Wellington City Council and AAM Ltd, {CC_BY}; map data and
+    building footprints ©{" "}
     <a className="theme-link" href="https://www.openstreetmap.org/copyright">
       OpenStreetMap contributors
     </a>

@@ -9,7 +9,9 @@
 #   terrain    public/terrain: height tiles, water, shore (LINZ DEM + OSM)
 #   trees      public/trees: lidar-found trees (needs terrain's caches)
 #   landcover  public/terrain/landcover.png, with the trees' canopy folded in
-#   buildings  public/buildings (WCC I3S)
+#   footprints .cache/buildings/footprints.json: OSM footprints with lidar
+#              heights, for past the city (needs the trees' caches)
+#   buildings  public/buildings (WCC I3S, and the footprints past it)
 #   heroes     src/components/scene/buildings/heroes.ts: floodlit landmarks (OSM)
 #   airport    public/airport + src/components/scene/airport/airfield.ts
 #   buses      public/buses/routes.json (Metlink GTFS)
@@ -19,15 +21,16 @@
 #   trains     public/rail/network.json
 #
 # Everything after landcover reads ground heights from public/terrain.
-# Downloads are cached in .cache/, so a rerun is mostly local. BATHYMETRY,
-# if set, is passed through to the terrain build.
+# Downloads are cached in .cache/, so a rerun is mostly local. The terrain
+# step needs BATHYMETRY: the path to NIWA's NZ bathymetry grid
+# (nzbathy_2016.tif).
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-ALL=(terrain trees landcover buildings heroes airport buses landmarks port traffic trains)
+ALL=(terrain trees landcover footprints buildings heroes airport buses landmarks port traffic trains)
 VENV=.venv-terrain
 PY="$VENV/bin/python"
 
@@ -61,13 +64,14 @@ run() {
   echo "=== $step done in $((SECONDS - start))s"
 }
 
-if wants terrain || wants trees || wants landcover; then
+if wants terrain || wants trees || wants landcover || wants footprints; then
   python_env
 fi
 
 wants terrain && run terrain "$PY" -I scripts/terrain/build_tiles.py
 wants trees && run trees "$PY" -I scripts/trees/build_trees.py
 wants landcover && run landcover "$PY" -I scripts/terrain/build_tiles.py landcover
+wants footprints && run footprints "$PY" -I scripts/buildings/build_footprints.py
 wants buildings && run buildings node scripts/buildings/build_tiles.mjs
 wants heroes && run heroes node scripts/buildings/build_heroes.mjs
 wants airport && run airport node scripts/airport/build_airfield.mjs

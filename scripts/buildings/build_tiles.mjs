@@ -8,6 +8,12 @@
 // council's I3S scene services. Ground heights come from public/terrain, so
 // run build_tiles.py first. Downloads are cached in .cache/buildings.
 //
+// Past the city (Porirua, the Hutt, Wainuiomata) there are no models; there,
+// OpenStreetMap footprints (LINZ's building outlines) are extruded, flat
+// roofed, to heights from the lidar (build_footprints.py, which writes
+// .cache/buildings/footprints.json). They're all suburban, and left out
+// wherever the council's models stand.
+//
 // Each building keeps its roof, simplified, and gets new walls dropped
 // straight down from the roof's outline to below the ground. The source's
 // walls (window reveals, ledges, balconies) are most of its triangles and
@@ -58,6 +64,7 @@ import path from "node:path";
 import zlib from "node:zlib";
 import draco3d from "draco3d";
 import { MeshoptEncoder, MeshoptSimplifier } from "meshoptimizer";
+import { ShapeUtils, Vector2 } from "three";
 import { createGroundSampler, fromWebMercator, toNztm } from "../lib/geo.mjs";
 
 const ROOT = path.resolve(
@@ -68,6 +75,13 @@ const ROOT = path.resolve(
 const TERRAIN = path.join(ROOT, "public/terrain");
 const OUT_DIR = path.join(ROOT, "public/buildings");
 const CACHE_DIR = path.join(ROOT, ".cache/buildings");
+const FOOTPRINTS = path.join(CACHE_DIR, "footprints.json");
+
+/**
+ * A footprint whose centre is in a cell of this size (m) that a council model
+ * reaches is already modelled.
+ */
+const MODELLED_CELL = 20;
 
 const SERVICE_ROOT =
   "https://tiles.arcgis.com/tiles/CPYspmTk3abe6d7i/arcgis/rest/services";
@@ -663,6 +677,124 @@ function roofAbove(p, triangles, roofCount, x, y, height) {
   return false;
 }
 
+/**
+ * Footprints with no council model over them, as buildings without a roof
+ * yet: raiseFootprint gives them one once their ground is known.
+ */
+async function loadFootprints(modelled) {
+  if (!existsSync(FOOTPRINTS)) {
+    console.log("no footprints: run build_footprints.py for past the city");
+
+    return [];
+  }
+
+  const cell = (e, n) =>
+    `${Math.floor(e / MODELLED_CELL)},${Math.floor(n / MODELLED_CELL)}`;
+
+  const covered = new Set();
+
+  for (const b of modelled) {
+    let [minE, minN, maxE, maxN] = [Infinity, Infinity, -Infinity, -Infinity];
+
+    for (let i = 0; i < b.positions.length; i += 3) {
+      minE = Math.min(minE, b.positions[i]);
+      maxE = Math.max(maxE, b.positions[i]);
+      minN = Math.min(minN, b.positions[i + 1]);
+      maxN = Math.max(maxN, b.positions[i + 1]);
+    }
+
+    for (let e = minE; e < maxE + MODELLED_CELL; e += MODELLED_CELL) {
+      for (let n = minN; n < maxN + MODELLED_CELL; n += MODELLED_CELL) {
+        covered.add(cell(Math.min(e, maxE), Math.min(n, maxN)));
+      }
+    }
+  }
+
+  const { buildings } = JSON.parse(await readFile(FOOTPRINTS, "utf8"));
+  const found = [];
+
+  for (const [id, height, flat] of buildings) {
+    const ring = [];
+
+    for (let i = 0; i < flat.length; i += 2) {
+      ring.push(new Vector2(flat[i], flat[i + 1]));
+    }
+
+    // Centre and area of the outline.
+    let area = 0;
+    let ce = 0;
+    let cn = 0;
+
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[i];
+      const b = ring[(i + 1) % ring.length];
+      const cross = a.x * b.y - b.x * a.y;
+      area += cross / 2;
+      ce += ((a.x + b.x) * cross) / 6;
+      cn += ((a.y + b.y) * cross) / 6;
+    }
+
+    if (Math.abs(area) < 1) continue;
+    const centre = [ce / area, cn / area];
+
+    if (covered.has(cell(...centre))) continue;
+
+    found.push({
+      id,
+      ring,
+      height,
+      area: Math.abs(area),
+      centre,
+      footprint: true,
+      suburban: true,
+    });
+  }
+
+  console.log(
+    `footprints: ${found.length} of ${buildings.length} past the models`
+  );
+
+  return found;
+}
+
+/**
+ * A footprint's flat roof, `height` above its ground, in the same form as
+ * prepareBuilding's. Null when the outline won't triangulate.
+ */
+function raiseFootprint(b) {
+  const top = b.ground + b.height;
+  const triangles = ShapeUtils.triangulateShape(b.ring, []);
+
+  if (!triangles.length) return null;
+
+  const positions = new Float64Array(b.ring.length * 3);
+
+  b.ring.forEach(({ x, y }, i) => positions.set([x, y, top], i * 3));
+  const roof = [];
+
+  for (let [a, c, d] of triangles) {
+    if (triangleNormal(positions, a, c, d)[2] < 0) [c, d] = [d, c];
+    roof.push(a, c, d);
+  }
+
+  const [e0, n0, h0] = positions;
+  const local = new Float32Array(positions.length);
+
+  for (let i = 0; i < positions.length; i += 3) {
+    local[i] = positions[i] - e0;
+    local[i + 1] = positions[i + 1] - n0;
+    local[i + 2] = positions[i + 2] - h0;
+  }
+
+  return Object.assign(b, {
+    positions,
+    local,
+    roof: new Uint32Array(roof),
+    base: b.ground,
+    top,
+  });
+}
+
 // --- Tiles ---
 
 /** Deterministic 0..1 from an integer. */
@@ -755,6 +887,8 @@ async function main() {
       `${buildings.filter(windowless).length} windowless`
   );
 
+  buildings.push(...(await loadFootprints(buildings)));
+
   // Ground under each: at the centre, and lowest under the roof's vertices.
   // The model's heights are on a datum of their own; compare its base with
   // the DEM where the model is lowest. Buildings off the terrain are dropped.
@@ -763,7 +897,9 @@ async function main() {
   for (const b of buildings) {
     b.ground = await groundHeight(...b.centre);
 
-    if (b.ground !== undefined) onTerrain.push(b);
+    if (b.ground === undefined) continue;
+
+    if (!b.footprint || raiseFootprint(b)) onTerrain.push(b);
   }
 
   if (onTerrain.length < buildings.length) {
@@ -776,6 +912,7 @@ async function main() {
   const offsets = [];
 
   for (const b of buildings) {
+    if (b.footprint) continue;
     let lowest = Infinity;
     let lowestAt = 0;
 
@@ -802,6 +939,9 @@ async function main() {
     `model base - DEM: p10 ${percentile(offsets, 0.1).toFixed(2)}, ` +
       `median ${datum.toFixed(2)}, p90 ${percentile(offsets, 0.9).toFixed(2)} m`
   );
+
+  // Footprints are raised from the DEM already.
+  for (const b of buildings) b.shift = b.footprint ? 0 : -datum;
 
   await rm(OUT_DIR, { recursive: true, force: true });
   const manifestLevels = [];
@@ -837,7 +977,7 @@ async function main() {
 
       const light = () => {
         if (lod.level === finest) return;
-        const left = buildingLights(b, -datum, false, toWorld);
+        const left = buildingLights(b, b.shift, false, toWorld);
         tileFor(b).lights.push(...left);
         lights += left.length;
       };
@@ -847,7 +987,7 @@ async function main() {
         continue;
       }
 
-      const shift = -datum;
+      const { shift } = b;
 
       const lowestGround = Math.min(
         b.ground,
@@ -924,7 +1064,8 @@ async function main() {
     path.join(OUT_DIR, "manifest.json"),
     JSON.stringify({
       attribution:
-        "3D buildings © Wellington City Council and AAM Ltd, CC BY 4.0",
+        "3D buildings © Wellington City Council and AAM Ltd, CC BY 4.0; " +
+        "footprints © OpenStreetMap contributors, heights from LINZ LiDAR",
       origin,
       rootSize,
       encoding: ENCODING,
