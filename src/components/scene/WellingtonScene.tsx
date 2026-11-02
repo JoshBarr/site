@@ -35,7 +35,7 @@ import {
   hazeTransmittance,
   phase,
 } from "./haze";
-import { hazeGlow } from "./skyglow";
+import { hazeGlowAtNight } from "./skyglow";
 import { Conditions, lowCloudBase, useConditions } from "./weather";
 import { loadManifest, nztmToWorld, TileIndex } from "./terrain/manifest";
 import {
@@ -68,6 +68,8 @@ import { updateLens } from "./lens";
 import { DEFAULT_FOV, FollowRig } from "./follow/rig";
 import { getSnapshot, stop as stopFollowing } from "./follow/store";
 import { useRenderer } from "./renderer";
+import { useInView } from "./visibility";
+import { attachInspector, showStats, Stats, switchedOff } from "./stats";
 
 // Over the harbour, looking west across Te Aro to Kelburn.
 const START_POSITION: [number, number] = [1752500, 5429000];
@@ -91,16 +93,14 @@ const SKYGLOW_DISTANCE = 20000;
 /**
  * Haze over everything (fog on every material, and the sky), plus a fade
  * toward the edges of the terrain root so the map dissolves instead of ending.
- * At `night` the city lights it from below.
+ * At night the city lights it from below.
  */
 function Atmosphere({
   rootSize,
   conditions,
-  night,
 }: {
   rootSize: number;
   conditions: Conditions;
-  night: boolean;
 }) {
   const scene = useThree((state) => state.scene);
 
@@ -114,9 +114,10 @@ function Atmosphere({
     const edgeFade = smoothstep(half * 0.6, half * 0.95, edge);
     const haze = float(1).sub(hazeTransmittance(cameraPosition, positionWorld));
 
-    let fogColor: any = hazeColor(positionWorld.sub(cameraPosition));
+    const fogColor = hazeColor(positionWorld.sub(cameraPosition)).add(
+      hazeGlowAtNight(cameraPosition, positionWorld)
+    );
 
-    if (night) fogColor = fogColor.add(hazeGlow(cameraPosition, positionWorld));
     scene.fogNode = fog(fogColor, max(haze, edgeFade));
 
     // Sky: zenith to horizon, hazier toward the horizon, glowing and with a
@@ -136,26 +137,22 @@ function Atmosphere({
       environment.sunIntensity.mul(3)
     );
 
-    let sky: any = mix(gradient, hazeColor(direction), horizon.mul(0.8))
-      .add(phase(toward, 0.7).mul(environment.sunIntensity).mul(0.15))
-      .add(disc);
+    const far = cameraPosition.add(direction.mul(SKYGLOW_DISTANCE));
 
-    if (night) {
-      const far = cameraPosition.add(direction.mul(SKYGLOW_DISTANCE));
-      sky = sky.add(
-        hazeGlow(cameraPosition, far).mul(
+    scene.backgroundNode = mix(gradient, hazeColor(direction), horizon.mul(0.8))
+      .add(phase(toward, 0.7).mul(environment.sunIntensity).mul(0.15))
+      .add(disc)
+      .add(
+        hazeGlowAtNight(cameraPosition, far).mul(
           float(1).sub(hazeTransmittance(cameraPosition, far))
         )
       );
-    }
-
-    scene.backgroundNode = sky;
 
     return () => {
       scene.fogNode = null;
       scene.backgroundNode = null;
     };
-  }, [scene, rootSize, night]);
+  }, [scene, rootSize]);
 
   return null;
 }
@@ -651,63 +648,88 @@ export function Scene({
     heightAt.current = query;
   }, []);
 
+  // The scene never moves. Recomposing its matrix each frame would make
+  // three recompute every object's world matrix too, frozen tiles included;
+  // anything that moves still updates its own.
+  const scene = useThree((state) => state.scene);
+
+  useEffect(() => {
+    scene.matrixAutoUpdate = false;
+  }, [scene]);
+
   return (
     <>
       <ambientLight
         ref={litForReflections}
         intensity={0.25 + 0.3 * environment.overcastFor(conditions.cloudCover)}
       />
-      <Atmosphere
-        rootSize={index.manifest.rootSize}
-        conditions={conditions}
-        night={lights > 0}
-      />
+      <Atmosphere rootSize={index.manifest.rootSize} conditions={conditions} />
       <Sun
         index={index}
         mobile={mobile}
         cloudCover={conditions.cloudCover}
         position={sun}
       />
-      <Terrain
-        onHeightQuery={setHeightQuery}
-        index={index}
-        quality={mobile ? TERRAIN_MOBILE : TERRAIN_DESKTOP}
-      />
-      <Suspense fallback={null}>
-        <Ocean
-          conditions={sea}
+      {!switchedOff("terrain") && (
+        <Terrain
+          onHeightQuery={setHeightQuery}
           index={index}
-          quality={mobile ? OCEAN_MOBILE : OCEAN_DESKTOP}
+          quality={mobile ? TERRAIN_MOBILE : TERRAIN_DESKTOP}
         />
-      </Suspense>
-      <Landmarks
-        index={index}
-        wind={conditions.wind}
-        lights={lights}
-        shadowMapSize={mobile ? 2048 : 4096}
-      />
-      <Buildings
-        terrain={index}
-        quality={mobile ? BUILDINGS_MOBILE : BUILDINGS_DESKTOP}
-        lights={lights}
-        occupancy={windowsLitAt(time)}
-      />
-      <Trees
-        terrain={index}
-        quality={mobile ? TREES_MOBILE : TREES_DESKTOP}
-        wind={conditions.wind}
-      />
-      <AirfieldLights index={index} lights={lights} />
-      <Vessels index={index} sea={sea} lights={lights} />
-      <Railway index={index} lights={lights} />
-      <Traffic index={index} lights={lights} time={time} />
-      <Buses index={index} heightAt={heightAt} lights={lights} />
-      <Flights
-        index={index}
-        heightAt={heightAt}
-        lights={lights}
-        windFrom={conditions.wind.direction}
-      />
+      )}
+      {!switchedOff("ocean") && (
+        <Suspense fallback={null}>
+          <Ocean
+            conditions={sea}
+            index={index}
+            quality={mobile ? OCEAN_MOBILE : OCEAN_DESKTOP}
+          />
+        </Suspense>
+      )}
+      {!switchedOff("landmarks") && (
+        <Landmarks
+          index={index}
+          wind={conditions.wind}
+          lights={lights}
+          shadowMapSize={mobile ? 2048 : 4096}
+        />
+      )}
+      {!switchedOff("buildings") && (
+        <Buildings
+          terrain={index}
+          quality={mobile ? BUILDINGS_MOBILE : BUILDINGS_DESKTOP}
+          lights={lights}
+          occupancy={windowsLitAt(time)}
+        />
+      )}
+      {!switchedOff("trees") && (
+        <Trees
+          terrain={index}
+          quality={mobile ? TREES_MOBILE : TREES_DESKTOP}
+          wind={conditions.wind}
+        />
+      )}
+      {!switchedOff("airfield") && (
+        <AirfieldLights index={index} lights={lights} />
+      )}
+      {!switchedOff("vessels") && (
+        <Vessels index={index} sea={sea} lights={lights} />
+      )}
+      {!switchedOff("railway") && <Railway index={index} lights={lights} />}
+      {!switchedOff("traffic") && (
+        <Traffic index={index} lights={lights} time={time} />
+      )}
+      {!switchedOff("buses") && (
+        <Buses index={index} heightAt={heightAt} lights={lights} />
+      )}
+      {!switchedOff("flights") && (
+        <Flights
+          index={index}
+          heightAt={heightAt}
+          lights={lights}
+          windFrom={conditions.wind.direction}
+        />
+      )}
       <Clouds
         conditions={conditions}
         quality={mobile ? CLOUDS_MOBILE : CLOUDS_DESKTOP}
@@ -736,6 +758,9 @@ export const WellingtonScene: React.FC<{
   );
 
   const time = useSceneTime();
+  const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
+  const [stats] = useState(showStats);
+  const inView = useInView(canvas);
 
   useEffect(() => {
     loadManifest().then(setIndex, (e) => console.error(e));
@@ -743,8 +768,13 @@ export const WellingtonScene: React.FC<{
 
   return (
     <Canvas
+      ref={setCanvas}
+      // Scrolled past, the scene stops drawing.
+      frameloop={inView ? "always" : "never"}
       shadows="percentage"
-      dpr={mobile ? [1, 1.5] : [1, 2]}
+      // With 4× MSAA in the scene pass, 2× buys little over 1.5× at
+      // nearly twice the fill.
+      dpr={[1, 1.5]}
       gl={async (props) => {
         const renderer = new WebGPURenderer({
           // SAFETY: R3F's props are for a WebGLRenderer, and WebGPURenderer
@@ -758,6 +788,8 @@ export const WellingtonScene: React.FC<{
 
         await renderer.init();
 
+        if (stats) await attachInspector(renderer);
+
         return renderer;
       }}
       camera={CAMERA}
@@ -770,6 +802,7 @@ export const WellingtonScene: React.FC<{
           mobile={mobile}
         />
       )}
+      {stats && <Stats />}
     </Canvas>
   );
 };

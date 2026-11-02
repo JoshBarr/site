@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { sceneShown } from "../visibility";
 import { isStale } from "../../../lib/vessels";
 import type { Vessel, VesselsResponse } from "../../../lib/vessels";
 
@@ -21,7 +22,7 @@ export function useVessels() {
     let stopped = false;
 
     const poll = async () => {
-      if (!document.hidden) {
+      if (sceneShown()) {
         try {
           const response = await fetch("/api/vessels");
 

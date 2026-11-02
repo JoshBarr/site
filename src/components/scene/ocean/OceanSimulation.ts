@@ -93,7 +93,8 @@ export class OceanSimulation {
   update(renderer: WebGPURenderer, time: number) {
     this.time.value = time;
 
-    for (const pass of this.passes) renderer.compute(pass);
+    // One compute pass; WebGPU orders its dispatches.
+    renderer.compute(this.passes);
   }
 
   private build() {

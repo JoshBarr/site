@@ -6,6 +6,7 @@ import { gaussianBlur } from "three/addons/tsl/display/GaussianBlurNode.js";
 import { cloudShadowMap, overcast, overcastFor } from "../environment";
 import { nightGlow, setNightGlow } from "../glow";
 import { depthOfField } from "../lens";
+import { switchedOff } from "../stats";
 import { Conditions, lowCloudBase, windVector } from "../weather";
 import { CloudQuality, createCloudNode } from "./cloudNode";
 import {
@@ -129,13 +130,13 @@ export function Clouds({
   const { pipeline, glow, drops } = useMemo(() => {
     const pipeline = new RenderPipeline(renderer);
     const scenePass = pass(scene, camera);
-    const viewZ = scenePass.getViewZNode();
+    const depth = scenePass.getTextureNode("depth");
     const output = scenePass.getTextureNode("output");
     const glow = nightGlow(output, dark);
     const color = glow ? output.add(glow) : output;
 
-    if (!noiseReady) {
-      pipeline.outputNode = depthOfField(color, viewZ);
+    if (!noiseReady || switchedOff("clouds")) {
+      pipeline.outputNode = depthOfField(color, depth);
 
       return { pipeline, glow, drops: null };
     }
@@ -149,7 +150,6 @@ export function Clouds({
       ...layers,
       rain,
       quality,
-      night: dark,
     });
 
     // Relative to CSS pixels: on a 2x display the march would otherwise do
@@ -164,7 +164,7 @@ export function Clouds({
 
     const composite: any = depthOfField(
       vec4(color.rgb.mul(soft.a).add(soft.rgb), 1),
-      viewZ
+      depth
     );
 
     if (!raining) {
@@ -184,7 +184,12 @@ export function Clouds({
 
     const rainScene = new Scene();
     rainScene.add(drops);
-    const streaks = pass(rainScene, camera).getTextureNode("output");
+
+    // Soft-edged and at least a couple of pixels wide: no MSAA needed.
+    const streaks = pass(rainScene, camera, { samples: 0 }).getTextureNode(
+      "output"
+    );
+
     // And water on the lens over everything. What it bends into view is
     // blurred anyway, so it goes without the depth of field (and glow).
     const over = (under, layer) => under.mul(layer.a.oneMinus()).add(layer.rgb);

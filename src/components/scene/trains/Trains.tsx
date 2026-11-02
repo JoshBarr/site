@@ -3,7 +3,6 @@ import { useFrame } from "@react-three/fiber";
 import {
   AdditiveBlending,
   Color,
-  DynamicDrawUsage,
   InstancedBufferAttribute,
   InstancedInterleavedBuffer,
   InstancedMesh,
@@ -112,7 +111,6 @@ const LIT_WINDOWS = new Color(1, 0.88, 0.7);
 
 function createCars() {
   const tints = new InstancedBufferAttribute(new Float32Array(MAX_CARS * 3), 3);
-  tints.setUsage(DynamicDrawUsage);
   const windowsLit = uniform(0);
   const part = attribute<"float">("part", "float");
 
@@ -135,7 +133,6 @@ function createCars() {
     vec3(0)
   );
   const mesh = new InstancedMesh(createCarGeometry(), material, MAX_CARS);
-  mesh.instanceMatrix.setUsage(DynamicDrawUsage);
   // Instances move every frame; their bounds would always be stale.
   mesh.frustumCulled = false;
   mesh.count = 0;
@@ -261,8 +258,6 @@ export function createRunTrails({
 export function createRunLights(count: number) {
   const light = new InstancedBufferAttribute(new Float32Array(count * 4), 4);
   const tint = new InstancedBufferAttribute(new Float32Array(count * 3), 3);
-
-  for (const a of [light, tint]) a.setUsage(DynamicDrawUsage);
 
   const at = instancedBufferAttribute<"vec4">(light, "vec4");
   const position = at.xyz;

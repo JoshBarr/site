@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { sceneShown } from "../visibility";
 import { HISTORY } from "../../../lib/flights";
 import type { Aircraft, FlightsResponse } from "../../../lib/flights";
 
@@ -53,7 +54,7 @@ export function useFlights(): Flights {
     let skew = 0;
 
     const poll = async () => {
-      if (!document.hidden) {
+      if (sceneShown()) {
         try {
           const response = await fetch(
             history ? "/api/flights?history" : "/api/flights"
@@ -97,7 +98,7 @@ export function useFlights(): Flights {
         if (stopped) return;
         setFlights({ aircraft: [...known.values()], skew });
       } else {
-        // Back from a hidden tab: catch up on what was missed.
+        // Hidden or scrolled away: catch up on what's missed when back.
         history = true;
       }
 

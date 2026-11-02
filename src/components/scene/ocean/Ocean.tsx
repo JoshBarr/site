@@ -49,6 +49,7 @@ import {
   OceanConditions,
 } from "./spectrum";
 import { useRenderer } from "../renderer";
+import { switchedOff } from "../stats";
 
 export interface OceanQuality {
   /** FFT resolution per cascade. */
@@ -62,7 +63,9 @@ export interface OceanQuality {
 }
 
 export const OCEAN_DESKTOP: OceanQuality = {
-  fftSize: 256,
+  // 256 cost about 4 ms more on an M1: each FFT stage streams every buffer
+  // through memory. The mesh can't carry finer waves than 128 gives anyway.
+  fftSize: 128,
   segments: 384,
   reflectionScale: 0.35,
   reflectionSamples: 0,
@@ -212,7 +215,8 @@ function createMaterial(
   mirror.target.rotateX(-Math.PI / 2);
 
   if (mirror.uvNode) mirror.uvNode = mirror.uvNode.add(slope.mul(0.12));
-  const sky = mirror.rgb;
+  // Left out of the material, the mirror isn't rendered.
+  const sky = switchedOff("reflection") ? vec3(0.04) : mirror.rgb;
   const sunAmount = max(dot(reflected, sunDirection), 0);
   // In a hill's or a cloud's shadow the sun's glint and direct light go;
   // skylight stays, so the body of the water only dims and its reflection

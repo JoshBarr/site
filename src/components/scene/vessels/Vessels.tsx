@@ -3,7 +3,6 @@ import { useFrame } from "@react-three/fiber";
 import {
   AdditiveBlending,
   Color,
-  DynamicDrawUsage,
   Euler,
   InstancedBufferAttribute,
   InstancedInterleavedBuffer,
@@ -368,8 +367,6 @@ function colorAttribute(count: number) {
     3
   );
 
-  attribute.setUsage(DynamicDrawUsage);
-
   return attribute;
 }
 
@@ -425,7 +422,6 @@ function createMeshes() {
   wakes.renderOrder = 2;
 
   for (const mesh of [hulls, parts, wakes]) {
-    mesh.instanceMatrix.setUsage(DynamicDrawUsage);
     // Instances move every frame; their bounds would always be stale.
     mesh.frustumCulled = false;
     mesh.receiveShadow = true;
@@ -448,7 +444,6 @@ function createTrailLines(count: number, material: TrailMaterial) {
     1
   );
 
-  segments.setUsage(DynamicDrawUsage);
   geometry.setAttribute(
     "instanceStart",
     new InterleavedBufferAttribute(segments, 3, 0)
@@ -464,7 +459,6 @@ function createTrailLines(count: number, material: TrailMaterial) {
     1
   );
 
-  times.setUsage(DynamicDrawUsage);
   geometry.setAttribute(
     "instanceTimeStart",
     new InterleavedBufferAttribute(times, 1, 0)
@@ -545,8 +539,6 @@ function createLights() {
     new Float32Array(MAX_LIGHTS * 3),
     3
   );
-
-  for (const a of [light, tint]) a.setUsage(DynamicDrawUsage);
 
   const at = instancedBufferAttribute<"vec4">(light, "vec4");
   const position = at.xyz;

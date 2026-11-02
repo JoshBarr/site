@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { sceneShown } from "../visibility";
 import { STALE } from "../../../lib/traffic";
 import type { TrafficResponse, TrafficSpeeds } from "../../../lib/traffic";
 
@@ -22,7 +23,7 @@ export function useTraffic() {
     let stopped = false;
 
     const poll = async () => {
-      if (!document.hidden || !known) {
+      if (sceneShown() || !known) {
         try {
           const response = await fetch("/api/traffic");
 

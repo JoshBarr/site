@@ -5,7 +5,6 @@ import {
   BufferGeometry,
   Color,
   DoubleSide,
-  DynamicDrawUsage,
   Frustum,
   Group,
   InstancedBufferAttribute,
@@ -237,8 +236,6 @@ function createFleet(geometry: BufferGeometry, capacity: number) {
   const place = new InstancedBufferAttribute(new Float32Array(capacity * 4), 4);
   const shape = new InstancedBufferAttribute(new Float32Array(capacity * 4), 4);
   const glow = new InstancedBufferAttribute(new Float32Array(capacity * 3), 3);
-
-  for (const a of [place, shape, glow]) a.setUsage(DynamicDrawUsage);
 
   const at = instancedBufferAttribute<"vec4">(place, "vec4");
   const size = instancedBufferAttribute<"vec4">(shape, "vec4");

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { sceneShown } from "../visibility";
 import { isStale } from "../../../lib/trains";
 import type { Train, TrainsResponse } from "../../../lib/trains";
 
@@ -21,7 +22,7 @@ export function useTrains() {
     let stopped = false;
 
     const poll = async () => {
-      if (!document.hidden) {
+      if (sceneShown()) {
         try {
           const response = await fetch("/api/trains");
 

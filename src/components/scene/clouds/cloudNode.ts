@@ -29,7 +29,7 @@ import {
   skyHorizon,
 } from "../environment";
 import { hazeColor, hazeTransmittance, phase } from "../haze";
-import { cloudGlow, hazeGlow } from "../skyglow";
+import { cloudGlowAtNight, hazeGlowAtNight } from "../skyglow";
 import {
   CloudLayerUniforms,
   EXTINCTION,
@@ -104,7 +104,6 @@ export function createCloudNode({
   cirrus,
   rain,
   quality,
-  night = false,
 }: {
   depth: any;
   cameraPosition: any;
@@ -118,8 +117,6 @@ export function createCloudNode({
   /** Falls from the low layer. */
   rain: RainUniforms;
   quality: CloudQuality;
-  /** Light the clouds' undersides with the city's glow. */
-  night?: boolean;
 }) {
   const density = (p, cheap = false) =>
     layerDensity(p, low, LOW_STYLE, { lid: overcast, cheap }).add(
@@ -214,13 +211,12 @@ export function createCloudNode({
           // Sky light, brighter toward the tops.
           const height = saturate(p.y.sub(bottom).div(top.sub(bottom)));
           const ambient = mix(skyHorizon, skyZenith.mul(3), height).mul(1.4);
-          let luminance: any = vec3(direct).add(ambient);
+          // At night the city lights the base; it's spent a little way in.
+          const below = float(1).sub(height);
 
-          if (night) {
-            // The city lights the base; it's spent a little way in.
-            const below = float(1).sub(height);
-            luminance = luminance.add(cloudGlow(p).mul(below.mul(below)));
-          }
+          const luminance = vec3(direct)
+            .add(ambient)
+            .add(cloudGlowAtNight(p).mul(below.mul(below)));
 
           const sigma = d.mul(EXTINCTION);
           const step = exp(sigma.mul(dt).negate());
@@ -280,9 +276,10 @@ export function createCloudNode({
         float(1).sub(smoothstep(15000, 85000, firstHit).mul(0.8))
       );
 
-      let haze: any = hazeColor(direction);
+      const haze = hazeColor(direction).add(
+        hazeGlowAtNight(cameraPosition, hit)
+      );
 
-      if (night) haze = haze.add(hazeGlow(cameraPosition, hit));
       scattered.assign(
         scattered
           .mul(clear)
@@ -319,13 +316,9 @@ export function createCloudNode({
         });
         const through = exp(depth.mul(rain.extinction).negate());
 
-        let light: any = hazeColor(direction);
-
-        if (night) {
-          light = light.add(
-            hazeGlow(cameraPosition, cameraPosition.add(direction.mul(r1)))
-          );
-        }
+        const light = hazeColor(direction).add(
+          hazeGlowAtNight(cameraPosition, cameraPosition.add(direction.mul(r1)))
+        );
 
         const shaft = light.mul(RAIN_SHADE).mul(float(1).sub(through));
 
