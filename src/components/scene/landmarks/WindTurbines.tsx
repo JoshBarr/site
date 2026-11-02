@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import {
   BufferGeometry,
-  DynamicDrawUsage,
   InstancedBufferAttribute,
   Mesh,
   MeshStandardNodeMaterial,
@@ -18,7 +17,7 @@ import {
   vec3,
 } from "three/tsl";
 import { pixelAngle, random, rotateX, rotateY, rotateZ } from "./common";
-import { castsNearShadow } from "./nearShadow";
+import { addRestlessCasters, castsNearShadow } from "./nearShadow";
 import {
   createBladeGeometry,
   createNacelleGeometry,
@@ -111,6 +110,9 @@ export function WindTurbines({
   );
 
   useEffect(() => () => parts.dispose(), [parts]);
+
+  // Spinning rotors: the near shadow redraws every frame while one's in it.
+  useEffect(() => addRestlessCasters(positions), [positions]);
 
   // Per-turbine variety: exposure on its ridge, how it sits to the wind.
   const variety = useMemo(
@@ -259,7 +261,6 @@ function instanced(
   });
   geometry.setAttribute("site", new InstancedBufferAttribute(site, 4));
   const poseAttribute = new InstancedBufferAttribute(pose, 4);
-  poseAttribute.setUsage(DynamicDrawUsage);
   geometry.setAttribute("pose", poseAttribute);
 
   return count;

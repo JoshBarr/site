@@ -1,12 +1,30 @@
 import {
   Camera,
+  HalfFloatType,
   PerspectiveCamera,
   Vector2,
   Vector3,
   WebGPURenderer,
 } from "three/webgpu";
-import { clamp, float, uniform } from "three/tsl";
-import { dof } from "three/addons/tsl/display/DepthOfFieldNode.js";
+import {
+  abs,
+  clamp,
+  float,
+  Fn,
+  Loop,
+  max,
+  min,
+  mix,
+  perspectiveDepthToViewZ,
+  rtt,
+  smoothstep,
+  uniform,
+  uniformArray,
+  uv,
+  vec3,
+  vec4,
+} from "three/tsl";
+import { switchedOff } from "./stats";
 
 // Thin-lens depth of field. The blur circle is A·f/s · |1 − s/d| for aperture
 // A, focal length f, focus distance s and depth d. A real lens focused
@@ -23,6 +41,28 @@ const focusDistance = uniform(1000);
 /** Largest blur radius, pixels. Set as a fraction of the frame height. */
 const maxRadius = uniform(7);
 const MAX_RADIUS_OF_HEIGHT = 0.008;
+
+/** One pixel of the frame, in uv. */
+const texel = uniform(new Vector2(1, 1));
+
+/** The scene camera's planes, for depths read in the blur's own pass. */
+const near = uniform(5);
+const far = uniform(80000);
+
+/**
+ * Lens blur taps, as three's dof node lays them out (Vogel's spiral, which
+ * fills the disc evenly): every fifth of 80 for the bokeh, the rest for the
+ * blur.
+ */
+const SPIRAL = Array.from({ length: 80 }, (_, i) => {
+  const r = Math.sqrt(i / 80);
+  const angle = i * 2.39996323;
+
+  return new Vector2(r * Math.cos(angle), r * Math.sin(angle));
+});
+
+const blurTaps = uniformArray(SPIRAL.filter((_, i) => i % 5 !== 0));
+const bokehTaps = uniformArray(SPIRAL.filter((_, i) => i % 5 === 0));
 
 /**
  * Focus this far toward the camera from the orbit target. Blur levels off behind
@@ -137,8 +177,15 @@ export function updateLens(
   target: Vector3,
   delta: number
 ) {
-  maxRadius.value =
-    renderer.getDrawingBufferSize(size).y * MAX_RADIUS_OF_HEIGHT;
+  renderer.getDrawingBufferSize(size);
+  maxRadius.value = size.y * MAX_RADIUS_OF_HEIGHT;
+  texel.value.set(1 / size.x, 1 / size.y);
+
+  if (camera instanceof PerspectiveCamera) {
+    near.value = camera.near;
+    far.value = camera.far;
+  }
+
   camera.getWorldPosition(origin);
   camera.getWorldDirection(axis);
   const fov = camera instanceof PerspectiveCamera ? camera.fov : 50;
@@ -153,16 +200,78 @@ export function updateLens(
   focusDistance.value *= Math.pow(focus / focusDistance.value, ease);
 }
 
-/** Blurs `color` by the scene depth (`viewZ`, negative in front). */
-export function depthOfField(color, viewZ) {
-  // Signed: negative in front of focus, where it grows without bound.
-  const blur = clamp(
+/** Signed blur at a scene depth (negative in front of focus), -1..1. */
+const blurAt = (viewZ) =>
+  clamp(
     backgroundBlur.mul(float(1).sub(focusDistance.div(viewZ.negate()))),
     -1,
     1
   );
 
-  // The dof node blurs by smoothstep(0, focalLength, |viewZ| − focus) and
-  // treats negatives as in front, so hand it the signed blur in place of depth.
-  return dof(color, blur.negate(), 0, 1, maxRadius);
+/**
+ * Blurs `color` by the scene's `depth` texture, as three's dof node does but
+ * in three passes at half size rather than seven, two of them full size:
+ * near and far share one blur, and how blurred each pixel is comes from the
+ * depth as it's needed. A 64-tap average makes the blur, then the brightest
+ * of 16 taps around spreads highlights (sun on the water, lamps) into
+ * discs, the bokeh.
+ */
+export function depthOfField(color, depth) {
+  if (switchedOff("dof")) return color;
+
+  // 0..1 of the largest blur.
+  const blurOf = (at) =>
+    smoothstep(
+      0,
+      1,
+      abs(blurAt(perspectiveDepthToViewZ(depth.sample(at).r, near, far)))
+    );
+
+  const halfSize = { type: HalfFloatType, resolutionScale: 0.5 };
+  const half = rtt(color, null, null, halfSize);
+
+  const blurred = rtt(
+    Fn(() => {
+      const at = uv();
+      const amount = blurOf(at);
+      const step = texel.mul(maxRadius).mul(amount);
+      const sum = vec3(0).toVar();
+
+      Loop(blurTaps.array.length, ({ i }) => {
+        const tap: any = blurTaps.element(i);
+        sum.addAssign(half.sample(at.add(step.mul(tap))).rgb);
+      });
+
+      return vec4(sum.div(blurTaps.array.length), amount);
+    })(),
+    null,
+    null,
+    halfSize
+  );
+
+  const bokeh = rtt(
+    Fn(() => {
+      const at = uv();
+      const centre = blurred.sample(at);
+      const step = texel.mul(maxRadius).mul(centre.a);
+      const brightest = centre.rgb.toVar();
+
+      Loop(bokehTaps.array.length, ({ i }) => {
+        const tap: any = bokehTaps.element(i);
+        brightest.assign(
+          max(brightest, blurred.sample(at.add(step.mul(tap))).rgb)
+        );
+      });
+
+      return vec4(brightest, centre.a);
+    })(),
+    null,
+    null,
+    halfSize
+  );
+
+  const soft = bokeh.sample(uv());
+
+  // As three's composite: fully soft from half the largest blur.
+  return vec4(mix(color.rgb, soft.rgb, min(soft.a, 0.5).mul(2)), 1);
 }

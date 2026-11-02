@@ -179,15 +179,17 @@ export function createTreeMaterial({ encoding }: TreesManifest) {
   // Crowns lean downwind and sway, the tops most.
   const gust = sin(time.mul(mix(1.1, 1.7, random(4))).add(random(5).mul(6.28)));
 
-  const lean = treeWind
-    .mul(float(0.012).add(gust.mul(0.006)))
-    .mul(t.mul(t).mul(depth).mul(0.25))
-    .mul(float(1).sub(isTrunk));
+  const reach = t.mul(t).mul(depth).mul(0.25).mul(float(1).sub(isTrunk));
+  const lean = treeWind.mul(float(0.012).add(gust.mul(0.006))).mul(reach);
+
+  const leaned = (by: any) =>
+    base.add(vec3(across.x.add(by.x), up, across.y.add(by.y)));
 
   const material = new MeshLambertNodeMaterial();
-  material.positionNode = base.add(
-    vec3(across.x.add(lean.x), up, across.y.add(lean.y))
-  );
+  material.positionNode = leaned(lean);
+  // Shadows lean without the sway: the near map only redraws ten times a
+  // second when nothing else changes.
+  material.castShadowPositionNode = leaned(treeWind.mul(0.012).mul(reach));
 
   // Smooth normals from an ellipsoid around the crown, mixed with facet
   // normals so they read as low-poly like the buildings.

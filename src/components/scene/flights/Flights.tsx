@@ -4,7 +4,6 @@ import {
   AdditiveBlending,
   BufferGeometry,
   Color,
-  DynamicDrawUsage,
   Euler,
   InstancedBufferAttribute,
   InstancedInterleavedBuffer,
@@ -236,8 +235,6 @@ function colorAttribute(count: number) {
     3
   );
 
-  attribute.setUsage(DynamicDrawUsage);
-
   return attribute;
 }
 
@@ -256,7 +253,6 @@ function createPlaneMesh(geometry: BufferGeometry) {
     attribute<"float">("tail", "float")
   );
   const mesh = new InstancedMesh(geometry, material, MAX_PER_SHAPE);
-  mesh.instanceMatrix.setUsage(DynamicDrawUsage);
   // Instances move every frame; their bounds would always be stale.
   mesh.frustumCulled = false;
   mesh.count = 0;
@@ -287,7 +283,6 @@ function createTrails() {
     1
   );
 
-  segments.setUsage(DynamicDrawUsage);
   geometry.setAttribute(
     "instanceStart",
     new InterleavedBufferAttribute(segments, 3, 0)
@@ -303,7 +298,6 @@ function createTrails() {
     1
   );
 
-  times.setUsage(DynamicDrawUsage);
   geometry.setAttribute(
     "instanceTimeStart",
     new InterleavedBufferAttribute(times, 1, 0)
@@ -415,8 +409,6 @@ function createLights() {
     new Float32Array(MAX_LIGHTS * 2),
     2
   );
-
-  for (const a of [light, style, extra]) a.setUsage(DynamicDrawUsage);
 
   const at = instancedBufferAttribute<"vec4">(light, "vec4");
   const look = instancedBufferAttribute<"vec4">(style, "vec4");

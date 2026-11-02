@@ -146,13 +146,13 @@ function TreeTiles({
 }) {
   const camera = useThree((state) => state.camera);
 
-  const { group, material } = useMemo(
-    () => ({
-      group: new Group(),
-      material: createTreeMaterial(index.manifest),
-    }),
-    [index]
-  );
+  const { group, material } = useMemo(() => {
+    const group = new Group();
+    // Tiles are placed in the shader; their matrices never change.
+    group.matrixAutoUpdate = false;
+
+    return { group, material: createTreeMaterial(index.manifest) };
+  }, [index]);
 
   useEffect(() => {
     treeFullDistance.value = quality.fullDistance;
@@ -340,6 +340,7 @@ function createTileMesh(
   geometry.instanceCount = 0;
 
   const mesh = new Mesh(geometry, material);
+  mesh.matrixAutoUpdate = false;
   mesh.userData.tile = new Vector4(tile.minX, tile.minZ, tile.size, tile.count);
   // Culled per tile above; there's no position attribute to bound.
   mesh.frustumCulled = false;

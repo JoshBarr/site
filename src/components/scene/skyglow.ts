@@ -7,6 +7,8 @@ import {
 import {
   exp,
   float,
+  Fn,
+  If,
   max,
   min,
   normalize,
@@ -158,7 +160,7 @@ function cityLight(p) {
 }
 
 /** What the city's light adds to a cloud at p, lit from below. */
-export function cloudGlow(p) {
+function cloudGlow(p) {
   return cityLight(p).mul(CLOUD_GLOW);
 }
 
@@ -167,7 +169,7 @@ export function cloudGlow(p) {
  * passes through: in-scattering to add to the fog's colour, as it's mixed in
  * by the fog's amount.
  */
-export function hazeGlow(from, to) {
+function hazeGlow(from, to) {
   const ray = to.sub(from);
   const length = min(ray.length(), MAX_DISTANCE);
   const direction = normalize(ray);
@@ -187,3 +189,26 @@ export function hazeGlow(from, to) {
 
   return sum.div(weights).mul(HAZE_GLOW);
 }
+
+/**
+ * `glow()` while the lights are on, else black. Branching on them, rather
+ * than adding the glow only at night, means dusk recompiles nothing, and by
+ * day the glow costs nothing.
+ */
+function whileLit(glow: () => any) {
+  return Fn(() => {
+    const lit = vec3(0).toVar();
+
+    If(windowLights.greaterThan(0), () => {
+      lit.assign(glow());
+    });
+
+    return lit;
+  })();
+}
+
+/** hazeGlow, skipped while the lights are off. */
+export const hazeGlowAtNight = (from, to) => whileLit(() => hazeGlow(from, to));
+
+/** cloudGlow, skipped while the lights are off. */
+export const cloudGlowAtNight = (p) => whileLit(() => cloudGlow(p));

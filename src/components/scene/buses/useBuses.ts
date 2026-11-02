@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { sceneShown } from "../visibility";
 import { isStale } from "../../../lib/buses";
 import type { Bus, BusesResponse } from "../../../lib/buses";
 
@@ -21,7 +22,7 @@ export function useBuses() {
     let stopped = false;
 
     const poll = async () => {
-      if (!document.hidden) {
+      if (sceneShown()) {
         try {
           const response = await fetch("/api/buses");
 

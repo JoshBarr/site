@@ -2,7 +2,6 @@ import { RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import {
   Color,
-  DynamicDrawUsage,
   InstancedMesh,
   Matrix4,
   MeshStandardNodeMaterial,
@@ -106,7 +105,6 @@ function createBuses() {
     vec3(0)
   );
   const mesh = new InstancedMesh(createCarGeometry(), material, MAX_BUSES);
-  mesh.instanceMatrix.setUsage(DynamicDrawUsage);
   // Instances move every frame; their bounds would always be stale.
   mesh.frustumCulled = false;
   mesh.count = 0;

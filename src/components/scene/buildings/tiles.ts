@@ -190,6 +190,7 @@ export class BuildingCache {
     this.maxTriangles = maxTriangles;
     this.maxInFlight = maxInFlight;
     this.setup = setup;
+    this.group.matrixAutoUpdate = false;
   }
 
   /** True when the tile can be drawn: loaded, empty, or given up on. */
@@ -270,6 +271,9 @@ export class BuildingCache {
         // Positions are 0..1 across the tile's bounds.
         mesh.position.set(tile.minX, 0, tile.minZ);
         mesh.scale.set(tile.maxX - tile.minX, 1, tile.maxZ - tile.minZ);
+        // Placed once: three needn't recompose thousands of tiles a frame.
+        mesh.updateMatrix();
+        mesh.matrixAutoUpdate = false;
         // Culled per tile by the selection; there's no position attribute
         // for three to compute bounds from.
         mesh.frustumCulled = false;
@@ -278,7 +282,12 @@ export class BuildingCache {
 
       const lights = data ? createLights(data, this.lightsMaterial) : undefined;
 
-      if (lights) object.add(lights);
+      if (lights) {
+        lights.matrixAutoUpdate = false;
+        object.add(lights);
+      }
+
+      object.matrixAutoUpdate = false;
       object.visible = false;
       this.setup({ object, mesh, lights });
       this.group.add(object);

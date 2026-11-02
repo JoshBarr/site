@@ -10,7 +10,6 @@ import {
   RepeatWrapping,
   RGBAFormat,
   TextureLoader,
-  DynamicDrawUsage,
   InstancedBufferAttribute,
   InstancedBufferGeometry,
   Mesh,
@@ -36,6 +35,7 @@ import {
   uniform,
   vec2,
   vec3,
+  varying,
   vec4,
 } from "three/tsl";
 import { TERRAIN_URL, TileIndex, nztmToWorld } from "./manifest";
@@ -60,7 +60,10 @@ export interface TerrainQuality {
 }
 
 export const TERRAIN_DESKTOP: TerrainQuality = {
-  gridSize: 64,
+  // Near the camera patches split until their vertices meet the data's
+  // samples whatever this is; it only sets how fine the distance is. 64 cost
+  // twice the vertices (about 8 ms on an M1) for no difference that shows.
+  gridSize: 32,
   slots: 256,
   lodFactor: 2.5,
   maxNodes: 800,
@@ -271,9 +274,13 @@ function createMaterial(
 
   const size = tileA.z;
 
-  const { height, gradientX, gradientZ } = smooth
-    ? sample(texel)
-    : sampleBilinear(texel);
+  const sampled = smooth ? sample(texel) : sampleBilinear(texel);
+
+  // Sampled once per vertex and interpolated: the pixels' shading would
+  // otherwise read all of the filter's taps again for each of them.
+  const height: any = varying(sampled.height);
+  const gradientX: any = varying(sampled.gradientX);
+  const gradientZ: any = varying(sampled.gradientZ);
 
   // Skirts drop a little below the patch to hide cracks.
   const skirt = positionGeometry.y.mul(size).mul(0.05);
@@ -359,8 +366,6 @@ function createPatches(
   const geometry = createPatchGeometry(gridSize);
   const tileA = new InstancedBufferAttribute(new Float32Array(maxNodes * 4), 4);
   const tileB = new InstancedBufferAttribute(new Float32Array(maxNodes * 4), 4);
-  tileA.setUsage(DynamicDrawUsage);
-  tileB.setUsage(DynamicDrawUsage);
   geometry.setAttribute("tileA", tileA);
   geometry.setAttribute("tileB", tileB);
   geometry.instanceCount = 0;
@@ -374,13 +379,30 @@ function createPatches(
     select(nodes);
     const a = tileA.array;
     const b = tileB.array;
+
     nodes.forEach((node, i) => {
-      a.set([node.originX, node.originZ, node.size, node.slot], i * 4);
-      b.set([node.u0, node.v0, node.uvScale, node.level], i * 4);
+      const o = i * 4;
+      a[o] = node.originX;
+      a[o + 1] = node.originZ;
+      a[o + 2] = node.size;
+      a[o + 3] = node.slot;
+      b[o] = node.u0;
+      b[o + 1] = node.v0;
+      b[o + 2] = node.uvScale;
+      b[o + 3] = node.level;
     });
-    tileA.needsUpdate = true;
-    tileB.needsUpdate = true;
+
     geometry.instanceCount = nodes.length;
+
+    if (!nodes.length) return;
+
+    // Upload only the patches in use, not the whole buffer.
+    tileA.clearUpdateRanges();
+    tileA.addUpdateRange(0, nodes.length * 4);
+    tileA.needsUpdate = true;
+    tileB.clearUpdateRanges();
+    tileB.addUpdateRange(0, nodes.length * 4);
+    tileB.needsUpdate = true;
   };
 
   const dispose = () => {
@@ -537,36 +559,41 @@ export function Terrain({
     [cache, main, reflection, caster]
   );
 
-  const casterSignature = useRef("");
+  // What the casters drew last: slot and uvScale per node.
+  const casterSignature = useRef<number[]>([]);
+
+  // Options for each selection, with the vertical scale filled in per frame.
+  const mainOptions = useMemo(
+    () => ({ ...quality, verticalScale: 1 }),
+    [quality]
+  );
+
+  const reflectionOptions = useMemo(
+    () => ({ ...REFLECTION, verticalScale: 1 }),
+    []
+  );
 
   useFrame(() => {
-    const scale = verticalScale.value;
-    main.update((out) =>
-      selectNodes(
-        index,
-        cache,
-        camera,
-        { ...quality, verticalScale: scale },
-        out
-      )
-    );
+    mainOptions.verticalScale = verticalScale.value;
+    reflectionOptions.verticalScale = verticalScale.value;
+    main.update((out) => selectNodes(index, cache, camera, mainOptions, out));
     reflection.update((out) =>
-      selectNodes(
-        index,
-        cache,
-        camera,
-        { ...REFLECTION, verticalScale: scale },
-        out
-      )
+      selectNodes(index, cache, camera, reflectionOptions, out)
     );
     // Selected every frame so its tiles stay resident; the shadow map only
     // re-renders when what it would draw changes.
     caster.update((out) => {
       selectLevel(index, cache, SHADOW_CASTER.level, out);
-      const signature = out.map((n) => `${n.slot}:${n.uvScale}`).join();
+      const last = casterSignature.current;
 
-      if (signature !== casterSignature.current) {
-        casterSignature.current = signature;
+      const same =
+        last.length === out.length * 2 &&
+        out.every(
+          (n, i) => last[i * 2] === n.slot && last[i * 2 + 1] === n.uvScale
+        );
+
+      if (!same) {
+        casterSignature.current = out.flatMap((n) => [n.slot, n.uvScale]);
         shadowCasters.version++;
       }
     });

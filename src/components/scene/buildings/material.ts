@@ -1,4 +1,4 @@
-import { DoubleSide, MeshStandardNodeMaterial } from "three/webgpu";
+import { FrontSide, MeshStandardNodeMaterial } from "three/webgpu";
 import {
   abs,
   attribute,
@@ -197,7 +197,7 @@ export function createBuildingMaterial({
   const material = new MeshStandardNodeMaterial({
     roughness: 0.85,
     metalness: 0,
-    side: DoubleSide,
+    side: FrontSide,
   });
 
   // The terrain is drawn exaggerated about sea level; buildings keep their

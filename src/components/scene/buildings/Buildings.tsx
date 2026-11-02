@@ -163,14 +163,12 @@ function BuildingTiles({
   const selected = useRef<BuildingTile[]>([]);
   const visible = useRef(new Set<TileObjects>());
 
+  // With the vertical scale filled in per frame.
+  const options = useMemo(() => ({ ...quality, verticalScale: 1 }), [quality]);
+
   useFrame(() => {
-    selectTiles(
-      index,
-      cache,
-      camera,
-      { ...quality, verticalScale: verticalScale.value },
-      selected.current
-    );
+    options.verticalScale = verticalScale.value;
+    selectTiles(index, cache, camera, options, selected.current);
 
     for (const tile of preload) {
       cache.request(tile, PRELOAD_PRIORITY + tile.level * 1e6);
