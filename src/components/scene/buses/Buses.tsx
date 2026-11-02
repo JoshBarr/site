@@ -22,6 +22,8 @@ import {
   subject,
   useFollowCandidates,
 } from "../follow/store";
+import { createModelMaterial, isNear, NearModels } from "../models/lod";
+import { createBusGeometry } from "./model";
 import { BusRoutes, loadBusRoutes } from "./routes";
 import { follow, Run } from "./run";
 import { useBuses } from "./useBuses";
@@ -45,8 +47,11 @@ const CATCH_UP = 10;
  * A single-decker, near enough: Metlink runs double-deckers on some routes
  * too, but doesn't say which bus is which.
  */
-const BUS = { length: 12.5, width: 2.5, height: 3.2 };
-const BUS_TINT = new Color(0xc4c4c4);
+const BUS = { length: 12.5, width: 2.5, height: 3.2, tint: 0xc4c4c4 };
+const BUS_TINT = new Color(BUS.tint);
+
+/** Drawn in detail at once, at most. */
+const MAX_DETAILED = 48;
 
 /** Off the road, m: the DEM's a little rough under it. */
 const RIDE = 0.1;
@@ -109,13 +114,27 @@ function createBuses() {
   mesh.frustumCulled = false;
   mesh.count = 0;
   castsNearShadow(mesh);
+  const near = createModelMaterial({ roughness: 0.55 });
 
-  return { mesh, windowsLit };
+  const detailed = new NearModels(
+    createBusGeometry(BUS),
+    near.material,
+    MAX_DETAILED
+  );
+
+  return {
+    mesh,
+    windowsLit,
+    detailed,
+    detailedMaterial: near.material,
+    detailedLit: near.lit,
+  };
 }
 
 const matrix = new Matrix4();
 const rotation = new Quaternion();
 const scale = new Vector3(BUS.width, BUS.height, BUS.length);
+const ONE = new Vector3(1, 1, 1);
 const front = new Vector3();
 const back = new Vector3();
 const centre = new Vector3();
@@ -213,7 +232,7 @@ function Fleet({
   }, [runs, trails]);
 
   useEffect(() => {
-    fleet.windowsLit.value = lights;
+    fleet.windowsLit.value = fleet.detailedLit.value = lights;
   }, [fleet, lights]);
 
   useEffect(
@@ -221,6 +240,8 @@ function Fleet({
       fleet.mesh.geometry.dispose();
       fleet.mesh.material.dispose();
       fleet.mesh.dispose();
+      fleet.detailedMaterial.dispose();
+      fleet.detailed.dispose();
       trails.lines.geometry.dispose();
       trails.material.dispose();
       sprites.sprite.material.dispose();
@@ -228,7 +249,7 @@ function Fleet({
     [fleet, trails, sprites]
   );
 
-  useFrame((_, delta) => {
+  useFrame(({ camera }, delta) => {
     const target = (Date.now() - DELAY - epoch) / 1000;
     const { light, tint } = sprites;
     let lit = 0;
@@ -242,6 +263,7 @@ function Fleet({
 
     let count = 0;
     const watched = followed("bus");
+    fleet.detailed.begin();
     runs.forEach((run, i) => {
       const { bus, fixes } = run;
       const latest = fixes[fixes.length - 1].time;
@@ -275,7 +297,16 @@ function Fleet({
         rotation.identity();
       }
 
-      fleet.mesh.setMatrixAt(count++, matrix.compose(centre, rotation, scale));
+      const detailed =
+        isNear(BUS.length, camera.position.distanceTo(centre)) &&
+        fleet.detailed.add(matrix.compose(centre, rotation, ONE));
+
+      if (!detailed) {
+        fleet.mesh.setMatrixAt(
+          count++,
+          matrix.compose(centre, rotation, scale)
+        );
+      }
 
       if (bus.id === watched) {
         publish({
@@ -296,6 +327,7 @@ function Fleet({
       }
     });
 
+    fleet.detailed.end();
     fleet.mesh.count = count;
     fleet.mesh.instanceMatrix.needsUpdate = true;
     sprites.sprite.count = lit;
@@ -306,6 +338,7 @@ function Fleet({
   return (
     <>
       <primitive object={fleet.mesh} name="buses" />
+      <primitive object={fleet.detailed.mesh} name="detailed buses" />
       <primitive object={trails.lines} name="bus trails" />
       <primitive object={sprites.sprite} name="bus lights" />
     </>

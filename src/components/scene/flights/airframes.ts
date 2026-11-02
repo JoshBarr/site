@@ -1,7 +1,7 @@
 import type { Aircraft } from "../../../lib/flights";
 
 // What to draw for an aircraft: a shape and how long it is, from its ICAO
-// type where we know it, else its ADS-B category. Every tail is grey.
+// type where we know it, else its ADS-B category.
 
 export type Shape = "jet" | "prop" | "helicopter";
 
@@ -9,8 +9,6 @@ export interface Airframe {
   shape: Shape;
   /** Metres, nose to tail. */
   length: number;
-  body: number;
-  tail: number;
 }
 
 /** Types seen around Wellington, and a few that visit. Length in metres. */
@@ -90,14 +88,11 @@ const CATEGORIES = new Map(
   } satisfies Record<string, [Shape, number]>)
 );
 
-const WHITE = 0xf2f2ef;
-const GREY = 0x8c8f93;
-
 export function airframeFor({ type, category }: Aircraft): Airframe {
   const fallback: [Shape, number] = ["prop", 9];
 
   const [shape, length] =
     TYPES.get(type ?? "") ?? CATEGORIES.get(category ?? "") ?? fallback;
 
-  return { shape, length, body: WHITE, tail: GREY };
+  return { shape, length };
 }

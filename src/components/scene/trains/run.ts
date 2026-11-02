@@ -36,7 +36,7 @@ interface Car {
 
 // Sizes are near enough, not drawn from the stock's specs.
 /** A car of a Matangi (FP/FT) unit, which run in pairs. */
-const MATANGI: Car = {
+export const MATANGI: Car = {
   length: 20.7,
   width: 2.75,
   height: 3.75,
@@ -44,9 +44,14 @@ const MATANGI: Car = {
 };
 
 /** The Wairarapa Connection's carriages and the locomotive hauling them. */
-const CARRIAGE: Car = { length: 22, width: 2.8, height: 3.6, tint: 0x8e8e8e };
+export const CARRIAGE: Car = {
+  length: 22,
+  width: 2.8,
+  height: 3.6,
+  tint: 0x8e8e8e,
+};
 
-const LOCOMOTIVE: Car = {
+export const LOCOMOTIVE: Car = {
   length: 17,
   width: 2.75,
   height: 3.85,

@@ -4,6 +4,7 @@ import {
   AdditiveBlending,
   Color,
   Euler,
+  Group,
   InstancedBufferAttribute,
   InstancedInterleavedBuffer,
   InstancedMesh,
@@ -53,6 +54,9 @@ import {
 import { TRAIL, TRAIL_GAP, UNDER_WAY } from "../../../lib/vessels";
 import { useVessels, Vessel } from "./useVessels";
 import { useShore } from "./shore";
+import { createShipModel, Kind, Lights, Point } from "./models";
+import { createModelMaterial, HIDDEN, isNear } from "../models/lod";
+import { castsNearShadow } from "../landmarks/nearShadow";
 import {
   Candidate,
   followed,
@@ -140,16 +144,11 @@ const TAIL_FADE = TRAIL / 1000 - TAIL_HOLD;
 /** Time of a trail's end at the ship, seconds: always now. */
 const FUTURE = 1e9;
 
-type Kind =
-  | "passenger"
-  | "cargo"
-  | "tanker"
-  | "tug"
-  | "pilot"
-  | "sailing"
-  | "pleasure"
-  | "fishing"
-  | "other";
+/**
+ * Detailed models built in a frame, at most, so a harbour full of boats
+ * coming into view isn't built all at once.
+ */
+const BUILDS_PER_FRAME = 1;
 
 function kindOf(type: number): Kind {
   if (type >= 60 && type < 70) return "passenger";
@@ -202,24 +201,16 @@ interface Part {
   color: number;
 }
 
-type Point = [number, number, number];
-
-/** Where a ship's lights are: metres in its frame, x starboard, z aft. */
-interface Lights {
-  masthead: Point;
-  port: Point;
-  starboard: Point;
-  stern: Point;
-  anchor: Point;
-}
-
 interface Hull {
+  kind: Kind;
   length: number;
   beam: number;
   /** Deck height above the water. */
   freeboard: number;
   /** Hull centre from the AIS antenna: metres forward, metres to starboard. */
   offset: [number, number];
+  /** The antenna, 0 at the bow to 1 at the stern, if the ship says. */
+  antenna: number | null;
   hull: number;
   deck: number;
   parts: Part[];
@@ -308,6 +299,7 @@ function hullFor({ mmsi, type, dimension }: Vessel): Hull {
   let length = typical.length;
   let beam = typical.beam;
   let offset: [number, number] = [0, 0];
+  let antenna: number | null = null;
 
   if (dimension) {
     const [bow, stern, port, starboard] = dimension;
@@ -317,6 +309,7 @@ function hullFor({ mmsi, type, dimension }: Vessel): Hull {
       length = Math.max(bow + stern, 3);
       beam = Math.max(port + starboard, 1);
       offset = [(bow - stern) / 2, (starboard - port) / 2];
+      antenna = bow + stern > 0 ? bow / (bow + stern) : null;
     }
   }
 
@@ -326,10 +319,12 @@ function hullFor({ mmsi, type, dimension }: Vessel): Hull {
   const parts = partsFor(kind, length, mmsi);
 
   return {
+    kind,
     length,
     beam,
     freeboard,
     offset,
+    antenna,
     hull: typical.hull,
     deck: typical.deck,
     parts,
@@ -429,6 +424,84 @@ function createMeshes() {
   }
 
   return { hulls, parts, wakes, hullColors, deckColors, partColors };
+}
+
+interface Detailed {
+  /** What it was built for: rebuilt if the ship's size or name changes. */
+  key: string;
+  mesh: InstancedMesh;
+  lights: Lights;
+}
+
+/**
+ * Ships drawn in detail, built as they first come close and kept while
+ * they're in the harbour: each its own mesh, as each is its own shape.
+ */
+function createDetailed() {
+  const group = new Group();
+  const { material, lit } = createModelMaterial({ roughness: 0.6 });
+  const models = new Map<number, Detailed>();
+
+  const keyOf = (vessel: Vessel, hull: Hull) =>
+    `${vessel.name}|${hull.length}|${hull.beam}|${hull.antenna}`;
+
+  /** A ship's model, if it's built or there's time this frame to build it. */
+  const get = (vessel: Vessel, hull: Hull, budget: { builds: number }) => {
+    const key = keyOf(vessel, hull);
+    const model = models.get(vessel.mmsi);
+
+    if (model?.key === key) return model;
+
+    if (budget.builds <= 0) return null;
+    budget.builds--;
+
+    if (model) remove(vessel.mmsi);
+
+    const { geometry, lights } = createShipModel({
+      mmsi: vessel.mmsi,
+      name: vessel.name,
+      kind: hull.kind,
+      length: hull.length,
+      beam: hull.beam,
+      freeboard: hull.freeboard,
+      antenna: hull.antenna,
+    });
+
+    const mesh = new InstancedMesh(geometry, material, 1);
+    mesh.name = vessel.name ?? String(vessel.mmsi);
+    mesh.frustumCulled = false;
+    mesh.visible = false;
+    castsNearShadow(mesh);
+    group.add(mesh);
+    const built = { key, mesh, lights };
+    models.set(vessel.mmsi, built);
+
+    return built;
+  };
+
+  const remove = (mmsi: number) => {
+    const model = models.get(mmsi);
+
+    if (!model) return;
+    group.remove(model.mesh);
+    model.mesh.geometry.dispose();
+    model.mesh.dispose();
+    models.delete(mmsi);
+  };
+
+  /** Forgets ships no longer in the harbour. */
+  const keep = (present: Set<number>) => {
+    for (const mmsi of models.keys()) {
+      if (!present.has(mmsi)) remove(mmsi);
+    }
+  };
+
+  const dispose = () => {
+    keep(new Set());
+    material.dispose();
+  };
+
+  return { group, models, lit, get, keep, dispose };
 }
 
 /** Seconds since the page's epoch. */
@@ -615,6 +688,7 @@ export function Vessels({
   const meshes = useMemo(createMeshes, []);
   const trails = useMemo(createTrails, []);
   const sprites = useMemo(createLights, []);
+  const detailed = useMemo(createDetailed, []);
   const tracks = useRef(new Map<number, Track>());
 
   const waves = useMemo(() => {
@@ -745,7 +819,13 @@ export function Vessels({
     for (const mmsi of tracks.current.keys()) {
       if (!present.has(mmsi)) tracks.current.delete(mmsi);
     }
-  }, [ships, meshes]);
+
+    detailed.keep(present);
+  }, [ships, meshes, detailed]);
+
+  useEffect(() => {
+    detailed.lit.value = lights;
+  }, [detailed, lights]);
 
   useEffect(
     () => () => {
@@ -761,8 +841,9 @@ export function Vessels({
 
       trails.material.dispose();
       sprites.sprite.material.dispose();
+      detailed.dispose();
     },
-    [meshes, trails, sprites]
+    [meshes, trails, sprites, detailed]
   );
 
   useFrame(({ camera, clock }, delta) => {
@@ -777,6 +858,8 @@ export function Vessels({
     const { light, tint } = sprites;
     let lit = 0;
     const watched = followed("ship");
+    const budget = { builds: BUILDS_PER_FRAME };
+    const shown = new Set<number>();
 
     const show = (at: Point, tone: Color, intensity: number) => {
       if (intensity <= 0 || lit >= MAX_LIGHTS) return;
@@ -922,8 +1005,19 @@ export function Vessels({
       rotation.multiplyQuaternions(yaw, tilt);
       ship.compose(position.set(cx, heave, cz), rotation, scale.set(1, 1, 1));
 
+      const model = isNear(length, camera.position.distanceTo(position))
+        ? detailed.get(vessel, hull, budget)
+        : null;
+
+      if (model) {
+        model.mesh.setMatrixAt(0, ship);
+        model.mesh.instanceMatrix.needsUpdate = true;
+        model.mesh.visible = true;
+        shown.add(vessel.mmsi);
+      }
+
       matrix.multiplyMatrices(ship, local.makeScale(beam, freeboard, length));
-      hulls.setMatrixAt(i, matrix);
+      hulls.setMatrixAt(i, model ? HIDDEN : matrix);
 
       if (String(vessel.mmsi) === watched) {
         publish({
@@ -943,7 +1037,10 @@ export function Vessels({
           STILL,
           scale.set(width * beam, height, (to - from) * length)
         );
-        parts.setMatrixAt(partCount++, matrix.multiplyMatrices(ship, local));
+        parts.setMatrixAt(
+          partCount++,
+          model ? HIDDEN : matrix.multiplyMatrices(ship, local)
+        );
       }
 
       const on = lights > hull.switchOn ? 1 : 0;
@@ -958,7 +1055,7 @@ export function Vessels({
           dx * forward[0] + dz * forward[1]
         );
 
-        const at = hull.lights;
+        const at = model?.lights ?? hull.lights;
 
         if (underWay) {
           show(
@@ -993,6 +1090,10 @@ export function Vessels({
       }
     });
 
+    for (const [mmsi, { mesh }] of detailed.models) {
+      if (!shown.has(mmsi)) mesh.visible = false;
+    }
+
     hulls.count = ships.length;
     parts.count = partCount;
     wakes.count = wakeCount;
@@ -1016,6 +1117,7 @@ export function Vessels({
       <primitive object={trails.past.lines} name="ship trails" />
       <primitive object={trails.heads.lines} />
       <primitive object={sprites.sprite} name="ship lights" />
+      <primitive object={detailed.group} name="detailed ships" />
     </>
   );
 }
