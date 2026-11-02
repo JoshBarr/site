@@ -1,5 +1,6 @@
-// Builds src/components/scene/landmarks/sites.ts: where the wind turbines and
-// transmitter towers stand, in NZTM, with the ground height under each.
+// Builds src/components/scene/landmarks/sites.ts: where the wind turbines,
+// transmitter towers and lighthouses stand, in NZTM, with the ground height
+// under each.
 //
 //   node scripts/landmarks/build_sites.mjs [--osm cached.json]
 //
@@ -25,11 +26,20 @@ const QUERY = `[out:json][timeout:60];
   node["generator:source"="wind"](-41.40,174.55,-41.15,174.85);
   way["man_made"="tower"]["name"="Kaukau TV/FM transmitter"];
   node(296684884);
+  node(id:1907945529,1052816306,1052817586,6035642212);
 );
 out center body;`;
 
 /** OSM node of the lattice communication tower on Mt Victoria (Topo50 7640592). */
 const MT_VICTORIA_NODE = 296684884;
+
+/** OSM nodes of the lighthouses, by the site each becomes. */
+const LIGHTHOUSE_NODES = new Map([
+  [1907945529, "pencarrow"],
+  [1052816306, "pencarrowLower"],
+  [1052817586, "baringHead"],
+  [6035642212, "pointHalswell"],
+]);
 
 async function loadOsm() {
   const cached = process.argv.indexOf("--osm");
@@ -74,6 +84,10 @@ const sites = {
   brooklyn: [],
   kaukau: [],
   mtVictoria: [],
+  pencarrow: [],
+  pencarrowLower: [],
+  baringHead: [],
+  pointHalswell: [],
 };
 
 for (const element of osm.elements) {
@@ -83,6 +97,7 @@ for (const element of osm.elements) {
   let site;
 
   if (node.id === MT_VICTORIA_NODE) site = "mtVictoria";
+  else if (LIGHTHOUSE_NODES.has(node.id)) site = LIGHTHOUSE_NODES.get(node.id);
   else if (tags.name === "Kaukau TV/FM transmitter") site = "kaukau";
   else if (tags["generator:source"] !== "wind") continue;
   else if (tags.name === "Brooklyn Wind Turbine") site = "brooklyn";
@@ -101,6 +116,10 @@ const expected = {
   brooklyn: 1,
   kaukau: 1,
   mtVictoria: 1,
+  pencarrow: 1,
+  pencarrowLower: 1,
+  baringHead: 1,
+  pointHalswell: 1,
 };
 
 for (const [name, count] of Object.entries(expected)) {
@@ -152,6 +171,18 @@ export const KAUKAU: Site = ${single(sites.kaukau)};
 
 /** The lattice communications tower by the Mt Victoria lookout. */
 export const MT_VICTORIA: Site = ${single(sites.mtVictoria)};
+
+/** The first Pencarrow lighthouse (1859), on the head; dark since 1935. */
+export const PENCARROW: Site = ${single(sites.pencarrow)};
+
+/** Pencarrow's lower light (1906), by the shore below it. */
+export const PENCARROW_LOWER: Site = ${single(sites.pencarrowLower)};
+
+/** Baring Head lighthouse (1935), the harbour's landfall light. */
+export const BARING_HEAD: Site = ${single(sites.baringHead)};
+
+/** Point Halswell light, at the tip of the Miramar peninsula. */
+export const POINT_HALSWELL: Site = ${single(sites.pointHalswell)};
 `
 );
 

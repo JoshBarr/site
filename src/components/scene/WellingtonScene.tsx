@@ -36,7 +36,7 @@ import {
   phase,
 } from "./haze";
 import { hazeGlow } from "./skyglow";
-import { Conditions, useConditions } from "./weather";
+import { Conditions, lowCloudBase, useConditions } from "./weather";
 import { loadManifest, nztmToWorld, TileIndex } from "./terrain/manifest";
 import {
   HeightQuery,
@@ -74,6 +74,16 @@ const START_POSITION: [number, number] = [1752500, 5429000];
 const START_ALTITUDE = 900;
 const START_TARGET: [number, number] = [1747500, 5428700];
 const TARGET_ALTITUDE = 150;
+
+/** Starting under a lower deck, this far beneath its base, m. */
+const DECK_CLEARANCE = 100;
+
+/** The usual start, or under the low cloud if its base is lower. */
+function startAltitude(deck: number | null) {
+  return deck === null
+    ? START_ALTITUDE
+    : Math.min(START_ALTITUDE, deck - DECK_CLEARANCE);
+}
 
 /** Sky samples reach this far for the city's glow, m. */
 const SKYGLOW_DISTANCE = 20000;
@@ -186,10 +196,13 @@ function Controls({
   index,
   heightAt,
   sea,
+  deck,
 }: {
   index: TileIndex;
   heightAt: React.RefObject<HeightQuery | null>;
   sea: OceanConditions;
+  /** Base of the low cloud, m, or null under a clear sky. */
+  deck: number | null;
 }) {
   const { manifest } = index;
   const half = manifest.rootSize / 2;
@@ -204,13 +217,18 @@ function Controls({
     const [pe, pn, pAlt, te, tn, tAlt] =
       cam?.length === 6 && cam.every(Number.isFinite)
         ? cam
-        : [...START_POSITION, START_ALTITUDE, ...START_TARGET, TARGET_ALTITUDE];
+        : [
+            ...START_POSITION,
+            startAltitude(deck),
+            ...START_TARGET,
+            TARGET_ALTITUDE,
+          ];
 
     const [px, pz] = nztmToWorld(manifest, pe, pn);
     const [tx, tz] = nztmToWorld(manifest, te, tn);
 
     return [new Vector3(px, pAlt, pz), new Vector3(tx, tAlt, tz)];
-  }, [manifest]);
+  }, [manifest, deck]);
 
   const boundary = useMemo(
     () =>
@@ -250,6 +268,10 @@ function Controls({
   /** Whether the rig has the camera. */
   const followingRef = useRef(false);
 
+  /** Whether the view's been set, and since moved by hand. */
+  const placed = useRef(false);
+  const touched = useRef(false);
+
   // Back to orbiting, from where the follow rig left the camera.
   const handBack = useCallback(() => {
     const c = controls.current;
@@ -283,6 +305,8 @@ function Controls({
     const element = events ?? renderer.domElement;
 
     const take = () => {
+      touched.current = true;
+
       if (!getSnapshot().following) return;
       stopFollowing();
       handBack();
@@ -303,12 +327,16 @@ function Controls({
     };
   }, [events, renderer, handBack]);
 
+  // Where the view starts, and again (gliding there) if the forecast arrives
+  // with a lower deck, until the map's been touched or a vehicle followed.
   useEffect(() => {
     const c = controls.current;
 
     if (!c) return;
 
     c.setBoundary(boundary);
+
+    if (touched.current || followingRef.current) return;
     c.setLookAt(
       position.x,
       position.y,
@@ -316,8 +344,9 @@ function Controls({
       target.x,
       target.y,
       target.z,
-      false
+      placed.current
     );
+    placed.current = true;
   }, [boundary, position, target]);
 
   useFrame((_, delta) => {
@@ -616,6 +645,7 @@ export function Scene({
   const sun = useMemo(() => sunPosition(time), [time]);
   const sea = useMemo(() => seaConditions(conditions), [conditions]);
   const lights = nightFor(sun.altitude);
+  const deck = conditions.cloudCover > 0 ? lowCloudBase(conditions) : null;
 
   const setHeightQuery = useCallback((query: HeightQuery | null) => {
     heightAt.current = query;
@@ -683,7 +713,7 @@ export function Scene({
         quality={mobile ? CLOUDS_MOBILE : CLOUDS_DESKTOP}
         night={lights}
       />
-      <Controls index={index} heightAt={heightAt} sea={sea} />
+      <Controls index={index} heightAt={heightAt} sea={sea} deck={deck} />
     </>
   );
 }
