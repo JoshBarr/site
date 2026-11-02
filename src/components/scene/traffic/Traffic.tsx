@@ -24,7 +24,6 @@ import {
   clamp,
   cos,
   dot,
-  exp,
   float,
   fract,
   fwidth,
@@ -32,7 +31,6 @@ import {
   max,
   min,
   mix,
-  normalize,
   positionGeometry,
   pow,
   round,
@@ -41,12 +39,12 @@ import {
   smoothstep,
   sqrt,
   step,
-  uv,
   vec3,
 } from "three/tsl";
 import { TileIndex } from "../terrain/manifest";
 import { pixelAngle } from "../landmarks/common";
 import { hazeTransmittance } from "../haze";
+import { distantDim, lampGlow, rowShare } from "../lamps";
 import {
   ASPHALT,
   BODY,
@@ -95,9 +93,25 @@ const MAX_GROW = 6;
 /** Head and tail lights: above the road, m; at least a pixel size. */
 const LIGHT_HEIGHT = 0.7;
 const LIGHT_SIZE = 0.5;
-const LIGHT_PIXELS = 9;
+const LIGHT_PIXELS = 6;
 const HEAD = new Color(1, 0.92, 0.75);
 const TAIL = new Color(1, 0.06, 0.03);
+const HEAD_BRIGHTNESS = 3;
+const TAIL_BRIGHTNESS = 5;
+
+/**
+ * Headlights are dipped, aimed down the road: seen from above the beam,
+ * this sine of the view's elevation up, they're down to a share of it.
+ */
+const BEAM_TOP = [0.05, 0.3];
+const ABOVE_BEAM = 0.5;
+
+/**
+ * Lights down a lane pile up seen along it, so each gives its share (see
+ * rowShare), but never under this: a short run of cars, where shares don't
+ * add up to one light's worth, still shows.
+ */
+const LIGHT_LEAST = 0.125;
 
 /** The road surfaces, each chunk built when the camera first comes near. */
 function Surfaces({ roads }: { roads: Roads }) {
@@ -222,13 +236,13 @@ function Surfaces({ roads }: { roads: Roads }) {
 function createFleet(geometry: BufferGeometry, capacity: number) {
   const place = new InstancedBufferAttribute(new Float32Array(capacity * 4), 4);
   const shape = new InstancedBufferAttribute(new Float32Array(capacity * 4), 4);
-  const glow = new InstancedBufferAttribute(new Float32Array(capacity * 2), 2);
+  const glow = new InstancedBufferAttribute(new Float32Array(capacity * 3), 3);
 
   for (const a of [place, shape, glow]) a.setUsage(DynamicDrawUsage);
 
   const at = instancedBufferAttribute<"vec4">(place, "vec4");
   const size = instancedBufferAttribute<"vec4">(shape, "vec4");
-  const lit = instancedBufferAttribute<"vec2">(glow, "vec2");
+  const lit = instancedBufferAttribute<"vec3">(glow, "vec3");
   const centre = at.xyz;
   const heading = at.w;
   const forward = vec3(sin(heading), 0, cos(heading));
@@ -278,7 +292,12 @@ function createFleet(geometry: BufferGeometry, capacity: number) {
   mesh.frustumCulled = false;
 
   // Lights, at the front and back: seen from ahead and behind respectively.
-  const lights = (end: 1 | -1, tint: Color, intensity: typeof lit.x) => {
+  const lights = (
+    end: 1 | -1,
+    tint: Color,
+    brightness: number,
+    intensity: typeof lit.x
+  ) => {
     const sprite = new SpriteNodeMaterial({
       transparent: true,
       depthWrite: false,
@@ -292,22 +311,38 @@ function createFleet(geometry: BufferGeometry, capacity: number) {
       .add(vec3(0, float(LIGHT_HEIGHT).mul(grow), 0));
 
     sprite.positionNode = position;
-    sprite.scaleNode = max(
+    const toCamera = cameraPosition.sub(position);
+    const distance = toCamera.length();
+
+    const scale = max(
       float(LIGHT_SIZE),
-      cameraPosition.distance(position).mul(pixelAngle).mul(LIGHT_PIXELS)
+      distance.mul(pixelAngle).mul(LIGHT_PIXELS)
     );
 
-    const facing = dot(
-      forward.mul(end),
-      normalize(cameraPosition.sub(position))
-    );
+    sprite.scaleNode = scale;
+    const facing = dot(forward.mul(end), toCamera.div(distance));
 
-    const r = uv().sub(0.5).length().mul(2);
-    const shine = exp(r.mul(r).mul(-40)).add(exp(r.mul(-4.5)).mul(0.4));
-    const edge = float(1).sub(smoothstep(0.85, 1, r));
+    const share = rowShare({
+      toCamera,
+      distance,
+      row: forward,
+      spacing: lit.z,
+      size: scale,
+      least: LIGHT_LEAST,
+    });
+
+    const beam =
+      end === 1
+        ? mix(
+            float(1),
+            float(ABOVE_BEAM),
+            smoothstep(BEAM_TOP[0], BEAM_TOP[1], toCamera.y.div(distance))
+          )
+        : float(1);
+
     sprite.colorNode = vec3(tint.r, tint.g, tint.b)
-      .mul(shine.mul(edge).mul(intensity).mul(5))
-      .mul(smoothstep(-0.6, 0.3, facing))
+      .mul(lampGlow(0.4).mul(intensity).mul(share).mul(brightness))
+      .mul(smoothstep(-0.6, 0.3, facing).mul(beam).mul(distantDim(distance)))
       .mul(sqrt(hazeTransmittance(cameraPosition, position)));
     const object = new Sprite(sprite);
     object.count = 0;
@@ -317,8 +352,8 @@ function createFleet(geometry: BufferGeometry, capacity: number) {
     return object;
   };
 
-  const heads = lights(1, HEAD, lit.x);
-  const tails = lights(-1, TAIL, lit.y);
+  const heads = lights(1, HEAD, HEAD_BRIGHTNESS, lit.x);
+  const tails = lights(-1, TAIL, TAIL_BRIGHTNESS, lit.y);
 
   return { mesh, heads, tails, place, shape, glow, capacity };
 }
@@ -438,8 +473,9 @@ function Vehicles({
         sh[n * 4 + 3] = car.tone;
         const on = lights > car.switchOn;
         const g = fleet.glow.array;
-        g[n * 2] = on ? scale : 0;
-        g[n * 2 + 1] = (on ? 0.45 + car.brake * 0.9 : car.brake * 0.25) * scale;
+        g[n * 3] = on ? scale : 0;
+        g[n * 3 + 1] = (on ? 0.45 + car.brake * 0.9 : car.brake * 0.25) * scale;
+        g[n * 3 + 2] = car.spacing;
       }
     }
 
@@ -452,7 +488,7 @@ function Vehicles({
       for (const [attribute, size] of [
         [fleet.place, 4],
         [fleet.shape, 4],
-        [fleet.glow, 2],
+        [fleet.glow, 3],
       ] as const) {
         attribute.clearUpdateRanges();
         attribute.addUpdateRange(0, n * size);
