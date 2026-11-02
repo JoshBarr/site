@@ -17,9 +17,9 @@ general first so woods inside suburbs and parks inside towns win. Where the
 trees build has cached lidar canopy cover (scripts/trees), forest is
 whichever is more.
 
-Sea floor: real bathymetry if BATHYMETRY points at a raster (e.g. NIWA's NZ
-250m grid, elevations negative below sea level), ramped to 0 at the coast;
-otherwise a synthetic shelf sloping away from the coast.
+Sea floor: NIWA's NZ 250m bathymetry grid (nzbathy_2016.tif, elevations
+negative below sea level), which BATHYMETRY must point at, ramped to 0 at
+the coast.
 
 Tile layout: each tile has 256 cells / 257 samples per side, registered so the
 first and last samples sit exactly on the tile edges (shared with neighbours),
@@ -41,7 +41,7 @@ Usage:
   .venv-terrain/bin/python -I scripts/terrain/build_tiles.py fetch <levels...>
   .venv-terrain/bin/python -I scripts/terrain/build_tiles.py landcover
   .venv-terrain/bin/python -I scripts/terrain/build_tiles.py shore
-  BATHYMETRY=~/Downloads/nz_bathy.tif .venv-terrain/bin/python -I ...
+  (each with BATHYMETRY=~/Downloads/nzbathy2016/nzbathy_2016.tif or similar)
 """
 
 import io
@@ -88,8 +88,9 @@ RING_MAX_LEVEL = 4
 REGIONS = [
     # level 5 (8m): Porirua, Hutt, Eastbourne, Mākara coast
     (5, (1724000.0, 5410000.0, 1772000.0, 5452000.0)),
-    # level 6 (4m): West Wind -> Eastbourne, south coast -> Johnsonville
-    (6, (1731000.0, 5418000.0, 1760000.0, 5440000.0)),
+    # level 6 (4m): West Wind -> Eastbourne, south coast -> Johnsonville, and
+    # the Hutt valley floor up to Taita
+    (6, (1731000.0, 5418000.0, 1765000.0, 5440000.0)),
     # level 7 (2m): same core, for close-ups
     (7, (1731000.0, 5418000.0, 1760000.0, 5440000.0)),
 ]
@@ -97,10 +98,6 @@ MAX_LEVEL = max(level for level, _ in REGIONS)
 
 BATHYMETRY = os.environ.get("BATHYMETRY")
 
-# Synthetic sea floor, used where there's no bathymetry: slopes down away from
-# the coast.
-SHELF_SLOPE = 0.04
-SHELF_MAX_DEPTH = 30.0
 # Bathymetry grids are too coarse to resolve the shore, so depth is capped by
 # a ramp up to 0 at the coastline.
 COAST_SLOPE = 0.08
@@ -289,9 +286,9 @@ def bathymetry():
 
 
 def read_depth(level):
-    """Bathymetry resampled to a level's grid, as positive depth, or None."""
+    """Bathymetry resampled to a level's grid, as positive depth."""
     if not BATHYMETRY:
-        return None
+        sys.exit("set BATHYMETRY to NIWA's NZ bathymetry grid (nzbathy_2016.tif)")
     elevation, src_transform, src_crs = bathymetry()
     transform, shape = level_grid(level)
     out = np.full(shape, np.nan, dtype=np.float32)
@@ -328,21 +325,19 @@ def dredged(level):
     return out
 
 
-def fill_sea(heights, res, depth=None, dredged=None):
+def fill_sea(heights, res, depth, dredged):
     """
-    Replace sea (and gaps) with a sea floor. `depth` is positive metres;
-    `dredged` is a minimum depth reached WHARF_SLOPE out from the shore.
+    Replace sea (and gaps) with a sea floor. `depth` is positive metres, the
+    bathymetry's, known everywhere; `dredged` is a minimum depth reached
+    WHARF_SLOPE out from the shore.
     """
     # Some surveys record the water surface just below 0 rather than nodata.
     sea = (heights == NODATA) | ~np.isfinite(heights) | (heights < 0)
     if not sea.any():
         return heights
     distance = ndimage.distance_transform_edt(sea).astype(np.float32) * res
-    floor = np.minimum(distance * SHELF_SLOPE, SHELF_MAX_DEPTH)
-    if depth is not None:
-        known = np.isfinite(depth) & (depth > 0)
-        floor = np.where(known, np.minimum(depth, distance * COAST_SLOPE), floor)
-    if dredged is not None and dredged.any():
+    floor = np.minimum(depth, distance * COAST_SLOPE)
+    if dredged.any():
         # Fade in from the polygons' edges out in open water, not those on land.
         open_water = sea & (dredged == 0)
         weight = np.clip(ndimage.distance_transform_edt(~open_water) * res / DREDGED_FEATHER, 0, 1)
