@@ -10,7 +10,6 @@ import {
   InstancedMesh,
   InterleavedBufferAttribute,
   Matrix4,
-  MeshStandardNodeMaterial,
   NormalBlending,
   Quaternion,
   Sprite,
@@ -25,7 +24,6 @@ import {
   fract,
   instancedBufferAttribute,
   max,
-  mix,
   positionGeometry,
   select,
   smoothstep,
@@ -49,7 +47,10 @@ import {
   createHelicopterGeometry,
   createJetGeometry,
   createPropGeometry,
+  JET_WING_RISE,
+  RIDE_HEIGHT,
 } from "./geometry";
+import { createModelMaterial, HIDDEN, isNear, NearModels } from "../models/lod";
 import {
   buildPath,
   EXTRAPOLATE,
@@ -84,8 +85,23 @@ const DELAY = 30_000;
  */
 const MIN_PIXELS = 10;
 
-/** Fuselage centre above the wheels, in lengths. */
-const RIDE_HEIGHT = 0.08;
+/** Detailed models, each way an aircraft can look up close. */
+type Detailed =
+  | "jet"
+  | "jetGear"
+  | "prop"
+  | "propGear"
+  | "propParked"
+  | "helicopter";
+
+/** Of each detailed model at once. */
+const MAX_DETAILED = 8;
+
+/** Gear's down below this, m above the ground: on short final, and climbing out. */
+const GEAR_DOWN = 400;
+
+/** Slower than this on the ground, m/s, a turboprop's props have stopped. */
+const PARKED = 1;
 
 /**
  * Wellington's yellow, against the scene's greys: it's data, not part of the
@@ -186,11 +202,13 @@ function lightsFor(
   wingY: number,
   wingZ: number,
   beacon: [number, number, number],
-  landing: [number, number, number]
+  landing: [number, number, number],
+  /** Wingtips above wingY. */
+  rise = 0
 ): LightSpec[] {
   const tip = (side: number): [number, number, number] => [
     side * span,
-    wingY,
+    wingY + rise,
     wingZ,
   ];
 
@@ -218,7 +236,14 @@ function lightsFor(
 
 /** Where each shape's lights are, matching geometry.ts. */
 const LIGHTS: Record<Shape, LightSpec[]> = {
-  jet: lightsFor(0.475, -0.03, 0.15, [0, 0.055, 0], [0, -0.04, -0.3]),
+  jet: lightsFor(
+    0.475,
+    -0.03,
+    0.15,
+    [0, 0.055, 0],
+    [0, -0.04, -0.3],
+    JET_WING_RISE
+  ),
   prop: lightsFor(0.55, 0.05, -0.06, [0, 0.215, 0.45], [0, 0.0, -0.35]),
   helicopter: lightsFor(0.1, 0, -0.1, [0, 0.13, 0.1], [0, -0.1, -0.38]),
 };
@@ -229,43 +254,55 @@ const MAX_LIGHTS = SHAPES.length * MAX_PER_SHAPE * LIGHTS_PER_AIRCRAFT;
 /** Seconds since the page's epoch, where trails are now. */
 const trailNow = uniform(0);
 
-function colorAttribute(count: number) {
-  const attribute = new InstancedBufferAttribute(
-    new Float32Array(count * 3),
-    3
-  );
-
-  return attribute;
-}
-
-function createPlaneMesh(geometry: BufferGeometry) {
-  const body = colorAttribute(MAX_PER_SHAPE);
-  const tail = colorAttribute(MAX_PER_SHAPE);
-
-  const material = new MeshStandardNodeMaterial({
+function createPlanes() {
+  const { material, lit } = createModelMaterial({
     roughness: 0.45,
     metalness: 0.1,
   });
 
-  material.colorNode = mix(
-    instancedBufferAttribute<"vec3">(body, "vec3"),
-    instancedBufferAttribute<"vec3">(tail, "vec3"),
-    attribute<"float">("tail", "float")
-  );
-  const mesh = new InstancedMesh(geometry, material, MAX_PER_SHAPE);
-  // Instances move every frame; their bounds would always be stale.
-  mesh.frustumCulled = false;
-  mesh.count = 0;
+  const simple = (shape: Shape, geometry: BufferGeometry) => {
+    const mesh = new InstancedMesh(geometry, material, MAX_PER_SHAPE);
+    mesh.name = shape;
+    // Instances move every frame; their bounds would always be stale.
+    mesh.frustumCulled = false;
+    mesh.count = 0;
 
-  return { mesh, body, tail };
+    return mesh;
+  };
+
+  const far: Record<Shape, InstancedMesh> = {
+    jet: simple("jet", createJetGeometry()),
+    prop: simple("prop", createPropGeometry()),
+    helicopter: simple("helicopter", createHelicopterGeometry()),
+  };
+
+  const detailed = (geometry: BufferGeometry) =>
+    new NearModels(geometry, material, MAX_DETAILED);
+
+  const near: Record<Detailed, NearModels> = {
+    jet: detailed(createJetGeometry(true)),
+    jetGear: detailed(createJetGeometry(true, { gear: true })),
+    prop: detailed(createPropGeometry(true)),
+    propGear: detailed(createPropGeometry(true, { gear: true })),
+    propParked: detailed(
+      createPropGeometry(true, { gear: true, blades: true })
+    ),
+    helicopter: detailed(createHelicopterGeometry(true)),
+  };
+
+  return { far, near, material, lit };
 }
 
-function createPlanes(): Record<Shape, ReturnType<typeof createPlaneMesh>> {
-  return {
-    jet: createPlaneMesh(createJetGeometry()),
-    prop: createPlaneMesh(createPropGeometry()),
-    helicopter: createPlaneMesh(createHelicopterGeometry()),
-  };
+/** Which detailed model an aircraft is, up close. */
+function detailedFor(shape: Shape, at: Pose, speed: () => number): Detailed {
+  if (shape === "helicopter") return shape;
+  const gear = at.ground || at.height < GEAR_DOWN;
+
+  if (!gear) return shape;
+
+  if (shape === "jet") return "jetGear";
+
+  return at.ground && speed() < PARKED ? "propParked" : "propGear";
 }
 
 /**
@@ -470,7 +507,7 @@ interface Plane {
   aircraft: Aircraft;
   airframe: Airframe;
   path: Path;
-  /** Instance within its shape's mesh. */
+  /** Instance within its shape's simple mesh. */
   slot: number;
   /** 0..1, so beacons and strobes don't flash in unison. */
   phase: number;
@@ -534,7 +571,6 @@ const position = new Vector3();
 const offset = new Vector3();
 const forward = new Vector3();
 const toCamera = new Vector3();
-const color = new Color();
 
 const pose: Pose = {
   x: 0,
@@ -547,7 +583,6 @@ const pose: Pose = {
   height: 0,
 };
 
-const HIDDEN = new Matrix4().makeScale(0, 0, 0);
 const before: Pose = { ...pose };
 const earlier: Pose = { ...pose };
 
@@ -649,13 +684,14 @@ export function Flights({
   );
 
   useEffect(() => {
-    for (const shape of SHAPES) planes[shape].mesh.count = 0;
+    planes.lit.value = lights;
+  }, [planes, lights]);
+
+  useEffect(() => {
+    for (const shape of SHAPES) planes.far[shape].count = 0;
 
     for (const { airframe, slot } of flying) {
-      const { mesh, body, tail } = planes[airframe.shape];
-      color.setHex(airframe.body).toArray(body.array, slot * 3);
-      color.setHex(airframe.tail).toArray(tail.array, slot * 3);
-      body.needsUpdate = tail.needsUpdate = true;
+      const mesh = planes.far[airframe.shape];
       mesh.count = Math.max(mesh.count, slot + 1);
     }
 
@@ -796,11 +832,13 @@ export function Flights({
   useEffect(
     () => () => {
       for (const shape of SHAPES) {
-        const { mesh } = planes[shape];
+        const mesh = planes.far[shape];
         mesh.geometry.dispose();
-        mesh.material.dispose();
         mesh.dispose();
       }
+
+      for (const near of Object.values(planes.near)) near.dispose();
+      planes.material.dispose();
 
       trails.lines.geometry.dispose();
       trails.lines.material.dispose();
@@ -816,8 +854,10 @@ export function Flights({
     let lit = 0;
     const watched = followed("plane");
 
+    for (const near of Object.values(planes.near)) near.begin();
+
     for (const { aircraft, airframe, path, slot, phase, switchOn } of flying) {
-      const { mesh } = planes[airframe.shape];
+      const mesh = planes.far[airframe.shape];
 
       if (!poseAt(path, now, pose)) {
         mesh.setMatrixAt(slot, HIDDEN);
@@ -834,11 +874,22 @@ export function Flights({
         distance * pixelAngle.value * MIN_PIXELS
       );
 
-      if (pose.ground) position.y += size * RIDE_HEIGHT;
+      if (pose.ground) position.y += size * RIDE_HEIGHT[airframe.shape];
       euler.set(pose.pitch, -pose.heading, pose.bank);
       rotation.setFromEuler(euler);
       matrix.compose(position, rotation, scale.setScalar(size));
-      mesh.setMatrixAt(slot, matrix);
+
+      const detailed =
+        isNear(airframe.length, distance) &&
+        planes.near[
+          detailedFor(
+            airframe.shape,
+            pose,
+            () => motionAt(path, now, pose).speed
+          )
+        ].add(matrix);
+
+      mesh.setMatrixAt(slot, detailed ? HIDDEN : matrix);
 
       if (aircraft.hex === watched) {
         publish({
@@ -889,7 +940,9 @@ export function Flights({
     }
 
     for (const shape of SHAPES)
-      planes[shape].mesh.instanceMatrix.needsUpdate = true;
+      planes.far[shape].instanceMatrix.needsUpdate = true;
+
+    for (const near of Object.values(planes.near)) near.end();
     sprites.sprite.count = lit;
     sprites.sprite.visible = lit > 0;
     light.needsUpdate = style.needsUpdate = extra.needsUpdate = true;
@@ -897,9 +950,12 @@ export function Flights({
 
   return (
     <>
-      <primitive object={planes.jet.mesh} name="jets" />
-      <primitive object={planes.prop.mesh} name="turboprops" />
-      <primitive object={planes.helicopter.mesh} name="helicopters" />
+      <primitive object={planes.far.jet} name="jets" />
+      <primitive object={planes.far.prop} name="turboprops" />
+      <primitive object={planes.far.helicopter} name="helicopters" />
+      {Object.entries(planes.near).map(([name, near]) => (
+        <primitive key={name} object={near.mesh} name={`detailed ${name}`} />
+      ))}
       <primitive object={trails.lines} name="flight trails" />
       <primitive object={sprites.sprite} name="aircraft lights" />
     </>

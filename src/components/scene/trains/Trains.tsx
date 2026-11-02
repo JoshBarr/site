@@ -42,7 +42,24 @@ import { hazeTransmittance } from "../haze";
 import { TrailMaterial } from "../trailMaterial";
 import { createCarGeometry, ROOF, WINDOWS, BODY } from "./geometry";
 import { Point, RAIL_TOP, RailNetwork } from "./network";
-import { distanceAt, follow, GAP, isPeak, pointAt, Routes, Run } from "./run";
+import {
+  CARRIAGE,
+  distanceAt,
+  follow,
+  GAP,
+  isPeak,
+  LOCOMOTIVE,
+  MATANGI,
+  pointAt,
+  Routes,
+  Run,
+} from "./run";
+import {
+  createCarriageGeometry,
+  createLocomotiveGeometry,
+  createMatangiGeometry,
+} from "./models";
+import { createModelMaterial, isNear, NearModels } from "../models/lod";
 import { useTrains } from "./useTrains";
 import type { Line } from "../../../lib/trains";
 import {
@@ -54,6 +71,9 @@ import {
 
 const MAX_TRAINS = 64;
 const MAX_CARS = MAX_TRAINS * 8;
+
+/** Of each detailed car at once. */
+const MAX_DETAILED = 24;
 
 /**
  * Trains are drawn this far behind live, ms, so there's nearly always a
@@ -139,6 +159,54 @@ function createCars() {
   castsNearShadow(mesh);
 
   return { mesh, tints, windowsLit };
+}
+
+/**
+ * Detailed cars, for those close up. A Matangi pair is an FP car, with the
+ * pantograph, and an FT, cab to cab: so in a train every other car's turned
+ * round.
+ */
+function createDetailedCars() {
+  const { material, lit } = createModelMaterial({ roughness: 0.55 });
+
+  const models = {
+    fp: new NearModels(
+      createMatangiGeometry(MATANGI, true),
+      material,
+      MAX_DETAILED
+    ),
+    ft: new NearModels(
+      createMatangiGeometry(MATANGI, false),
+      material,
+      MAX_DETAILED
+    ),
+    carriage: new NearModels(
+      createCarriageGeometry(CARRIAGE),
+      material,
+      MAX_DETAILED
+    ),
+    locomotive: new NearModels(
+      createLocomotiveGeometry(LOCOMOTIVE),
+      material,
+      MAX_DETAILED
+    ),
+  };
+
+  /** A car's model, and whether it's turned round, by its place in the train. */
+  const modelFor = (car: Run["cars"][number], index: number) => {
+    if (car === MATANGI) {
+      return index % 2
+        ? { model: models.ft, reversed: true }
+        : { model: models.fp, reversed: false };
+    }
+
+    return {
+      model: car === LOCOMOTIVE ? models.locomotive : models.carriage,
+      reversed: false,
+    };
+  };
+
+  return { models, material, lit, modelFor };
 }
 
 /**
@@ -300,6 +368,9 @@ const FORWARD = new Vector3(0, 0, 1);
 const nose = new Vector3();
 const tail = new Vector3();
 const color = new Color();
+const ONE = new Vector3(1, 1, 1);
+const TURN = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), Math.PI);
+const turned = new Quaternion();
 
 /**
  * Metlink's trains at their live positions, run along the tracks from fix
@@ -319,6 +390,7 @@ export function Trains({
   const trains = useTrains();
   const epoch = useMemo(() => Date.now(), []);
   const cars = useMemo(createCars, []);
+  const detailed = useMemo(createDetailedCars, []);
 
   const trails = useMemo(
     () =>
@@ -412,7 +484,8 @@ export function Trains({
 
   useEffect(() => {
     cars.windowsLit.value = lights;
-  }, [cars, lights]);
+    detailed.lit.value = lights;
+  }, [cars, detailed, lights]);
 
   useEffect(
     () => () => {
@@ -422,11 +495,14 @@ export function Trains({
       trails.lines.geometry.dispose();
       trails.material.dispose();
       sprites.sprite.material.dispose();
+
+      for (const model of Object.values(detailed.models)) model.dispose();
+      detailed.material.dispose();
     },
-    [cars, trails, sprites]
+    [cars, trails, sprites, detailed]
   );
 
-  useFrame((_, delta) => {
+  useFrame(({ camera }, delta) => {
     const target = (Date.now() - DELAY - epoch) / 1000;
     const { light, tint } = sprites;
     let lit = 0;
@@ -440,6 +516,8 @@ export function Trains({
 
     let count = 0;
     const watched = followed("train");
+
+    for (const model of Object.values(detailed.models)) model.begin();
     runs.forEach((run, i) => {
       const { train, fixes } = run;
       const latest = fixes[fixes.length - 1].time;
@@ -463,16 +541,26 @@ export function Trains({
       const head = distanceAt(run, playhead) + run.length / 2;
       let offset = 0;
 
-      for (const car of run.cars) {
+      for (const [k, car] of run.cars.entries()) {
         if (count >= MAX_CARS) break;
         pointAt(run, head - offset, front);
         pointAt(run, head - offset - car.length, back);
         centre.addVectors(front, back).multiplyScalar(0.5);
         centre.y += RAIL_TOP;
         along.subVectors(front, back);
+        offset += car.length + GAP;
 
         if (along.lengthSq() > 1e-6) {
           rotation.setFromUnitVectors(FORWARD, along.normalize());
+        }
+
+        if (isNear(car.length, camera.position.distanceTo(centre))) {
+          const { model, reversed } = detailed.modelFor(car, k);
+          turned.copy(rotation);
+
+          if (reversed) turned.multiply(TURN);
+
+          if (model.add(matrix.compose(centre, turned, ONE))) continue;
         }
 
         matrix.compose(
@@ -483,7 +571,6 @@ export function Trains({
         cars.mesh.setMatrixAt(count, matrix);
         color.setHex(car.tint).toArray(cars.tints.array, count * 3);
         count++;
-        offset += car.length + GAP;
       }
 
       if (train.id === watched) {
@@ -505,6 +592,8 @@ export function Trains({
       }
     });
 
+    for (const model of Object.values(detailed.models)) model.end();
+
     cars.mesh.count = count;
     cars.mesh.instanceMatrix.needsUpdate = true;
     cars.tints.needsUpdate = true;
@@ -516,6 +605,9 @@ export function Trains({
   return (
     <>
       <primitive object={cars.mesh} name="trains" />
+      {Object.entries(detailed.models).map(([name, model]) => (
+        <primitive key={name} object={model.mesh} name={`detailed ${name}`} />
+      ))}
       <primitive object={trails.lines} name="train trails" />
       <primitive object={sprites.sprite} name="train lights" />
     </>
