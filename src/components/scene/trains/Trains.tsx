@@ -520,9 +520,9 @@ export function Trains({
 
   return (
     <>
-      <primitive object={cars.mesh} />
-      <primitive object={trails.lines} />
-      <primitive object={sprites.sprite} />
+      <primitive object={cars.mesh} name="trains" />
+      <primitive object={trails.lines} name="train trails" />
+      <primitive object={sprites.sprite} name="train lights" />
     </>
   );
 }

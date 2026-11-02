@@ -575,7 +575,7 @@ export function Terrain({
 
   return (
     <>
-      <primitive object={main.mesh} />
+      <primitive object={main.mesh} name="terrain" />
       <primitive object={reflection.mesh} />
       <primitive object={caster.mesh} />
     </>

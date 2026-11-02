@@ -323,7 +323,7 @@ function TreeTiles({
     }
   }
 
-  return <primitive object={group} />;
+  return <primitive object={group} name="trees" />;
 }
 
 function createTileMesh(

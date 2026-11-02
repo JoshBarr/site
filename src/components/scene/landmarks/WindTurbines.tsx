@@ -234,7 +234,7 @@ export function WindTurbines({
   });
 
   return (
-    <group>
+    <group name="wind turbines">
       <primitive object={parts.towers} />
       <primitive object={parts.nacelles} />
       <primitive object={parts.blades} />

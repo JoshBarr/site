@@ -28,7 +28,7 @@ export function LatticeTower({
   useEffect(() => () => tower.dispose(), [tower]);
 
   return (
-    <group position={position} rotation-y={rotation}>
+    <group name="lattice tower" position={position} rotation-y={rotation}>
       {tower.meshes.map((mesh) => (
         <primitive key={mesh.uuid} object={mesh} />
       ))}

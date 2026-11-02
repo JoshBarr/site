@@ -226,7 +226,7 @@ function Surfaces({ roads }: { roads: Roads }) {
     }
   });
 
-  return <primitive object={group} />;
+  return <primitive object={group} name="roads" />;
 }
 
 /**
@@ -501,9 +501,9 @@ function Vehicles({
     <>
       {fleets.map((fleet, i) => (
         <group key={i}>
-          <primitive object={fleet.mesh} />
-          <primitive object={fleet.heads} />
-          <primitive object={fleet.tails} />
+          <primitive object={fleet.mesh} name="cars" />
+          <primitive object={fleet.heads} name="headlights" />
+          <primitive object={fleet.tails} name="tail lights" />
         </group>
       ))}
     </>

@@ -13,6 +13,20 @@ interface Pending {
   priority: number;
 }
 
+/** Cubic B-spline weights for samples i-1..i+2, as the terrain shader's. */
+function bspline(f: number, out: Float64Array) {
+  const g = 1 - f;
+  const f2 = f * f;
+  const f3 = f2 * f;
+  out[0] = (g * g * g) / 6;
+  out[1] = (3 * f3 - 6 * f2 + 4) / 6;
+  out[2] = (-3 * f3 + 3 * f2 + 3 * f + 1) / 6;
+  out[3] = f3 / 6;
+}
+
+const wu = new Float64Array(4);
+const wv = new Float64Array(4);
+
 /** Tiles at or below this level are never evicted, so there is always a fallback. */
 const PINNED_LEVEL = 1;
 
@@ -101,13 +115,15 @@ export class TileCache {
 
   /**
    * Terrain height (unscaled) at a world x/z from the finest loaded tile, or
-   * undefined if nothing covering it is loaded. Bilinear; for CPU queries
-   * like keeping the camera above ground.
+   * undefined if nothing covering it is loaded. For CPU queries like keeping
+   * the camera above ground, so it's the same cubic B-spline the terrain is
+   * drawn with: that rides up to a few metres above the samples in gullies.
    */
   heightAt(x: number, z: number): number | undefined {
     const { manifest, samples } = this.index;
     const { rootSize, tileCells, apron } = manifest;
     const data = this.heights;
+    const last = samples - 1;
 
     for (let level = this.index.maxLevel; level >= 0; level--) {
       const size = this.index.tileSize(level);
@@ -120,17 +136,23 @@ export class TileCache {
       const [ox, oz] = this.index.tileOrigin(level, tx, ty);
       const u = ((x - ox) / size) * tileCells + apron;
       const v = ((z - oz) / size) * tileCells + apron;
-      const i = Math.min(Math.floor(u), samples - 2);
-      const j = Math.min(Math.floor(v), samples - 2);
-      const fu = u - i;
-      const fv = v - j;
+      const i = Math.floor(u);
+      const j = Math.floor(v);
+      bspline(u - i, wu);
+      bspline(v - j, wv);
       const base = slot * samples * samples;
-      const at = (a: number, b: number) => data[base + b * samples + a];
+      let height = 0;
 
-      return (
-        (at(i, j) * (1 - fu) + at(i + 1, j) * fu) * (1 - fv) +
-        (at(i, j + 1) * (1 - fu) + at(i + 1, j + 1) * fu) * fv
-      );
+      for (let b = 0; b < 4; b++) {
+        const row = base + Math.min(Math.max(j + b - 1, 0), last) * samples;
+
+        for (let a = 0; a < 4; a++) {
+          const column = Math.min(Math.max(i + a - 1, 0), last);
+          height += data[row + column] * wu[a] * wv[b];
+        }
+      }
+
+      return height;
     }
 
     return undefined;

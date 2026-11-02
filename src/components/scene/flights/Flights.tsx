@@ -905,11 +905,11 @@ export function Flights({
 
   return (
     <>
-      <primitive object={planes.jet.mesh} />
-      <primitive object={planes.prop.mesh} />
-      <primitive object={planes.helicopter.mesh} />
-      <primitive object={trails.lines} />
-      <primitive object={sprites.sprite} />
+      <primitive object={planes.jet.mesh} name="jets" />
+      <primitive object={planes.prop.mesh} name="turboprops" />
+      <primitive object={planes.helicopter.mesh} name="helicopters" />
+      <primitive object={trails.lines} name="flight trails" />
+      <primitive object={sprites.sprite} name="aircraft lights" />
     </>
   );
 }

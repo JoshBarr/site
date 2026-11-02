@@ -200,5 +200,5 @@ function BuildingTiles({
     cache.update();
   });
 
-  return <primitive object={cache.group} />;
+  return <primitive object={cache.group} name="buildings" />;
 }

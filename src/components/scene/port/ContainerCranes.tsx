@@ -81,6 +81,7 @@ export function ContainerCranes({
       {meshes.map((mesh, i) => (
         <group
           key={mesh.uuid}
+          name="container crane"
           position={cranes[i].position}
           rotation-y={cranes[i].rotation}
         >
@@ -101,5 +102,6 @@ export function craneLights(
 
   return craneLightPoints(spec, pose).map((point) => ({
     position: point.applyAxisAngle(UP, rotation).add(base).toArray(),
+    low: true,
   }));
 }
