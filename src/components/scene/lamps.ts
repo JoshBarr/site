@@ -1,4 +1,5 @@
 import { clamp, cross, exp, float, mix, smoothstep, uv } from "three/tsl";
+import type { Node } from "three/webgpu";
 
 // Lamps at night, drawn as additive sprites: bigger than life, at least a
 // few pixels across, so they still read from kilometres off.
@@ -19,7 +20,7 @@ export function lampGlow(halo: number) {
 }
 
 /** Far off, they're points, not lamps: dimming, 0..1, at `distance`. */
-export function distantDim(distance) {
+export function distantDim(distance: Node<"float">) {
   return clamp(float(NEAR).div(distance), 0, 1);
 }
 
@@ -30,7 +31,23 @@ export function distantDim(distance) {
  * lamps in no straight line (taken as square on); `spacing` metres between
  * lamps; `size` the sprite's, metres; and none goes under `least`.
  */
-export function rowShare({ toCamera, distance, row, spacing, size, least }) {
+interface Row {
+  toCamera: Node<"vec3">;
+  distance: Node<"float">;
+  row: Node<"vec3">;
+  spacing: Node<"float">;
+  size: Node<"float">;
+  least: Node<"float"> | number;
+}
+
+export function rowShare({
+  toCamera,
+  distance,
+  row,
+  spacing,
+  size,
+  least,
+}: Row) {
   const square = mix(
     float(1),
     cross(toCamera.div(distance), row).length(),
