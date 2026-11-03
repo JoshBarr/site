@@ -82,7 +82,8 @@ nearShadowLight.shadow.autoUpdate = false;
 // Once, empty, so it reads as lit until something fits it.
 nearShadowLight.shadow.needsUpdate = true;
 
-const nearShadow = shadow(nearShadowLight, nearShadowLight.shadow);
+/** The near map's shadow factor, for lit and self-shaded materials alike. */
+export const nearShadow = shadow(nearShadowLight, nearShadowLight.shadow);
 
 /**
  * The sun let through the clouds at a surface (1 clear, 0 shadowed). Under

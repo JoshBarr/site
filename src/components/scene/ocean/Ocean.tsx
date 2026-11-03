@@ -36,6 +36,7 @@ import {
 import { TERRAIN_URL, TileIndex } from "../terrain/manifest";
 import {
   cloudShadow,
+  nearShadow,
   REFLECTION_LAYER,
   skylight,
   sunDirection,
@@ -218,11 +219,14 @@ function createMaterial(
   // Left out of the material, the mirror isn't rendered.
   const sky = switchedOff("reflection") ? vec3(0.04) : mirror.rgb;
   const sunAmount = max(dot(reflected, sunDirection), 0);
-  // In a hill's or a cloud's shadow the sun's glint and direct light go;
-  // skylight stays, so the body of the water only dims and its reflection
+
+  // In a hill's, a ship's or a cloud's shadow the sun's glint and direct light
+  // go; skylight stays, so the body of the water only dims and its reflection
   // barely changes.
   // SAFETY: shadow() makes a float node; see environment.ts.
-  const lit = float(sunShadow as any).mul(cloudShadow);
+  const lit = float(sunShadow as any)
+    .mul(nearShadow as any)
+    .mul(cloudShadow);
 
   const glint = pow(sunAmount, 900)
     .mul(40)
