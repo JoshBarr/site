@@ -1,4 +1,4 @@
-import { Vector3 } from "three/webgpu";
+import { Euler, Quaternion, Vector3 } from "three/webgpu";
 import { nztmToWorld, TileIndex } from "../terrain/manifest";
 import { random } from "../landmarks/common";
 import type { Line } from "../../../lib/trains";
@@ -367,6 +367,23 @@ export function pointAt(
   const [bx, by, bz] = points[hi];
 
   return out.set(ax + (bx - ax) * t, ay + (by - ay) * t, az + (bz - az) * t);
+}
+
+const euler = new Euler(0, 0, 0, "YXZ");
+
+/**
+ * Turns a car (nose on +z) to face `along`, back to front: heading, then
+ * pitch up or down the grade, never rolled. The shortest arc from +z rolls a
+ * car heading -z on a grade onto its side.
+ */
+export function orient(along: Vector3, out: Quaternion) {
+  const level = Math.hypot(along.x, along.z);
+
+  if (level < 1e-6) return out.identity();
+
+  return out.setFromEuler(
+    euler.set(-Math.atan2(along.y, level), Math.atan2(along.x, along.z), 0)
+  );
 }
 
 /** How far along its run a train is at `time`, seconds since the epoch. */

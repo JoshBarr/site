@@ -1,19 +1,13 @@
 import { z } from "zod";
+import type { Poll } from "./fold";
 import { Aircraft, Fix, HISTORY, Route, RouteEnd } from "./flights";
+import type { flights, LiveData } from "./liveRecords";
 import { toNztm } from "./nztm";
-import { canStore, getRedis } from "./redis";
-import { point, readJson } from "./schemas";
-
-export { canStore };
+import { readJson } from "./schemas";
 
 // Aircraft around Wellington from adsb.lol, a free community ADS-B network.
-// It keeps no history we can use, so fixes are stored in Upstash Redis as
-// they're fetched (by visitors, and by a QStash schedule between visits) and
-// the trails are built from those. Redis rather than Neon: writes every
-// couple of minutes would keep Neon's compute awake around the clock.
-
-/** Sorted set of stored sightings, scored by time. */
-const KEY = "flights:fixes";
+// It keeps no history we can use, so the AWS poller logs what it hears (see
+// plans/dynamo.md) and trails are folded from that.
 
 const WLG: [number, number] = [-41.327, 174.805];
 
@@ -140,101 +134,11 @@ export async function fetchAirspace(): Promise<Sighting[]> {
   });
 }
 
-/** A sighting as stored: details, then the fix. Its score is the fix time. */
-type Stored = [
-  hex: string,
-  callsign: string | null,
-  registration: string | null,
-  type: string | null,
-  category: string | null,
-  ...fix: Fix,
-];
-
-const stored = z.tuple([
-  z.string(),
-  z.string().nullable(),
-  z.string().nullable(),
-  z.string().nullable(),
-  z.string().nullable(),
-  z.number(),
-  z.number(),
-  z.number().nullable(),
-  z.number(),
-  z.number(),
-  z.number().nullable(),
-  z.number().nullable(),
-]) satisfies z.ZodType<Stored>;
-
-/**
- * Stores sightings for trails, and with `trim` forgets ones too old to be
- * drawn. A report heard twice is the same member, so it's kept once. Reads
- * only ask for recent ones, so trimming is left to the sweep: every visitor
- * request doing it would cost a Redis command each time for nothing.
- */
-export async function saveSightings(
-  sightings: Sighting[],
-  { trim = false } = {}
-) {
-  if (!sightings.length) return;
-
-  const [first, ...rest] = sightings.map(({ aircraft, fix }) => {
-    const member: Stored = [
-      aircraft.hex,
-      aircraft.callsign,
-      aircraft.registration,
-      aircraft.type,
-      aircraft.category,
-      ...fix,
-    ];
-
-    return { score: fix[3], member };
-  });
-
-  const pipeline = getRedis()
-    .pipeline()
-    .zadd(KEY, first, ...rest);
-
-  if (trim) pipeline.zremrangebyscore(KEY, 0, Date.now() - HISTORY - 60_000);
-  await pipeline.exec();
-}
-
-/** Stored sightings from the last `since` ms, oldest first. */
-export async function loadSightings(since: number): Promise<Sighting[]> {
-  const members = await getRedis().zrange(KEY, Date.now() - since, "+inf", {
-    byScore: true,
-  });
-
-  // Any stored some other way (by an older deploy, say) are left out.
-  return members.flatMap((member): Sighting[] => {
-    const parsed = stored.safeParse(member);
-
-    if (!parsed.success) return [];
-
-    const [hex, callsign, registration, type, category, ...fix] = parsed.data;
-
-    return [{ aircraft: { hex, callsign, registration, type, category }, fix }];
-  });
-}
-
 // Routes come from adsb.im's lookup by callsign (adsb.lol's own returns
-// nothing), and are kept a day: a flight number flies the same route day
-// after day. Each function instance also remembers the ones it's seen, so
-// most requests don't ask Redis at all.
+// nothing), with every airport the callsign stops at. Which leg an aircraft
+// is flying is picked from its own fixes when it's drawn.
 
 const ROUTES = "https://adsb.im/api/0/routeset";
-const routeKey = (callsign: string) => `flights:route:${callsign}`;
-
-/** Seconds a route is remembered, or that one isn't known. */
-const ROUTE_TTL = 24 * 3600;
-const UNKNOWN_TTL = 3600;
-
-/** Routes this instance has seen, by callsign, with when to forget them. */
-const remembered = new Map<string, { route: Route | null; until: number }>();
-
-function remember(callsign: string, route: Route | null) {
-  const ttl = route ? ROUTE_TTL : UNKNOWN_TTL;
-  remembered.set(callsign, { route, until: Date.now() + ttl * 1000 });
-}
 
 /**
  * Airports further than this from Wellington, km, are replaced by a point
@@ -243,19 +147,6 @@ function remember(callsign: string, route: Route | null) {
  */
 const ROUTE_REACH = 300;
 const EARTH_RADIUS = 6371;
-
-const routeEnd = z.object({
-  code: z.string(),
-  at: point,
-  elevation: z.number().nullable(),
-});
-
-/** Wrapped, so an unknown route isn't mistaken for one never looked up. */
-const cachedRoute = z.tuple([
-  z.object({ from: routeEnd, to: routeEnd }).nullable(),
-]) satisfies z.ZodType<[Route | null]>;
-
-type CachedRoute = z.infer<typeof cachedRoute>;
 
 const routeReplies = z.array(
   z.object({
@@ -277,7 +168,7 @@ const routeReplies = z.array(
 
 type RouteReply = z.infer<typeof routeReplies>[number];
 
-type LatLon = [number, number];
+export type LatLon = [number, number];
 
 const radians = (degrees: number) => (degrees * Math.PI) / 180;
 
@@ -332,89 +223,8 @@ function toRouteEnd(
   };
 }
 
-/**
- * The leg being flown, of a route that may have several: the one the
- * aircraft is least out of its way on.
- */
-function toRoute({ plausible, _airports: airports }: RouteReply, at: LatLon) {
-  if (!plausible || !airports || airports.length < 2) return null;
-  let best = 0;
-  let detour = Infinity;
-
-  for (let i = 0; i < airports.length - 1; i++) {
-    const a: LatLon = [airports[i].lat, airports[i].lon];
-    const b: LatLon = [airports[i + 1].lat, airports[i + 1].lon];
-    const extra = arc(a, at) + arc(at, b) - arc(a, b);
-
-    if (extra < detour) [best, detour] = [i, extra];
-  }
-
-  return {
-    from: toRouteEnd(airports[best]),
-    to: toRouteEnd(airports[best + 1]),
-  };
-}
-
-/**
- * Routes by callsign, remembered or looked up. Missing ones couldn't be
- * found out.
- */
-export async function findRoutes(sightings: Sighting[]) {
-  const routes = new Map<string, Route | null>();
-
-  const callsigns = [
-    ...new Set(
-      sightings.flatMap(({ aircraft: { callsign } }) =>
-        callsign ? [callsign] : []
-      )
-    ),
-  ];
-
-  if (!callsigns.length) return routes;
-
-  const now = Date.now();
-
-  for (const [callsign, { until }] of remembered) {
-    if (until <= now) remembered.delete(callsign);
-  }
-
-  for (const callsign of callsigns) {
-    const known = remembered.get(callsign);
-
-    if (known) routes.set(callsign, known.route);
-  }
-
-  const unknown = callsigns.filter((callsign) => !routes.has(callsign));
-
-  if (canStore() && unknown.length) {
-    const cached = await getRedis().mget(...unknown.map(routeKey));
-
-    cached.forEach((c, i) => {
-      // Not cached, or not as expected: looked up again below.
-      const parsed = cachedRoute.safeParse(c);
-
-      if (!parsed.success) return;
-
-      const [route] = parsed.data;
-      routes.set(unknown[i], route);
-      remember(unknown[i], route);
-    });
-  }
-
-  // Asked with where it is, so a route it isn't flying is ruled out. Only
-  // stored, it was somewhere around Wellington.
-  const wanted = new Map<string, LatLon>();
-
-  for (const { aircraft, at } of sightings) {
-    const { callsign } = aircraft;
-
-    if (callsign && !routes.has(callsign) && (at || !wanted.has(callsign))) {
-      wanted.set(callsign, at ?? WLG);
-    }
-  }
-
-  if (!wanted.size) return routes;
-
+/** adsb.im's routes for the callsigns in `wanted`, each asked where it is. */
+async function askRoutes(wanted: Map<string, LatLon>) {
   const response = await fetch(ROUTES, {
     method: "POST",
     headers: {
@@ -432,72 +242,133 @@ export async function findRoutes(sightings: Sighting[]) {
   });
 
   if (!response.ok) throw new Error(`adsb.im: HTTP ${response.status}`);
-  const replies = await readJson(response, routeReplies, "adsb.im");
 
-  const found = new Map<string, Route | null>();
+  return readJson(response, routeReplies, "adsb.im");
+}
 
-  for (const reply of replies) {
-    const at = wanted.get(reply.callsign);
+/**
+ * Every airport on each callsign's route in `wanted` (asked where it is),
+ * far ones pulled in as `toRouteEnd` does, or null if adsb.im doesn't know
+ * it. For the AWS poller, which stores them all and leaves picking the leg
+ * to whoever draws the aircraft. Callsigns adsb.im doesn't answer for are
+ * left out.
+ */
+export async function lookupRoutes(wanted: Map<string, LatLon>) {
+  const routes = new Map<string, RouteEnd[] | null>();
+  const replies = await askRoutes(wanted);
 
-    if (at) found.set(reply.callsign, toRoute(reply, at));
-  }
+  for (const { callsign, plausible, _airports: airports } of replies) {
+    if (!wanted.has(callsign)) continue;
 
-  for (const [callsign, route] of found) {
-    routes.set(callsign, route);
-    remember(callsign, route);
-  }
-
-  if (canStore() && found.size) {
-    const pipeline = getRedis().pipeline();
-
-    for (const [callsign, route] of found) {
-      pipeline.set(routeKey(callsign), [route] satisfies CachedRoute, {
-        ex: route ? ROUTE_TTL : UNKNOWN_TTL,
-      });
-    }
-
-    await pipeline.exec();
+    routes.set(
+      callsign,
+      plausible && airports && airports.length >= 2
+        ? airports.map(toRouteEnd)
+        : null
+    );
   }
 
   return routes;
 }
 
+/** Metres between two NZTM points. */
+const distance = ([e1, n1]: [number, number], [e2, n2]: [number, number]) =>
+  Math.hypot(e2 - e1, n2 - n1);
+
 /**
- * Sightings gathered into aircraft, each with its fixes in time order. The
- * latest sighting's details win.
+ * How much further out of its way a leg flown backwards counts as, m: it's
+ * picked only if no other will do.
  */
-export function toAircraft(
-  sightings: Sighting[],
-  routes = new Map<string, Route | null>()
+const BACKWARDS = 1_000_000;
+
+/** How far an aircraft has to have moved to go by that, not its track, m. */
+const MOVED = 1000;
+
+/**
+ * The leg of a route with `airports` that an aircraft with `fixes` (oldest
+ * first) is flying: the one it's least out of its way on, of those it's
+ * heading along. Which way it's heading is how it's moved over its fixes,
+ * or if it's barely moved, its track. So of legs into and out of
+ * Wellington, one arriving gets the leg in and one leaving the leg out.
+ */
+export function pickLeg(airports: RouteEnd[], fixes: Fix[]): Route {
+  const [e0, n0] = fixes[0];
+  const [e, n, , , , track] = fixes[fixes.length - 1];
+  const moved = [e - e0, n - n0];
+
+  const heading =
+    Math.hypot(moved[0], moved[1]) > MOVED
+      ? moved
+      : track === null
+        ? null
+        : [Math.sin(radians(track)), Math.cos(radians(track))];
+
+  let best = 0;
+  let least = Infinity;
+
+  for (let i = 0; i < airports.length - 1; i++) {
+    const a = airports[i].at;
+    const b = airports[i + 1].at;
+    const detour = distance(a, [e, n]) + distance([e, n], b) - distance(a, b);
+
+    const backwards =
+      heading !== null &&
+      heading[0] * (b[0] - a[0]) + heading[1] * (b[1] - a[1]) < 0;
+
+    const score = detour + (backwards ? BACKWARDS : 0);
+
+    if (score < least) [best, least] = [i, score];
+  }
+
+  return { from: airports[best], to: airports[best + 1] };
+}
+
+/**
+ * Every aircraft heard in `polls` (oldest first) since `since`, each with
+ * its fixes in time order and the newest details heard. `routes` has every
+ * airport on each callsign's route, or null if it isn't known; an aircraft
+ * whose callsign isn't in it couldn't be looked up, and has no `route`.
+ */
+export function foldFlights(
+  polls: Poll<LiveData<typeof flights>>[],
+  routes: ReadonlyMap<string, RouteEnd[] | null>,
+  since = Date.now() - HISTORY
 ): Aircraft[] {
   const byHex = new Map<string, Aircraft>();
 
-  for (const { aircraft, fix } of sightings) {
-    const known = byHex.get(aircraft.hex);
+  for (const { data } of polls) {
+    for (const { aircraft, fix } of data.sightings) {
+      if (fix[3] <= since) continue;
+      const known = byHex.get(aircraft.hex);
 
-    if (!known) {
-      byHex.set(aircraft.hex, { ...aircraft, fixes: [fix] });
-      continue;
-    }
+      if (!known) {
+        byHex.set(aircraft.hex, { ...aircraft, fixes: [fix] });
+        continue;
+      }
 
-    known.fixes.push(fix);
+      known.fixes.push(fix);
 
-    for (const key of ["callsign", "registration", "type", "category"]) {
-      known[key] = aircraft[key] ?? known[key];
+      for (const key of ["callsign", "registration", "type", "category"]) {
+        known[key] = aircraft[key] ?? known[key];
+      }
     }
   }
 
   for (const aircraft of byHex.values()) {
-    if (aircraft.callsign && routes.has(aircraft.callsign)) {
-      aircraft.route = routes.get(aircraft.callsign);
-    } else if (!aircraft.callsign) {
-      aircraft.route = null;
-    }
-
     aircraft.fixes.sort((a, b) => a[3] - b[3]);
     aircraft.fixes = aircraft.fixes.filter(
       (fix, i, fixes) => i === 0 || fix[3] !== fixes[i - 1][3]
     );
+
+    const { callsign } = aircraft;
+
+    if (!callsign) {
+      aircraft.route = null;
+    } else if (routes.has(callsign)) {
+      const airports = routes.get(callsign);
+
+      aircraft.route = airports ? pickLeg(airports, aircraft.fixes) : null;
+    }
   }
 
   return [...byHex.values()];

@@ -1,0 +1,264 @@
+import { gunzipSync, gzipSync } from "node:zlib";
+import { z } from "zod";
+import type { Bus } from "./buses";
+import type { Fix, RouteEnd } from "./flights";
+import type { Sighting } from "./flightStore";
+import { point, trailPoint } from "./schemas";
+import type { TrafficSpeeds } from "./traffic";
+import type { Train } from "./trains";
+import type { Vessel } from "./vessels";
+import type { Conditions } from "./weather";
+
+// The live table's items (see plans/dynamo.md), as the AWS poller writes
+// them and the site reads them. Each collection's schema is a codec between
+// a DynamoDB item, attribute by attribute, and the record it holds: decoded
+// to read, encoded to write, and checked both ways. Payloads are gzipped
+// JSON in `data`; `v` is their format, and an item of a version a schema
+// doesn't know doesn't decode, so it's skipped.
+
+const DAY = 24 * 3600;
+
+/** A string attribute that's always `value`. */
+const key = <const K extends string>(value: K) =>
+  z.codec(z.object({ S: z.literal(value) }), z.literal(value), {
+    decode: ({ S }) => S,
+    encode: (s) => ({ S: s }),
+  });
+
+/** A number attribute that's always `value`: an item's format version. */
+const version = <const V extends number>(value: V) =>
+  z.codec(z.object({ N: z.literal(`${value}`) }), z.literal(value), {
+    decode: () => value,
+    encode: () => ({ N: `${value}` as const }),
+  });
+
+const number = z.codec(z.object({ N: z.string() }), z.number(), {
+  decode: ({ N }) => Number(N),
+  encode: (n) => ({ N: String(n) }),
+});
+
+/** Epoch ms, zero-padded to sort as a string (until 2286). */
+export const sortTime = (time: number) => String(time).padStart(13, "0");
+
+/** A sort key that's a time: when a log's poll or a route's lookup was. */
+const time = z.codec(
+  z.object({ S: z.string().regex(/^\d{13}$/) }),
+  z.number().int().nonnegative(),
+  {
+    decode: ({ S }) => Number(S),
+    encode: (t) => ({ S: sortTime(t) }),
+  }
+);
+
+/** JSON, gzipped into a binary attribute. */
+const gzipped = <T extends z.ZodType>(schema: T) =>
+  z.codec(z.object({ B: z.instanceof(Uint8Array) }), schema, {
+    decode: ({ B }, payload) => {
+      try {
+        return JSON.parse(gunzipSync(B).toString());
+      } catch {
+        payload.issues.push({
+          code: "custom",
+          message: "not gzipped JSON",
+          input: B,
+        });
+
+        return z.NEVER;
+      }
+    },
+    encode: (value) => ({ B: gzipSync(JSON.stringify(value)) }),
+  });
+
+/** One of the table's collections: its partition, and what's in it. */
+const collection = <
+  const P extends string,
+  const V extends number,
+  K extends z.ZodType,
+  D extends z.ZodType,
+>(
+  pk: P,
+  v: V,
+  { sk, data, ttl }: { sk: K; data: D; ttl: number }
+) => ({
+  pk,
+  v,
+  /** Seconds an item's kept after it's written. */
+  ttl,
+  schema: z.object({
+    pk: key(pk),
+    sk,
+    v: version(v),
+    data: gzipped(data),
+    /** Epoch seconds: DynamoDB's TTL. */
+    expires: number,
+  }),
+});
+
+/** One poll of a feed, kept for replays. */
+const log = <const P extends string, D extends z.ZodType>(pk: P, data: D) =>
+  collection(pk, 1, { sk: time, data, ttl: 30 * DAY });
+
+type Schema = { schema: z.ZodType<{ sk: unknown; data: unknown }> };
+
+/** A collection's item, as its schema reads it. */
+export type LiveRecord<C extends Schema> = z.output<C["schema"]>;
+
+/** What's in an item's `data`. */
+export type LiveData<C extends Schema> = LiveRecord<C>["data"];
+
+/** `data` as `c`'s item with sort key `sk`, written at `written` (epoch ms). */
+export const toRecord = <
+  C extends Schema & { pk: string; v: number; ttl: number },
+>(
+  c: C,
+  sk: LiveRecord<C>["sk"],
+  data: LiveData<C>,
+  written: number
+) =>
+  // SAFETY: c's pk and v, which its schema checks are its own when the
+  // record's encoded.
+  ({
+    pk: c.pk,
+    sk,
+    v: c.v,
+    data,
+    expires: Math.floor(written / 1000) + c.ttl,
+  }) as LiveRecord<C>;
+
+export const trainFix = z.object({
+  id: z.string(),
+  line: z.enum(["KPL", "HVL", "MEL", "WRL", "JVL"]),
+  direction: z.number(),
+  position: point,
+  bearing: z.number().nullable(),
+  time: z.number(),
+}) satisfies z.ZodType<Omit<Train, "trail">>;
+
+export const busFix = z.object({
+  id: z.string(),
+  route: z.string(),
+  direction: z.number(),
+  position: point,
+  bearing: z.number().nullable(),
+  time: z.number(),
+}) satisfies z.ZodType<Omit<Bus, "trail">>;
+
+export const fix = z.tuple([
+  z.number(),
+  z.number(),
+  z.number().nullable(),
+  z.number(),
+  z.number(),
+  z.number().nullable(),
+  z.number().nullable(),
+]) satisfies z.ZodType<Fix>;
+
+export const routeEnd = z.object({
+  code: z.string(),
+  at: point,
+  elevation: z.number().nullable(),
+}) satisfies z.ZodType<RouteEnd>;
+
+/** What adsb.lol says about an aircraft, besides where it is. */
+export const aircraftDetails = z.object({
+  hex: z.string(),
+  callsign: z.string().nullable(),
+  registration: z.string().nullable(),
+  type: z.string().nullable(),
+  category: z.string().nullable(),
+});
+
+const sighting = z.object({
+  aircraft: aircraftDetails,
+  fix,
+}) satisfies z.ZodType<Omit<Sighting, "at">>;
+
+export const vessel = z.object({
+  mmsi: z.number(),
+  name: z.string().nullable(),
+  type: z.number(),
+  position: point,
+  speed: z.number(),
+  course: z.number().nullable(),
+  heading: z.number().nullable(),
+  dimension: z
+    .tuple([z.number(), z.number(), z.number(), z.number()])
+    .nullable(),
+  time: z.number(),
+  trail: z.array(trailPoint),
+}) satisfies z.ZodType<Vessel>;
+
+const wind = z.object({ speed: z.number(), direction: z.number() });
+
+/** Every train Metlink reported, on the map, without trails. */
+export const trains = log("trains", z.object({ trains: z.array(trainFix) }));
+
+/** Every bus on a trip Metlink reported, on the map, without trails. */
+export const buses = log("buses", z.object({ buses: z.array(busFix) }));
+
+/** Everything adsb.lol heard around Wellington: one fix each, no routes. */
+export const flights = log(
+  "flights",
+  z.object({ sightings: z.array(sighting) })
+);
+
+/**
+ * Every ship in the harbour, moored ones without a heading given the last
+ * one known. A ship under way is placed by the newest point of its track,
+ * and its trail is the track fetched since the last poll's.
+ */
+export const vessels = log("vessels", z.object({ vessels: z.array(vessel) }));
+
+export const speeds = z.object({
+  links: z.record(z.string(), z.number()),
+  legs: z.record(z.string(), z.number()),
+}) satisfies z.ZodType<TrafficSpeeds>;
+
+export const conditions = z.object({
+  time: z.string(),
+  cloudCover: z.number(),
+  cloudBase: z.number().nullable(),
+  visibility: z.number(),
+  humidity: z.number(),
+  precipitation: z.number(),
+  wind,
+  windAloft: wind,
+}) satisfies z.ZodType<Conditions>;
+
+/** NZTA's speeds. */
+export const traffic = log("traffic", speeds);
+
+/** MetService's conditions for the hour. */
+export const weather = log("weather", conditions);
+
+/** Every airport on a callsign's route, or null if adsb.im doesn't know it. */
+export const routes = collection("routes", 1, {
+  // `<callsign>#<lookup time>`, so a callsign's newest is a prefix away.
+  sk: z.codec(
+    z.object({ S: z.string().regex(/^[^#]+#\d{13}$/) }),
+    z.object({ callsign: z.string().min(1), time: z.number() }),
+    {
+      decode: ({ S }) => {
+        const [callsign, t] = S.split("#");
+
+        return { callsign, time: Number(t) };
+      },
+      encode: ({ callsign, time: t }) => ({ S: `${callsign}#${sortTime(t)}` }),
+    }
+  ),
+  data: z.object({ airports: z.array(routeEnd).min(2).nullable() }),
+  ttl: 30 * DAY,
+});
+
+/** The sort key prefix of a callsign's routes. */
+export const routePrefix = (callsign: string) => `${callsign}#`;
+
+/** Which way a ship last pointed, by MMSI: forgotten a week after. */
+export const headings = collection("headings", 1, {
+  sk: z.codec(z.object({ S: z.string().regex(/^\d+$/) }), z.number(), {
+    decode: ({ S }) => Number(S),
+    encode: (mmsi) => ({ S: String(mmsi) }),
+  }),
+  data: z.object({ heading: z.number() }),
+  ttl: 7 * DAY,
+});

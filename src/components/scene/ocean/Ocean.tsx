@@ -36,8 +36,8 @@ import {
 import { TERRAIN_URL, TileIndex } from "../terrain/manifest";
 import {
   cloudShadow,
-  overcast,
   REFLECTION_LAYER,
+  skylight,
   sunDirection,
   sunIntensity,
   sunShadow,
@@ -237,7 +237,7 @@ function createMaterial(
     .mul(3)
     .mul(max(sunDirection.y, 0))
     .mul(lit)
-    .add(overcast.mul(0.3).add(0.25))
+    .add(skylight)
     .div(Math.PI);
 
   // Light that enters and scatters back out: brighter on crests facing the sun.

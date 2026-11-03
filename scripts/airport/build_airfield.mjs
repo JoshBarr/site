@@ -1,6 +1,7 @@
 // Builds Wellington Airport's airfield for the scene:
 //
-//   src/components/scene/airport/airfield.ts  the runway, its PAPIs and lights
+//   src/components/scene/airport/airfield.ts  the runway, its PAPIs and lights,
+//                                             and buildings on the aerodrome
 //   public/airport/lines.png                  taxiway markings, 1 m texels
 //   public/airport/ground.png                 paving and grass, 2 m texels
 //
@@ -27,7 +28,7 @@ const OUT_TS = path.join(ROOT, "src/components/scene/airport/airfield.ts");
 const OUT_DIR = path.join(ROOT, "public/airport");
 
 const QUERY = `[out:json][timeout:60][bbox:-41.345,174.795,-41.31,174.82];
-nwr["aeroway"];
+(nwr["aeroway"]; way["building"];);
 out geom;`;
 
 /** Taxiways aren't tagged with a width; WLG's are code C/D, about 23 m. */
@@ -141,6 +142,35 @@ const aerodromeRings = stitch(
     .filter((m) => m.role === "outer" && m.geometry)
     .map((m) => project(m.geometry))
 );
+
+/** Ray-cast point in polygon. */
+function inRing([x, y], ring) {
+  let inside = false;
+
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+
+    if (yi > y !== yj > y && x < xj + ((y - yi) / (yj - yi)) * (xi - xj))
+      inside = !inside;
+  }
+
+  return inside;
+}
+
+// Buildings an aircraft on the ground could run into: terminals and hangars,
+// and anything else standing on the aerodrome.
+const buildings = elements
+  .filter((e) => e.type === "way" && e.tags?.building && e.geometry)
+  .map((e) => ({ e, ring: project(e.geometry) }))
+  .filter(({ e, ring }) => {
+    if (["terminal", "hangar"].includes(e.tags.aeroway)) return true;
+    const n = ring.length;
+    const centre = [0, 1].map((k) => ring.reduce((s, p) => s + p[k], 0) / n);
+
+    return aerodromeRings.some((r) => inRing(centre, r));
+  })
+  .map(({ ring }) => ring);
 
 const runwayWays = tagged("runway").filter((e) => e.tags.ref === "16/34");
 const stopways = tagged("stopway");
@@ -596,19 +626,21 @@ await writeFile(
 // follow ICAO Annex 14 spacing along the mapped runway, not a survey.
 
 export type Light = [easting: number, northing: number, ground: number];
+
 /** Bearing (degrees from grid north) the light shines toward. */
 export type DirectedLight = [...Light, facing: number];
+
 /** And the angle above the horizon (degrees) above which it shows white. */
 export type PapiLight = [...DirectedLight, angle: number];
 
 /** Runway 16/34: its south end and the direction to its north end. */
 export const RUNWAY = {
-  south: [${f1(south[0])}, ${f1(south[1])}] as [number, number],
-  axis: [${axis[0].toFixed(6)}, ${axis[1].toFixed(6)}] as [number, number],
+  south: [${f1(south[0])}, ${f1(south[1])}] satisfies [number, number],
+  axis: [${axis[0].toFixed(6)}, ${axis[1].toFixed(6)}] satisfies [number, number],
   length: ${f1(length)},
   width: ${width},
   /** Stopway beyond the south and north ends. */
-  stopway: [${f1(stopway[0])}, ${f1(stopway[1])}] as [number, number],
+  stopway: [${f1(stopway[0])}, ${f1(stopway[1])}] satisfies [number, number],
   /** Displaced thresholds, metres along from the south end. */
   threshold34: ${f1(thresholds["34"])},
   threshold16: ${f1(thresholds["16"])},
@@ -627,7 +659,7 @@ export const RUNWAY = {
  * runway); G within the aerodrome; B concrete.
  */
 export const AIRFIELD_TEXTURES = {
-  bounds: [${west}, ${southEdge}, ${east}, ${northEdge}] as [
+  bounds: [${west}, ${southEdge}, ${east}, ${northEdge}] satisfies [
     number,
     number,
     number,
@@ -662,6 +694,11 @@ ${rowsOf(lights.papi, (l) => [...point(l), f1(l[3]), l[4].toFixed(3)])}
 export const TAXIWAY_LIGHTS: Light[] = [
 ${rowsOf(lights.taxiway, point)}
 ];
+
+/** Outlines of the buildings on the aerodrome: easting, northing, ... */
+export const BUILDINGS: number[][] = [
+${buildings.map((ring) => `  [${ring.flat().map(f1).join(", ")}],`).join("\n")}
+];
 `
 );
 
@@ -674,6 +711,8 @@ console.log(
 console.log(
   `textures ${cols}x${rows} (lines), ${groundCols}x${groundRows} (ground); ${holdingBars} holding bars`
 );
+
+console.log(`${buildings.length} buildings`);
 
 console.log(
   Object.entries(lights)

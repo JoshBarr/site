@@ -12,7 +12,7 @@ import { Category, getSnapshot, next, subject } from "./store";
 //   low behind them, looking past them down the approach.
 //
 // The camera eases onto each shot as it moves, and flies in an arc from
-// one vehicle to the next.
+// one vehicle to the next, or cuts straight there if the store says to.
 
 export type ToWorld = (easting: number, northing: number) => [number, number];
 
@@ -116,7 +116,13 @@ const clamp = (v: number, lo: number, hi: number) =>
 
 /** How far to ease toward something this frame, settling over `time`. */
 const ease = (delta: number, time: number) => 1 - Math.exp(-delta / time);
-const smootherstep = (u: number) => u * u * u * (u * (u * 6 - 15) + 10);
+export const smootherstep = (u: number) => u * u * u * (u * (u * 6 - 15) + 10);
+
+/** Moving `way` m to another shot: seconds to take, and the arc's height. */
+export const flightFor = (way: number) => ({
+  duration: clamp(FLIGHT_MIN + way / FLIGHT_SPEED, FLIGHT_MIN, FLIGHT_MAX),
+  arc: Math.min(way * ARC, ARC_MAX),
+});
 
 /** 0..1 from a string, so each vehicle keeps its side. */
 function hash(text: string) {
@@ -201,7 +207,7 @@ export class FollowRig {
 
   /** The shot for this frame, or null with nothing followed. */
   update(camera: PerspectiveCamera, delta: number): Shot | null {
-    const { following } = getSnapshot();
+    const { following, cut } = getSnapshot();
 
     if (!following) {
       this.key = null;
@@ -253,14 +259,10 @@ export class FollowRig {
       this.rig.position.copy(this.wanted.position);
       this.rig.target.copy(this.wanted.target);
       this.rig.fov = this.wanted.fov;
-      const way = this.from.position.distanceTo(this.rig.position);
       this.flight = 0;
-      this.duration = clamp(
-        FLIGHT_MIN + way / FLIGHT_SPEED,
-        FLIGHT_MIN,
-        FLIGHT_MAX
-      );
-      this.arc = Math.min(way * ARC, ARC_MAX);
+      ({ duration: this.duration, arc: this.arc } = flightFor(
+        this.from.position.distanceTo(this.rig.position)
+      ));
     } else {
       this.time += delta;
       move.set(subject.x, subject.y, subject.z).sub(this.last);
@@ -279,10 +281,10 @@ export class FollowRig {
     const { position } = this.rig;
     position.y = Math.max(position.y, this.floorAt(position.x, position.z));
 
-    // Flying in from where the camera was, over the top.
+    // Flying in from where the camera was, over the top, unless cutting.
     const out = this.shot;
 
-    if (this.flight < this.duration) {
+    if (!cut && this.flight < this.duration) {
       this.flight += delta;
       const u = Math.min(this.flight / this.duration, 1);
       const s = smootherstep(u);

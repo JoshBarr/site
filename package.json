@@ -5,11 +5,10 @@
   "version": "0.1.0",
   "author": "Josh Barr <josh@joshbarr.com>",
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "3.1161.0",
     "@react-spring/web": "10.0.2",
     "@react-three/drei": "10.7.9",
     "@react-three/fiber": "9.8.2",
-    "@upstash/qstash": "2.12.0",
-    "@upstash/redis": "1.39.0",
     "@vercel/functions": "3.10.1",
     "change-case": "5.4.4",
     "fs-extra": "^11.3.0",

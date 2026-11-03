@@ -89,7 +89,7 @@ export const NOT_DRAWN = [
   { hex: "c80003", flight: "SDA1    ", lat: -41.3, lon: 174.9, seen_pos: 2 },
 ];
 
-export const AIRPORTS = {
+const AIRPORTS = {
   AKL: { iata: "AKL", icao: "NZAA", lat: -37.008099, lon: 174.792007 },
   WLG: { iata: "WLG", icao: "NZWN", lat: -41.327202, lon: 174.804993 },
   SYD: { iata: "SYD", icao: "YSSY", lat: -33.946098, lon: 151.177002 },

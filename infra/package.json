@@ -1,0 +1,24 @@
+{
+  "name": "joshbarr-site-infra",
+  "private": true,
+  "description": "AWS for the scene's live layers, with Alchemy: see ../plans/infra.md",
+  "type": "module",
+  "scripts": {
+    "plan": "alchemy plan --stage prod --env-file ../.env.local",
+    "deploy": "alchemy deploy --stage prod --env-file ../.env.local",
+    "logs": "alchemy logs --stage prod --tail",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "tsc --noEmit && vitest run"
+  },
+  "dependencies": {
+    "@alchemy.run/aws": "2.0.0-beta.85",
+    "@distilled.cloud/aws": "1.0.0-rc.18",
+    "@effect/platform-node": "4.1.2",
+    "alchemy": "2.0.0-beta.85",
+    "effect": "4.1.2"
+  },
+  "volta": {
+    "node": "24.11.1"
+  }
+}

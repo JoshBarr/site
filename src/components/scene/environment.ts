@@ -27,6 +27,21 @@ export function overcastFor(cloudCover: number) {
 }
 
 /**
+ * The sky's even light: the ambient light's intensity, for materials that
+ * shade themselves.
+ */
+export const skylight = uniform(0.25);
+
+/**
+ * Skylight for a cloud cover fraction, 0 at night to 1 by day. A deck takes
+ * the sun but spreads it into flat light from everywhere, so by day an
+ * overcast sky lights the scene nearly as much as the sun did.
+ */
+export function skylightFor(cloudCover: number, daylight: number) {
+  return 0.25 + overcastFor(cloudCover) * (0.3 + 0.6 * daylight);
+}
+
+/**
  * Objects on this layer are seen only by the water's reflection camera, which
  * sees nothing else (bar the sky). Lets reflections use cheaper stand-ins.
  */

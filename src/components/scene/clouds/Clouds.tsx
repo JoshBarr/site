@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { HalfFloatType, RenderPipeline, Scene } from "three/webgpu";
-import { pass, rtt, uniform, vec4 } from "three/tsl";
+import { pass, rtt, texture, uniform, vec4 } from "three/tsl";
 import { gaussianBlur } from "three/addons/tsl/display/GaussianBlurNode.js";
 import { cloudShadowMap, overcast, overcastFor } from "../environment";
 import { nightGlow, setNightGlow } from "../glow";
@@ -23,8 +23,10 @@ import {
   dropFraction,
   rainfallAt,
 } from "./rain";
+import { cloudHistory } from "./temporal";
 import { lensWetness, updateLensWetness, wetLens } from "./wetLens";
 import { useRenderer } from "../renderer";
+import { setSceneDepth } from "../sceneDepth";
 
 /**
  * Clouds drift at the real wind speed times this. Real time reads as
@@ -127,7 +129,7 @@ export function Clouds({
     setNightGlow(night);
   }, [night]);
 
-  const { pipeline, glow, drops } = useMemo(() => {
+  const { scenePass, pipeline, glow, history, drops } = useMemo(() => {
     const pipeline = new RenderPipeline(renderer);
     const scenePass = pass(scene, camera);
     const depth = scenePass.getTextureNode("depth");
@@ -138,8 +140,10 @@ export function Clouds({
     if (!noiseReady || switchedOff("clouds")) {
       pipeline.outputNode = depthOfField(color, depth);
 
-      return { pipeline, glow, drops: null };
+      return { scenePass, pipeline, glow, history: null, drops: null };
     }
+
+    const offset = uniform(0);
 
     const cloudNode = createCloudNode({
       depth: scenePass.getTextureNode("depth"),
@@ -150,17 +154,29 @@ export function Clouds({
       ...layers,
       rain,
       quality,
+      offset,
     });
 
     // Relative to CSS pixels: on a 2x display the march would otherwise do
     // four times the work for detail the softness of clouds doesn't need.
+    // A second texture for how far off the cloud is.
     const clouds = rtt(cloudNode, null, null, {
       type: HalfFloatType,
       resolutionScale: quality.resolutionScale / renderer.getPixelRatio(),
+      count: 2,
     });
 
+    const history = switchedOff("cloudhistory")
+      ? null
+      : cloudHistory(
+          clouds,
+          texture(clouds.renderTarget!.textures[1]),
+          camera,
+          offset
+        );
+
     // Just enough blur to dissolve the march's jitter grain.
-    const soft = gaussianBlur(clouds, 1, 0.4);
+    const soft = gaussianBlur(history?.getTextureNode() ?? clouds, 1, 0.4);
 
     const composite: any = depthOfField(
       vec4(color.rgb.mul(soft.a).add(soft.rgb), 1),
@@ -170,7 +186,7 @@ export function Clouds({
     if (!raining) {
       pipeline.outputNode = composite;
 
-      return { pipeline, glow, drops: null };
+      return { scenePass, pipeline, glow, history, drops: null };
     }
 
     // Drops go over the clouds: from under them, they're in front.
@@ -197,7 +213,7 @@ export function Clouds({
     if (!WET_LENS) {
       pipeline.outputNode = vec4(over(composite.rgb, streaks), 1);
 
-      return { pipeline, glow, drops };
+      return { scenePass, pipeline, glow, history, drops };
     }
 
     pipeline.outputNode = wetLens(
@@ -212,17 +228,25 @@ export function Clouds({
       }
     );
 
-    return { pipeline, glow, drops };
+    return { scenePass, pipeline, glow, history, drops };
   }, [renderer, scene, camera, noiseReady, rain, quality, dark, raining]);
+
+  // For reading back what's in front of what.
+  useEffect(() => {
+    setSceneDepth(scenePass.getTexture("depth"));
+
+    return () => setSceneDepth(null);
+  }, [scenePass]);
 
   useEffect(
     () => () => {
       pipeline.dispose();
       glow?.dispose();
+      history?.dispose();
       drops?.geometry.dispose();
       drops?.material.dispose();
     },
-    [pipeline, glow, drops]
+    [pipeline, glow, history, drops]
   );
 
   useEffect(() => {

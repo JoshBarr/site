@@ -13,7 +13,7 @@ import { TileIndex } from "../terrain/manifest";
 import type { HeightQuery } from "../terrain/Terrain";
 import { castsNearShadow } from "../landmarks/nearShadow";
 import { BODY, createCarGeometry, ROOF, WINDOWS } from "../trains/geometry";
-import { distanceAt, pointAt } from "../trains/run";
+import { distanceAt, orient, pointAt } from "../trains/run";
 import { createRunLights, createRunTrails } from "../trains/Trains";
 import {
   Candidate,
@@ -21,11 +21,15 @@ import {
   publish,
   subject,
   useFollowCandidates,
+  useFollowSpots,
 } from "../follow/store";
 import { createModelMaterial, isNear, NearModels } from "../models/lod";
+import { highways } from "../traffic/shared";
+import type { RoadUser } from "../traffic/sim";
 import { createBusGeometry } from "./model";
 import { BusRoutes, loadBusRoutes } from "./routes";
-import { follow, Run } from "./run";
+import { follow, keepToKerb, Run } from "./run";
+import { createSpacing } from "./spacing";
 import { useBuses } from "./useBuses";
 
 const MAX_BUSES = 640;
@@ -52,6 +56,16 @@ const BUS_TINT = new Color(BUS.tint);
 
 /** Drawn in detail at once, at most. */
 const MAX_DETAILED = 48;
+
+/** Kept between a bus and the one ahead of it in its lane, m. */
+const GAP = 2;
+
+/**
+ * A bus held back behind another lets go at this pace, m/s, once the one
+ * ahead moves on; it's never held back further than `MAX_HOLD`, m.
+ */
+const LET_GO = 3;
+const MAX_HOLD = 3 * (BUS.length + GAP);
 
 /** Off the road, m: the DEM's a little rough under it. */
 const RIDE = 0.1;
@@ -139,7 +153,28 @@ const front = new Vector3();
 const back = new Vector3();
 const centre = new Vector3();
 const along = new Vector3();
-const FORWARD = new Vector3(0, 0, 1);
+
+const user: RoadUser = {
+  id: "",
+  x: 0,
+  y: 0,
+  z: 0,
+  dx: 0,
+  dz: 0,
+  length: BUS.length,
+  width: BUS.width,
+  speed: 0,
+  held: 0,
+};
+
+/** Puts the bus `run` drives with its middle at `middle` along it. */
+function place(run: Run, middle: number) {
+  pointAt(run, middle + BUS.length / 2, front);
+  pointAt(run, middle - BUS.length / 2, back);
+  centre.addVectors(front, back).multiplyScalar(0.5);
+  centre.y += RIDE;
+  along.subVectors(front, back);
+}
 
 /**
  * Metlink's buses at their live positions, run along their routes from fix
@@ -174,13 +209,25 @@ function Fleet({
   );
 
   const sprites = useMemo(() => createRunLights(MAX_LIGHTS), []);
+  const spots = useFollowSpots("bus");
   const playheads = useRef(new Map<string, number>());
+  const holds = useRef(new Map<string, number>());
+  const spacing = useMemo(() => createSpacing(MAX_BUSES), []);
+  const middles = useMemo(() => new Float32Array(MAX_BUSES), []);
+  /** How fast each bus's run takes it now, m/s. */
+  const speeds = useMemo(() => new Float32Array(MAX_BUSES), []);
 
   const runs = useMemo(
     () =>
       buses
         .slice(0, MAX_BUSES)
-        .map((bus) => follow(bus, routes, index, epoch, heightAt.current))
+        .map((bus) => {
+          const run = follow(bus, routes, index, epoch, heightAt.current);
+          const roads = highways.traffic?.roads;
+
+          // In traffic, over in the kerb lane.
+          return run && roads ? keepToKerb(run, roads) : run;
+        })
         .filter((run): run is Run => run !== null),
     [buses, routes, index, epoch, heightAt]
   );
@@ -229,6 +276,10 @@ function Fleet({
     for (const id of playheads.current.keys()) {
       if (!present.has(id)) playheads.current.delete(id);
     }
+
+    for (const id of holds.current.keys()) {
+      if (!present.has(id)) holds.current.delete(id);
+    }
   }, [runs, trails]);
 
   useEffect(() => {
@@ -261,9 +312,8 @@ function Fleet({
       lit++;
     };
 
-    let count = 0;
-    const watched = followed("bus");
-    fleet.detailed.begin();
+    // Where each bus would be, less how far it's held back behind the one
+    // ahead of it.
     runs.forEach((run, i) => {
       const { bus, fixes } = run;
       const latest = fixes[fixes.length - 1].time;
@@ -283,19 +333,61 @@ function Fleet({
       playheads.current.set(bus.id, playhead);
       trails.playheads.array[i] = playhead;
 
-      // The fix is taken as the middle of the bus.
-      const middle = distanceAt(run, playhead);
-      pointAt(run, middle + BUS.length / 2, front);
-      pointAt(run, middle - BUS.length / 2, back);
-      centre.addVectors(front, back).multiplyScalar(0.5);
-      centre.y += RIDE;
-      along.subVectors(front, back);
+      const hold = Math.max(
+        (holds.current.get(bus.id) ?? 0) - LET_GO * delta,
+        0
+      );
 
-      if (along.lengthSq() > 1e-6) {
-        rotation.setFromUnitVectors(FORWARD, along.normalize());
-      } else {
-        rotation.identity();
+      holds.current.set(bus.id, hold);
+      // The fix is taken as the middle of the bus.
+      const at = distanceAt(run, playhead);
+      middles[i] = at - hold;
+      speeds[i] = distanceAt(run, playhead + 1) - at;
+      place(run, middles[i]);
+      const level = Math.hypot(along.x, along.z) || 1;
+      spacing.x[i] = centre.x;
+      spacing.z[i] = centre.z;
+      spacing.dx[i] = along.x / level;
+      spacing.dz[i] = along.z / level;
+    });
+
+    // Then any bus in the back of another is held back behind it.
+    const push = spacing.resolve(runs.length, BUS.length, GAP);
+
+    let count = 0;
+    const watched = followed("bus");
+    fleet.detailed.begin();
+    spots.begin();
+    runs.forEach((run, i) => {
+      const { bus } = run;
+      const hold = holds.current.get(bus.id) ?? 0;
+      let more = Math.max(Math.min(push[i], MAX_HOLD - hold), 0);
+      place(run, middles[i] - more);
+      const traffic = highways.traffic;
+
+      // On a highway, it's in traffic: held back behind the car ahead (and
+      // cars make way for it).
+      if (traffic && along.lengthSq() > 1e-6) {
+        const level = Math.hypot(along.x, along.z) || 1;
+        user.id = bus.id;
+        user.x = centre.x;
+        user.y = centre.y - RIDE;
+        user.z = centre.z;
+        user.dx = along.x / level;
+        user.dz = along.z / level;
+        user.speed = speeds[i];
+        user.held = hold + more;
+        const wait = Math.min(traffic.share(user, GAP), MAX_HOLD - hold - more);
+
+        if (wait > 0) {
+          more += wait;
+          place(run, middles[i] - more);
+        }
       }
+
+      if (more > 0) holds.current.set(bus.id, hold + more);
+      orient(along, rotation);
+      spots.add(bus.id, centre.x, centre.y, centre.z, BUS.length);
 
       const detailed =
         isNear(BUS.length, camera.position.distanceTo(centre)) &&

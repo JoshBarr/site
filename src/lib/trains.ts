@@ -42,7 +42,13 @@ const STALE = 5 * 60_000;
  * The terrain root the scene covers, NZTM [west, south, east, north]:
  * trains beyond it aren't sent.
  */
-export const MAP_BOUNDS = [1715232, 5395232, 1780768, 5460768];
+const MAP_BOUNDS = [1715232, 5395232, 1780768, 5460768];
+
+const [WEST, SOUTH, EAST, NORTH] = MAP_BOUNDS;
+
+/** Whether a vehicle is within MAP_BOUNDS. */
+export const onMap = ({ position: [e, n] }: { position: [number, number] }) =>
+  e > WEST && e < EAST && n > SOUTH && n < NORTH;
 
 /** Whether a fix is too old to show. */
 export function isStale({ time }: Pick<Train, "time">) {
