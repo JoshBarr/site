@@ -1,11 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { loadVessels } from "../../lib/vesselStore";
-import type { VesselsResponse } from "../../lib/vessels";
+import { loadVessels } from "../../lib/live";
+import { isStale, type VesselsResponse } from "../../lib/vessels";
 
 /**
- * Ships in Wellington Harbour for the homepage scene, from Open Waters AIS:
- * refreshed every 20 seconds or so by whichever request is due, and
- * otherwise as last fetched.
+ * Ships in Wellington Harbour for the homepage scene, from Open Waters AIS,
+ * as the AWS poller logged them (see lib/live.ts).
  */
 export default async function handler(
   _req: NextApiRequest,
@@ -17,7 +16,10 @@ export default async function handler(
       "Cache-Control",
       "public, s-maxage=10, stale-while-revalidate=20"
     );
-    res.status(200).json({ time: Date.now(), vessels });
+    res.status(200).json({
+      time: Date.now(),
+      vessels: vessels.filter((vessel) => !isStale(vessel)),
+    });
   } catch (e) {
     console.error("[vessels] load failed:", e);
     res.setHeader("Cache-Control", "public, s-maxage=30");

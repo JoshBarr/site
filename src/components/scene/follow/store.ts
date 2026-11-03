@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
+import { PerspectiveCamera, Vector3 } from "three/webgpu";
 
 // Following a vehicle with the camera. The layers that draw vehicles list
 // the ones that can be followed and, each frame, publish where the followed
@@ -14,6 +15,8 @@ export interface Candidate {
   label: string;
   /** Under way, so picked before those standing still. */
   moving: boolean;
+  /** On the map now; those that aren't are passed over. Assumed if absent. */
+  drawn?: () => boolean;
 }
 
 export interface Following {
@@ -25,6 +28,8 @@ export interface Following {
 interface FollowSnapshot {
   following: Following | null;
   counts: Record<Category, number>;
+  /** Cut straight to each new subject, rather than flying there. */
+  cut: boolean;
 }
 
 /** Where the followed vehicle is this frame, as its layer draws it. */
@@ -68,6 +73,37 @@ export const subject: Subject & {
 
 const candidates = new Map<Category, Candidate[]>();
 
+/**
+ * Where a layer drew its vehicles in the last frame, so one can be picked
+ * out by clicking it. A vehicle may have several spots: a train has one for
+ * each car.
+ */
+class Spots {
+  ids: string[] = [];
+  /** x, y, z, and length, for each. */
+  at = new Float32Array(4 * 256);
+  count = 0;
+
+  begin() {
+    this.count = 0;
+  }
+
+  add(id: string, x: number, y: number, z: number, length: number) {
+    const i = this.count++;
+
+    if (this.at.length < this.count * 4) {
+      const grown = new Float32Array(this.at.length * 2);
+      grown.set(this.at);
+      this.at = grown;
+    }
+
+    this.ids[i] = id;
+    this.at.set([x, y, z, length], i * 4);
+  }
+}
+
+const spots = new Map<Category, Spots>();
+
 /** Followed since each category's list last went round, so Next doesn't repeat. */
 const visited = new Map<Category, Set<string>>();
 const listeners = new Set<() => void>();
@@ -83,10 +119,14 @@ const countsOf = (): Record<Category, number> => {
   };
 };
 
-let snapshot: FollowSnapshot = { following: null, counts: countsOf() };
+let snapshot: FollowSnapshot = {
+  following: null,
+  counts: countsOf(),
+  cut: false,
+};
 
-function update(following: Following | null) {
-  snapshot = { following, counts: countsOf() };
+function update(following: Following | null, cut = snapshot.cut) {
+  snapshot = { following, counts: countsOf(), cut };
 
   for (const listener of listeners) listener();
 }
@@ -124,11 +164,14 @@ export function publish(at: Partial<Subject> & Pick<Subject, "x" | "y" | "z">) {
 }
 
 /**
- * One of `category` at random, not `avoid`, and not one followed since the
- * list last went round. Those under way go first.
+ * One of `category` drawn now at random, not `avoid`, and not one followed
+ * since the list last went round. Those under way go first.
  */
 function pick(category: Category, avoid?: string): Following | null {
-  const list = candidates.get(category) ?? [];
+  const list = (candidates.get(category) ?? []).filter(
+    ({ drawn }) => drawn?.() ?? true
+  );
+
   let seen = visited.get(category);
 
   if (!seen) visited.set(category, (seen = new Set()));
@@ -150,6 +193,98 @@ function pick(category: Category, avoid?: string): Following | null {
   return { category, id, label };
 }
 
+/** Pixels from a vehicle that a click still picks it, however small it's drawn. */
+const REACH = 12;
+
+const spot = new Vector3();
+const projected = new Vector3();
+
+/** A vehicle drawn near a point on the view. */
+export interface Sighting {
+  vehicle: Following;
+  /** Where it's drawn, -1..1 across and up the view. */
+  x: number;
+  y: number;
+  /** In front of the camera, along its view axis, m. */
+  depth: number;
+  /** Metres bow to stern. */
+  length: number;
+}
+
+/**
+ * The vehicles drawn near enough the point `x`, `y` (-1..1 across and up
+ * the view, as three has it) on a view `height` pixels high to be what was
+ * meant, at least `reach` pixels, nearest the point first: each once, at
+ * its nearest spot. Some may be hidden behind hills or buildings.
+ */
+export function vehiclesAt(
+  camera: PerspectiveCamera,
+  x: number,
+  y: number,
+  height: number,
+  reach = REACH
+): Sighting[] {
+  // Pixels across a metre one metre away.
+  const scale = height / 2 / Math.tan((camera.fov * Math.PI) / 360);
+  const near = new Map<string, Sighting & { off: number }>();
+
+  for (const [category, { ids, at, count }] of spots) {
+    for (let i = 0; i < count; i++) {
+      const o = i * 4;
+      spot.set(at[o], at[o + 1], at[o + 2]);
+      projected.copy(spot).project(camera);
+
+      if (projected.z < -1 || projected.z > 1) continue;
+      const depth = -spot.applyMatrix4(camera.matrixWorldInverse).z;
+      const dx = ((projected.x - x) * height * camera.aspect) / 2;
+      const dy = ((projected.y - y) * height) / 2;
+      const off = Math.hypot(dx, dy);
+      const length = at[o + 3];
+      const radius = Math.max((length / 2 / depth) * scale, reach);
+      const key = `${category}:${ids[i]}`;
+
+      if (off > radius || off >= (near.get(key)?.off ?? Infinity)) continue;
+      near.set(key, {
+        vehicle: { category, id: ids[i], label: "" },
+        x: projected.x,
+        y: projected.y,
+        depth,
+        length,
+        off,
+      });
+    }
+  }
+
+  return [...near.values()]
+    .sort((a, b) => a.off - b.off)
+    .flatMap(({ vehicle, x, y, depth, length }) => {
+      const { category, id } = vehicle;
+      const candidate = candidates.get(category)?.find((c) => c.id === id);
+
+      if (!candidate) return [];
+
+      return [
+        {
+          vehicle: { ...vehicle, label: candidate.label },
+          x,
+          y,
+          depth,
+          length,
+        },
+      ];
+    });
+}
+
+/** Starts following `vehicle`, as picked out on the map. */
+export function followVehicle(vehicle: Following) {
+  const { category, id } = vehicle;
+  let seen = visited.get(category);
+
+  if (!seen) visited.set(category, (seen = new Set()));
+  seen.add(id);
+  update(vehicle);
+}
+
 /** Starts following one of `category`, or the next if already following. */
 export function follow(category: Category) {
   const { following } = snapshot;
@@ -167,6 +302,11 @@ export function next() {
 
 export function stop() {
   if (snapshot.following) update(null);
+}
+
+/** Cuts, or flies, to each new subject from now on. */
+export function setCut(cut: boolean) {
+  if (cut !== snapshot.cut) update(snapshot.following, cut);
 }
 
 /** Lists what of `category` can be followed while mounted. */
@@ -194,4 +334,19 @@ export function useFollowCandidates(category: Category, list: Candidate[]) {
     },
     [category]
   );
+}
+
+/** Spots for where `category` is drawn, to fill each frame while mounted. */
+export function useFollowSpots(category: Category) {
+  const drawn = useMemo(() => new Spots(), []);
+
+  useEffect(() => {
+    spots.set(category, drawn);
+
+    return () => {
+      if (spots.get(category) === drawn) spots.delete(category);
+    };
+  }, [category, drawn]);
+
+  return drawn;
 }

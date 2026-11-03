@@ -1,6 +1,6 @@
 import type { TrafficSpeeds } from "../../../lib/traffic";
 import type { TileIndex } from "../terrain/manifest";
-import type { Carriageway, Roads } from "./roads";
+import type { Carriageway, OnRoad, Roads } from "./roads";
 import {
   BIN,
   Bins,
@@ -68,6 +68,26 @@ const TOLERANCE = 0.75;
 /** Speeds settle to new readings over this, s. */
 const SETTLE = 20;
 
+/**
+ * Buses, from another layer, go where their fixes say, so traffic makes
+ * way for them, with some licence: ahead of one going faster than this,
+ * m/s, cars in its lanes move over, or turn off (fade out) about this
+ * often, s, sooner the longer it's been held up behind them.
+ */
+const BUS_MOVING = 1;
+const MAKE_WAY_EVERY = 8;
+const HELD_UP = 8;
+
+/** Ahead of a moving bus, cars make way this far, m, and this many seconds on. */
+const MAKE_WAY = 20;
+const MAKE_WAY_TIME = 1.5;
+
+/** A bus's sides overlap a lane by more than this, m, before it's in it. */
+const IN_LANE = 0.4;
+
+/** A bus not seen in this long, s, is gone. */
+const GONE = 2;
+
 export interface Car {
   /** Distance along, m: the front bumper. */
   s: number;
@@ -108,6 +128,40 @@ export interface Car {
   takes: boolean;
   /** Off this flow at the end of the step: gone, or onto another. */
   off: boolean;
+}
+
+/** What a car follows: the car ahead in its lane, or a bus. */
+interface Leader {
+  /** The front, m along. */
+  s: number;
+  length: number;
+  v: number;
+}
+
+/** A bus in the road, from the lowest lane it's in to the highest. */
+interface Block extends Leader {
+  lo: number;
+  hi: number;
+  /** How fast its run takes it, m/s, and how far it's been held back, m. */
+  speed: number;
+  held: number;
+}
+
+/** A bus, or anything else driven elsewhere, sharing the road. */
+export interface RoadUser {
+  id: string;
+  /** Its middle, in world space. */
+  x: number;
+  y: number;
+  z: number;
+  /** Which way it faces, a unit vector on the ground. */
+  dx: number;
+  dz: number;
+  length: number;
+  width: number;
+  /** How fast it wants to go, m/s, and how far it's been held back, m. */
+  speed: number;
+  held: number;
 }
 
 /**
@@ -201,6 +255,8 @@ class Flow {
   into?: { flow: Flow; s: number };
   /** Whether traffic starts on it from another, not from nowhere. */
   fed = false;
+  /** Buses in it, front first: those shared since the last step. */
+  blocks: Block[] = [];
   /** Per lane: how far behind the last car the next starts, m. */
   private readonly spacing: number[];
 
@@ -409,10 +465,49 @@ class Flow {
     const gapAhead = ahead ? ahead.s - ahead.length - car.s : Infinity;
     const gapBehind = behind ? car.s - car.length - behind.s : Infinity;
 
-    return (
-      gapAhead > (MIN_GAP + car.v * 0.6) * slack &&
-      gapBehind > (MIN_GAP + (behind?.v ?? 0) * 0.6) * slack
-    );
+    if (
+      gapAhead <= (MIN_GAP + car.v * 0.6) * slack ||
+      gapBehind <= (MIN_GAP + (behind?.v ?? 0) * 0.6) * slack
+    ) {
+      return false;
+    }
+
+    // Nor in front of a bus, where it'd only have to make way again.
+    for (const block of this.blocks) {
+      if (lane < block.lo || lane > block.hi) continue;
+      const toBus = block.s - block.length - car.s;
+      const fromBus = car.s - car.length - block.s;
+
+      if (toBus < 0 && fromBus < 0) return false;
+
+      if (toBus >= 0 && toBus <= (MIN_GAP + car.v * 0.6) * slack) return false;
+
+      if (fromBus >= 0 && fromBus <= MIN_GAP + block.speed * MAKE_WAY_TIME) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * Room ahead of `front` in lanes `lo` to `hi`, m: to the back of the
+   * nearest car there that isn't leaving or (being in the way already)
+   * making way.
+   */
+  room(front: number, lo: number, hi: number) {
+    const cars = this.cars;
+
+    for (let i = this.indexAt(front) - 1, n = 0; i >= 0 && n < 60; i--, n++) {
+      const car = cars[i];
+
+      if (car.lane < lo || car.lane > hi || car.leaving) continue;
+      const gap = car.s - car.length - front;
+
+      if (gap >= -0.5) return gap;
+    }
+
+    return Infinity;
   }
 
   /** Puts a car in, in order. */
@@ -494,7 +589,7 @@ class Flow {
   }
 
   /** New traffic onto the start of the road, lane by lane, as busy as it should be. */
-  feed(rearmost: (Car | null)[]) {
+  feed(rearmost: (Leader | null)[]) {
     for (let lane = 0; lane < this.lanesAt(0); lane++) {
       const last = rearmost[lane];
 
@@ -524,8 +619,18 @@ export class Traffic {
   private readonly maxCars: number;
   private sinceControl = 0;
   private filled = false;
+  readonly roads: Roads;
+  /** Seconds stepped, for how fast buses go. */
+  private clock = 0;
+  /** Buses seen: on which flow, where and how fast, and when. */
+  private readonly users = new Map<
+    string,
+    { flow: Flow; s: number; v: number; t: number }
+  >();
+  private readonly at: OnRoad = { carriageway: 0, s: 0, lateral: 0, i: 0 };
 
   constructor(roads: Roads, index: TileIndex, maxCars: number) {
+    this.roads = roads;
     this.maxCars = maxCars;
     this.flows = roads.carriageways.map((c) => new Flow(c, roads, index));
     const byName = new Map(this.flows.map((f) => [f.road.name, f]));
@@ -592,8 +697,17 @@ export class Traffic {
     const dt = Math.min(frame, MAX_FRAME);
     const steps = Math.ceil(dt / STEP);
 
+    for (const flow of this.flows) flow.blocks.sort((a, b) => b.s - a.s);
+
     for (let k = 0; k < steps; k++) this.advance(dt / steps);
     this.sinceControl += dt;
+    this.clock += dt;
+
+    for (const flow of this.flows) flow.blocks.length = 0;
+
+    for (const [id, seen] of this.users) {
+      if (this.clock - seen.t > GONE) this.users.delete(id);
+    }
 
     if (this.sinceControl >= CONTROL) {
       this.sinceControl = 0;
@@ -601,6 +715,65 @@ export class Traffic {
 
       for (const flow of this.flows) room -= this.control(flow, room);
     }
+  }
+
+  /**
+   * A bus where `user` says, in the lanes of a carriageway it's on (if
+   * any) until the next step: traffic follows it, and makes way ahead of
+   * it. Returns how far back it should go, m, to keep `gap` behind the car
+   * ahead of it; it's taken to.
+   */
+  share(user: RoadUser, gap: number) {
+    const at = this.at;
+
+    if (
+      !this.filled ||
+      !this.roads.find(user.x, user.y, user.z, user.dx, user.dz, at)
+    ) {
+      return 0;
+    }
+
+    const flow = this.flows[at.carriageway];
+    const { road } = flow;
+    const kerb = road.kerbAt(at.i);
+    const width = road.laneWidth[at.i];
+    const lanes = road.lanes[at.i];
+    const half = user.width / 2 - IN_LANE;
+    const lo = Math.max(Math.floor((at.lateral - half - kerb) / width), 0);
+
+    const hi = Math.min(
+      Math.floor((at.lateral + half - kerb) / width),
+      lanes - 1
+    );
+
+    if (lo > hi) return 0;
+    const ahead = at.s + user.length / 2;
+    const back = Math.max(gap - flow.room(ahead, lo, hi), 0);
+    const front = ahead - back;
+
+    let seen = this.users.get(user.id);
+
+    if (!seen || seen.flow !== flow || Math.abs(front - seen.s) > 50) {
+      seen = { flow, s: front, v: user.speed, t: this.clock };
+      this.users.set(user.id, seen);
+    } else if (this.clock > seen.t) {
+      const v = Math.max((front - seen.s) / (this.clock - seen.t), 0);
+      seen.v += (v - seen.v) * 0.3;
+      seen.s = front;
+      seen.t = this.clock;
+    }
+
+    flow.blocks.push({
+      s: front,
+      length: user.length,
+      v: seen.v,
+      lo,
+      hi,
+      speed: user.speed,
+      held: user.held + back,
+    });
+
+    return back;
   }
 
   private advance(dt: number) {
@@ -643,15 +816,28 @@ export class Traffic {
       cars[j] = car;
     }
 
-    /** The car last moved in each lane: ahead of the next one there. */
-    const leaders: (Car | null)[] = Array.from(
+    /** The car last moved in each lane, or a bus: ahead of the next one there. */
+    const leaders: (Leader | null)[] = Array.from(
       { length: road.maxLanes },
       () => null
     );
 
+    const { blocks } = flow;
+    /** Buses passed: those with fronts ahead of the car now. */
+    let passed = 0;
     let dropped = false;
 
     for (const car of cars) {
+      while (passed < blocks.length && blocks[passed].s >= car.s) {
+        const block = blocks[passed++];
+
+        for (let lane = block.lo; lane <= block.hi; lane++) {
+          leaders[lane] = block;
+        }
+      }
+
+      if (blocks.length && !car.leaving) this.makeWay(flow, car, dt);
+
       const lanesHere =
         road.lanes[car.hint < 0 ? road.locate(car.s) : car.hint];
 
@@ -691,6 +877,9 @@ export class Traffic {
       );
 
       let gap = leader ? leader.s - leader.length - car.s : Infinity;
+
+      // Fading out from under a bus, it carries on as it goes.
+      if (car.leaving && gap < 0) gap = Infinity;
 
       car.spacing = leader
         ? (leader.s - car.s) / Math.max(lanesHere, 1)
@@ -826,8 +1015,49 @@ export class Traffic {
     moving.push([flow, car]);
   }
 
+  /**
+   * Out of the way of any bus `car` is in, or just ahead of and holding up:
+   * into another lane, else off the road.
+   */
+  private makeWay(flow: Flow, car: Car, dt: number) {
+    for (const block of flow.blocks) {
+      if (car.lane < block.lo || car.lane > block.hi) continue;
+      const ahead = car.s - car.length - block.s;
+
+      if (ahead < 0) {
+        // In it, the bus having come along regardless.
+        if (car.s <= block.s - block.length) continue;
+      } else if (
+        block.speed < BUS_MOVING ||
+        ahead > MAKE_WAY + block.speed * MAKE_WAY_TIME
+      ) {
+        continue;
+      }
+
+      for (const lane of [block.lo - 1, block.hi + 1]) {
+        if (
+          lane >= 0 &&
+          lane < flow.lanesAt(car.s) &&
+          flow.fits(car, lane, car, ahead < 0 ? 0.3 : 1)
+        ) {
+          car.lane = lane;
+
+          return;
+        }
+      }
+
+      const rate = (1 + block.held / HELD_UP) / MAKE_WAY_EVERY;
+
+      if (ahead < 0 || Math.random() < dt * rate) {
+        car.leaving = true;
+
+        return;
+      }
+    }
+  }
+
   /** Into the faster lane beside, or back to the left when there's room. */
-  private considerChange(flow: Flow, car: Car, leaders: (Car | null)[]) {
+  private considerChange(flow: Flow, car: Car, leaders: (Leader | null)[]) {
     const lanes = flow.lanesAt(car.s);
 
     const gapIn = (lane: number) => {

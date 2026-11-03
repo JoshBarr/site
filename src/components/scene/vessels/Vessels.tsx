@@ -62,6 +62,7 @@ import {
   followed,
   publish,
   useFollowCandidates,
+  useFollowSpots,
 } from "../follow/store";
 
 const MAX_VESSELS = 256;
@@ -688,6 +689,7 @@ export function Vessels({
   const meshes = useMemo(createMeshes, []);
   const trails = useMemo(createTrails, []);
   const sprites = useMemo(createLights, []);
+  const spots = useFollowSpots("ship");
   const detailed = useMemo(createDetailed, []);
   const tracks = useRef(new Map<number, Track>());
 
@@ -858,6 +860,7 @@ export function Vessels({
     const { light, tint } = sprites;
     let lit = 0;
     const watched = followed("ship");
+    spots.begin();
     const budget = { builds: BUILDS_PER_FRAME };
     const shown = new Set<number>();
 
@@ -1018,6 +1021,7 @@ export function Vessels({
 
       matrix.multiplyMatrices(ship, local.makeScale(beam, freeboard, length));
       hulls.setMatrixAt(i, model ? HIDDEN : matrix);
+      spots.add(String(vessel.mmsi), cx, heave + freeboard, cz, length);
 
       if (String(vessel.mmsi) === watched) {
         publish({

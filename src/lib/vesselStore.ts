@@ -1,7 +1,6 @@
-import { z } from "zod";
+import { byTime, type Poll } from "./fold";
+import type { LiveData, vessels } from "./liveRecords";
 import { fetchHarbour, fetchTrack, TrackPoint } from "./openwaters";
-import { canStore, getRedis, getStored } from "./redis";
-import { point, trailPoint } from "./schemas";
 import {
   isStale,
   STALE_STATIONARY,
@@ -11,62 +10,17 @@ import {
   Vessel,
 } from "./vessels";
 
-// The harbour as last fetched from Open Waters, kept in Upstash Redis so it's
-// fetched at most every REFRESH however many people are watching, and so
-// there's something to show when Open Waters can't be reached.
-
-/** The latest `Snapshot`. Never expires: it's the last known good. */
-const SNAPSHOT = "vessels:snapshot";
-
-/** Held by whoever's refreshing, for REFRESH. */
-const LOCK = "vessels:lock";
-
-/**
- * Hash of which way each ship last pointed, by MMSI, kept for good: plenty
- * of small craft never send a heading, only a course while under way.
- */
-const HEADINGS = "vessels:headings";
-
-/** How often the harbour is fetched, at most. */
-const REFRESH = 20_000;
+// Ships in the harbour from Open Waters, polled by the AWS poller and folded
+// from its log into what the scene draws (see plans/dynamo.md).
 
 /** Trail positions closer together than this, ms, are thinned out. */
 const TRAIL_STEP = 10_000;
 
 /**
- * Most tracks fetched in one refresh. Open Waters allows 120 requests a
- * minute; three refreshes a minute stay under it.
+ * Most tracks fetched in one poll. Open Waters allows 120 requests a
+ * minute.
  */
 const MAX_TRACKS = 30;
-
-interface Snapshot {
-  /** When it was fetched, epoch ms. */
-  time: number;
-  vessels: Vessel[];
-}
-
-const stored = z.object({
-  time: z.number(),
-  vessels: z.array(
-    z.object({
-      mmsi: z.number(),
-      name: z.string().nullable(),
-      type: z.number(),
-      position: point,
-      speed: z.number(),
-      course: z.number().nullable(),
-      heading: z.number().nullable(),
-      dimension: z
-        .tuple([z.number(), z.number(), z.number(), z.number()])
-        .nullable(),
-      time: z.number(),
-      trail: z.array(trailPoint),
-    })
-  ),
-}) satisfies z.ZodType<Snapshot>;
-
-/** HEADINGS' entries for the MMSIs asked for: null for those not in it. */
-const storedHeadings = z.record(z.string(), z.number().nullable()).nullable();
 
 /** The newest point, and others at least TRAIL_STEP apart, from `since`. */
 function thin(trail: Vessel["trail"], since: number) {
@@ -109,124 +63,75 @@ function follow(vessel: Vessel, track: TrackPoint[], since: number): Vessel {
   };
 }
 
-/** Fetches the harbour, carrying on trails and headings from `previous`. */
-async function refresh(previous: Snapshot | null): Promise<Snapshot> {
+/** Which way a ship points, as it reports: its heading, or under way, its course. */
+export const reportedHeading = (v: Vessel) =>
+  v.heading ?? (v.speed > UNDER_WAY ? v.course : null);
+
+/**
+ * Fetches the harbour for the AWS poller, which stores each poll as it is
+ * and leaves joining up trails to whoever reads them. Each ship under way
+ * is placed by the newest point of its track since `ends` has its trail
+ * ending (or the whole TRAIL), with those points as its trail.
+ */
+export async function pollHarbour(
+  ends: ReadonlyMap<number, number>
+): Promise<Vessel[]> {
   const now = Date.now();
-  const since = now - TRAIL;
   const fetched = await fetchHarbour(STALE_STATIONARY, STALE_UNDER_WAY);
-  const before = new Map(previous?.vessels.map((v) => [v.mmsi, v]));
 
-  // Only ships under way have moved since. Each one's track is fetched from
-  // the end of its trail, or for the whole trail if it's new or was moored.
-  const moving = fetched
-    .filter((v) => v.speed > UNDER_WAY)
-    .slice(0, MAX_TRACKS);
+  const since = (mmsi: number) =>
+    Math.max(ends.get(mmsi) ?? -Infinity, now - TRAIL);
 
+  // A failed track, or one past MAX_TRACKS, resumes from further back the
+  // next poll.
   const tracks = new Map(
     await Promise.all(
-      moving.map(async ({ mmsi }) => {
-        const trail = before.get(mmsi)?.trail.filter(([, , t]) => t > since);
-        const from = trail?.length ? trail[trail.length - 1][2] : since;
+      fetched
+        .filter((v) => v.speed > UNDER_WAY)
+        .slice(0, MAX_TRACKS)
+        .map(async ({ mmsi }) => {
+          const track = await fetchTrack(mmsi, since(mmsi)).catch((e) => {
+            console.error(`[vessels] track ${mmsi}:`, e);
 
-        const track = await fetchTrack(mmsi, from).catch((e) => {
-          console.error(`[vessels] track ${mmsi}:`, e);
+            return null;
+          });
 
-          return null;
-        });
-
-        return [mmsi, track] as const;
-      })
+          return [mmsi, track] as const;
+        })
     )
   );
 
-  const vessels = fetched.map((vessel) => {
-    const known = before.get(vessel.mmsi);
-    const carried = { ...vessel, trail: known?.trail ?? [] };
+  return fetched.map((vessel) => {
     const track = tracks.get(vessel.mmsi);
 
-    return track
-      ? follow(carried, track, since)
-      : { ...carried, trail: thin(carried.trail, since) };
+    return track ? follow(vessel, track, since(vessel.mmsi)) : vessel;
   });
-
-  if (canStore()) await rememberHeadings(vessels);
-
-  return { time: now, vessels };
 }
 
 /**
- * Stores which way ships under way or with a heading point, and fills in the
- * last one known for those moored without one.
+ * The ships in the newest of `polls` (oldest first) that are recent enough
+ * to show, each with its tracks from the last TRAIL as its trail. The
+ * newest poll may be older than that: moored ships are shown for hours.
  */
-async function rememberHeadings(vessels: Vessel[]) {
-  const redis = getRedis();
-  const known: Record<string, number> = {};
+export function foldVessels(
+  polls: Poll<LiveData<typeof vessels>>[],
+  now = Date.now()
+): Vessel[] {
+  const since = now - TRAIL;
+  const tracks = new Map<number, Vessel["trail"]>();
 
-  for (const v of vessels) {
-    const heading = v.heading ?? (v.speed > UNDER_WAY ? v.course : null);
-
-    if (heading !== null) known[v.mmsi] = heading;
-  }
-
-  // Under way, the scene goes by its course instead.
-  const missing = vessels.filter(
-    (v) => v.heading === null && v.speed <= UNDER_WAY
-  );
-
-  const pipeline = redis.pipeline();
-
-  if (Object.keys(known).length) pipeline.hset(HEADINGS, known);
-
-  if (missing.length) {
-    pipeline.hmget(HEADINGS, ...missing.map((v) => String(v.mmsi)));
-  }
-
-  if (!pipeline.length()) return;
-  const results = await pipeline.exec();
-
-  if (!missing.length) return;
-
-  // Without them, these ships are drawn pointing north: no reason to fail.
-  const { data: headings } = storedHeadings.safeParse(
-    results[results.length - 1]
-  );
-
-  for (const v of missing) v.heading = headings?.[v.mmsi] ?? null;
-}
-
-/**
- * Ships recent enough to show, with their trails: the stored snapshot, or a
- * fresh one if it's due and nobody else is fetching it. If Open Waters
- * fails, the last one fetched.
- */
-export async function loadVessels(): Promise<Vessel[]> {
-  let snapshot: Snapshot | null = null;
-
-  if (!canStore()) {
-    snapshot = await refresh(null);
-  } else {
-    const redis = getRedis();
-    snapshot = await getStored(SNAPSHOT, stored);
-
-    if (
-      (!snapshot || Date.now() - snapshot.time >= REFRESH) &&
-      (await redis.set(LOCK, 1, { nx: true, px: REFRESH })) === "OK"
-    ) {
-      try {
-        snapshot = await refresh(snapshot);
-        await redis.set(SNAPSHOT, snapshot);
-      } catch (e) {
-        console.error("[vessels] refresh failed:", e);
-      }
+  for (const { data } of polls) {
+    for (const { mmsi, trail } of data.vessels) {
+      tracks.set(mmsi, [...(tracks.get(mmsi) ?? []), ...trail]);
     }
   }
 
-  const since = Date.now() - TRAIL;
-
-  return (snapshot?.vessels ?? [])
+  return (polls.at(-1)?.data.vessels ?? [])
     .filter((vessel) => !isStale(vessel))
     .map((vessel) => ({
       ...vessel,
-      trail: vessel.trail.filter(([, , time]) => time > since),
+      trail: byTime(tracks.get(vessel.mmsi) ?? []).filter(
+        ([, , time]) => time > since
+      ),
     }));
 }

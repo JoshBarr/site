@@ -5,6 +5,7 @@ import {
   follow,
   getSnapshot,
   next,
+  setCut,
   stop,
   subscribe,
 } from "./store";
@@ -28,13 +29,13 @@ const button: React.CSSProperties = {
 
 /**
  * Pick a kind of vehicle and the camera follows one of them, chosen at
- * random; Next moves on to another. Touching the map, Esc or × hands the
- * camera back.
+ * random, or click one on the map; Next moves on to another. Cut jumps straight to each instead of
+ * flying there. Touching the map, Esc or × hands the camera back.
  */
 export const FollowPanel: React.FC<{ style?: React.CSSProperties }> = ({
   style,
 }) => {
-  const { following, counts } = useSyncExternalStore(
+  const { following, counts, cut } = useSyncExternalStore(
     subscribe,
     getSnapshot,
     getSnapshot
@@ -85,6 +86,18 @@ export const FollowPanel: React.FC<{ style?: React.CSSProperties }> = ({
           </button>
         );
       })}
+      <button
+        type="button"
+        onClick={() => setCut(!cut)}
+        aria-pressed={cut}
+        title="Jump straight to each vehicle instead of flying there"
+        style={{
+          ...button,
+          background: cut ? "rgba(255, 255, 255, 0.2)" : "transparent",
+        }}
+      >
+        Cut
+      </button>
       {following && (
         <>
           <span

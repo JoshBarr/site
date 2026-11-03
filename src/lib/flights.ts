@@ -55,8 +55,12 @@ export interface FlightsResponse {
   aircraft: Aircraft[];
 }
 
-/** How far back trails go, with `?history`. */
-export const HISTORY = 30 * 60_000;
+/**
+ * How far back trails go, with `?history`: past a parked aircraft's 5-min
+ * hold and the 30 s planes are drawn behind. Trails fade out within a
+ * minute, so older fixes would go undrawn.
+ */
+export const HISTORY = 7 * 60_000;
 
 /** How far back an ordinary poll goes: enough to bridge a missed one. */
 export const RECENT = 2 * 60_000;

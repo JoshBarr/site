@@ -1,7 +1,5 @@
 // Live buses around Wellington: shared by /api/buses and the scene.
 
-export { MAP_BOUNDS } from "./trains";
-
 /** A bus's latest fix. Units: metres, degrees from true north. */
 export interface Bus {
   /** Metlink's id for the bus reporting. */

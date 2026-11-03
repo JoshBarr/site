@@ -1,11 +1,20 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
-  // Pages, the Next config, Vitest and oxlint are found by knip's plugins.
-  // These are run some other way.
-  "entry": [
-    // Run by scripts/build_assets.sh, or by hand.
-    "scripts/**/*.mjs",
-  ],
-  // Vendored, unchanged: see tools/oxlint/anti-slop/UPSTREAM.md.
-  "ignore": ["tools/oxlint/anti-slop/**"],
+  "workspaces": {
+    // Pages, the Next config, Vitest and oxlint are found by knip's plugins.
+    ".": {
+      // These are run some other way.
+      "entry": [
+        // Run by scripts/build_assets.sh, or by hand.
+        "scripts/**/*.mjs",
+      ],
+      // Vendored, unchanged: see tools/oxlint/anti-slop/UPSTREAM.md.
+      "ignore": ["tools/oxlint/anti-slop/**"],
+    },
+    // The AWS stack and poller: its own package, so Alchemy stays out of the
+    // site's dependencies. The poller runs src/lib's feeds.
+    "infra": {
+      "entry": ["alchemy.run.ts"],
+    },
+  },
 }

@@ -1,0 +1,19 @@
+{
+  // The stack, the poller and its tests. As the site's, so the src/lib code
+  // the poller bundles checks the same here.
+  "compilerOptions": {
+    "lib": ["dom", "esnext"],
+    "types": ["node"],
+    "skipLibCheck": true,
+    "strict": false,
+    "strictNullChecks": true,
+    "noEmit": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "target": "es2022"
+  },
+  "include": ["*.ts", "*.mts", "poller/**/*.ts", "test/**/*.ts"]
+}

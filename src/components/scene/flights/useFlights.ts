@@ -40,7 +40,7 @@ export interface Flights {
 
 /**
  * Aircraft around Wellington and their trails, polled from /api/flights. The
- * first poll fetches half an hour of history; later ones only recent fixes,
+ * first poll fetches HISTORY's worth of fixes; later ones only recent fixes,
  * which are merged in.
  */
 export function useFlights(): Flights {

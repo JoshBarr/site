@@ -50,6 +50,7 @@ import {
   isPeak,
   LOCOMOTIVE,
   MATANGI,
+  orient,
   pointAt,
   Routes,
   Run,
@@ -67,6 +68,7 @@ import {
   followed,
   publish,
   useFollowCandidates,
+  useFollowSpots,
 } from "../follow/store";
 
 const MAX_TRAINS = 64;
@@ -364,7 +366,6 @@ const front = new Vector3();
 const back = new Vector3();
 const centre = new Vector3();
 const along = new Vector3();
-const FORWARD = new Vector3(0, 0, 1);
 const nose = new Vector3();
 const tail = new Vector3();
 const color = new Color();
@@ -406,6 +407,7 @@ export function Trains({
   );
 
   const sprites = useMemo(() => createRunLights(MAX_LIGHTS), []);
+  const spots = useFollowSpots("train");
   const routes = useRef(new Map<string, Point[] | null>());
   const playheads = useRef(new Map<string, number>());
 
@@ -516,6 +518,7 @@ export function Trains({
 
     let count = 0;
     const watched = followed("train");
+    spots.begin();
 
     for (const model of Object.values(detailed.models)) model.begin();
     runs.forEach((run, i) => {
@@ -550,9 +553,8 @@ export function Trains({
         along.subVectors(front, back);
         offset += car.length + GAP;
 
-        if (along.lengthSq() > 1e-6) {
-          rotation.setFromUnitVectors(FORWARD, along.normalize());
-        }
+        if (along.lengthSq() > 1e-6) orient(along, rotation);
+        spots.add(train.id, centre.x, centre.y, centre.z, car.length);
 
         if (isNear(car.length, camera.position.distanceTo(centre))) {
           const { model, reversed } = detailed.modelFor(car, k);

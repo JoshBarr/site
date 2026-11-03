@@ -41,7 +41,7 @@ const REACH = 2000;
 const HAZE_GLOW = 0.24;
 
 /** And the cloud base, which is far whiter and denser. */
-const CLOUD_GLOW = 0.64;
+const CLOUD_GLOW = 0.4;
 
 /** Wellington's street lights are LED now: a near-white, slightly cool glow. */
 const COLOUR = vec3(0.92, 0.95, 1);

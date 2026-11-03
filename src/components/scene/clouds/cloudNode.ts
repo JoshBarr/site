@@ -13,6 +13,8 @@ import {
   min,
   mix,
   normalize,
+  outputStruct,
+  property,
   screenCoordinate,
   screenUV,
   smoothstep,
@@ -90,8 +92,9 @@ const RAIN_SHADE = 0.75;
 
 /**
  * Raymarches the cloud layers for each screen pixel, stopping at the scene
- * depth. Returns (scattered light, transmittance): composite with
- * scene * a + rgb.
+ * depth. Writes two outputs: (scattered light, transmittance), to composite
+ * with scene * a + rgb; and in r, how far off what it shows is, m (see
+ * temporal), for a render target with two textures.
  */
 export function createCloudNode({
   depth,
@@ -104,6 +107,7 @@ export function createCloudNode({
   cirrus,
   rain,
   quality,
+  offset = float(0),
 }: {
   depth: any;
   cameraPosition: any;
@@ -117,13 +121,21 @@ export function createCloudNode({
   /** Falls from the low layer. */
   rain: RainUniforms;
   quality: CloudQuality;
+  /**
+   * Added to the start's jitter, 0..1 of a step. Changed each frame, the
+   * frames average out (see temporal).
+   */
+  offset?: any;
 }) {
   const density = (p, cheap = false) =>
     layerDensity(p, low, LOW_STYLE, { lid: overcast, cheap }).add(
       layerDensity(p, mid, MID_STYLE, { cheap })
     );
 
-  return Fn(() => {
+  // Set by the march, written to the second output.
+  const distance = property("float", "cloudDistance");
+
+  const march = Fn(() => {
     // Ray from the camera through this pixel, as far as the scene goes.
     const sceneDepth = depth.sample(screenUV).r;
     const view = getViewPosition(screenUV, sceneDepth, projectionInverse);
@@ -150,10 +162,14 @@ export function createCloudNode({
     const scattered = vec3(0).toVar();
     const transmittance = float(1).toVar();
     const firstHit = float(-1).toVar();
+    // Distance into the cloud, weighted by how much each step shows.
+    const depthSum = float(0).toVar();
 
     // Interleaved gradient noise jitters the start to trade banding for grain.
     const jitter = fract(
-      dot(screenCoordinate.xy, vec2(0.06711056, 0.00583715)).mul(52.9829189)
+      dot(screenCoordinate.xy, vec2(0.06711056, 0.00583715))
+        .mul(52.9829189)
+        .add(offset)
     );
 
     const cosine = dot(direction, sunDirection);
@@ -208,9 +224,15 @@ export function createCloudNode({
             .mul(cloudPhase)
             .mul(sunLight);
 
-          // Sky light, brighter toward the tops.
+          // Sky light, brighter toward the tops. Under a deck, the sun
+          // scattered many times through it lights the whole layer evenly,
+          // where the march above sees it spent at the top.
           const height = saturate(p.y.sub(bottom).div(top.sub(bottom)));
-          const ambient = mix(skyHorizon, skyZenith.mul(3), height).mul(1.4);
+
+          const ambient = mix(skyHorizon, skyZenith.mul(3), height)
+            .mul(1.4)
+            .add(overcast.mul(sunIntensity).mul(1.2));
+
           // At night the city lights the base; it's spent a little way in.
           const below = float(1).sub(height);
 
@@ -221,9 +243,9 @@ export function createCloudNode({
           const sigma = d.mul(EXTINCTION);
           const step = exp(sigma.mul(dt).negate());
           // Energy-conserving: light scattered over the step, attenuated.
-          scattered.addAssign(
-            luminance.mul(float(1).sub(step)).mul(transmittance)
-          );
+          const shown = float(1).sub(step).mul(transmittance);
+          scattered.addAssign(luminance.mul(shown));
+          depthSum.addAssign(t.mul(shown));
           transmittance.mulAssign(step);
         });
 
@@ -232,6 +254,10 @@ export function createCloudNode({
       });
     });
 
+    const cloudOpacity = float(1).sub(transmittance).toVar();
+    // Where there's no cloud to speak of: the scene, or the cirrus.
+    const behind = sceneDistance.toVar();
+
     // Cirrus: a thin textured sheet high above, behind everything else.
     const cirrusHeight = cirrus.shape.x;
     If(
@@ -239,6 +265,7 @@ export function createCloudNode({
       () => {
         const tc = cirrusHeight.sub(cameraPosition.y).div(direction.y);
         const pc = cameraPosition.add(direction.mul(tc));
+        behind.assign(min(tc, MAX_DISTANCE));
         // Stretched along the wind for streaks.
         const uv = pc.xz.add(cirrus.offset).div(vec2(70000, 22000));
         const streaks = texture(weather, uv).g;
@@ -335,6 +362,12 @@ export function createCloudNode({
       });
     });
 
+    distance.assign(
+      cloudOpacity.greaterThan(0.02).select(depthSum.div(cloudOpacity), behind)
+    );
+
     return vec4(scattered, transmittance);
   })();
+
+  return outputStruct(march, vec4(distance, 0, 0, 1));
 }

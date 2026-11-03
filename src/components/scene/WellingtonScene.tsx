@@ -65,8 +65,15 @@ import { Buses } from "./buses/Buses";
 import { Traffic } from "./traffic/Traffic";
 import { AirfieldLights } from "./airport/AirfieldLights";
 import { updateLens } from "./lens";
-import { DEFAULT_FOV, FollowRig } from "./follow/rig";
-import { getSnapshot, stop as stopFollowing } from "./follow/store";
+import { DEFAULT_FOV, flightFor, FollowRig, smootherstep } from "./follow/rig";
+import {
+  followVehicle,
+  getSnapshot,
+  stop as stopFollowing,
+  vehiclesAt,
+} from "./follow/store";
+import { DEPTH_POINTS, sceneDepthsAt } from "./sceneDepth";
+import { connectCamera, shotFromUrl } from "./shots/shots";
 import { useRenderer } from "./renderer";
 import { useInView } from "./visibility";
 import { attachInspector, showStats, Stats, switchedOff } from "./stats";
@@ -121,13 +128,14 @@ function Atmosphere({
     scene.fogNode = fog(fogColor, max(haze, edgeFade));
 
     // Sky: zenith to horizon, hazier toward the horizon, glowing and with a
-    // small disc toward the sun.
+    // small disc toward the sun. Under a deck it goes flat grey: the clouds
+    // hide it, but the water's reflection (which leaves them out) shows it.
     const direction = positionWorldDirection;
     const toward = dot(direction, environment.sunDirection);
 
     const gradient = mix(
       environment.skyHorizon,
-      environment.skyZenith,
+      mix(environment.skyZenith, environment.skyHorizon, environment.overcast),
       smoothstep(0, 0.35, direction.y)
     );
 
@@ -180,6 +188,33 @@ const MAX_POLAR_ANGLE = Math.PI * 0.5;
  */
 const CAMERA_PRIORITY = 0.5;
 
+/** A press moving less than this, pixels, and let go within CLICK_TIME, ms, is a click. */
+const CLICK_SLOP = 6;
+const CLICK_TIME = 500;
+
+/** Pixels from a vehicle that a tap picks it: fingers are blunter than a mouse. */
+const TAP_REACH = 24;
+
+/**
+ * Something drawn nearer than a vehicle by more than half its length, and
+ * this fraction of the way to it (the depth buffer's coarse far off), hides
+ * it from clicks.
+ */
+const HIDDEN_BY = 0.02;
+
+/** Camera and target, from where they were to a set view, and how far in. */
+interface ViewFlight {
+  from: [Vector3, Vector3];
+  to: [Vector3, Vector3];
+  /** Seconds. */
+  time: number;
+  duration: number;
+  /** Height of the arc flown, m. */
+  arc: number;
+}
+
+const flown: [Vector3, Vector3] = [new Vector3(), new Vector3()];
+
 /** Handing back from following, the orbit target's this far off, m. */
 const HAND_BACK: [number, number] = [50, 2000];
 
@@ -205,7 +240,8 @@ function Controls({
   const half = manifest.rootSize / 2;
 
   const [position, target] = useMemo(() => {
-    // ?cam=E,N,alt,targetE,targetN,targetAlt (NZTM metres) for sharing views.
+    // ?cam=E,N,alt,targetE,targetN,targetAlt (NZTM metres) for sharing views,
+    // or ?shot=<id> for one of the set ones.
     const cam = new URLSearchParams(location.search)
       .get("cam")
       ?.split(",")
@@ -214,12 +250,12 @@ function Controls({
     const [pe, pn, pAlt, te, tn, tAlt] =
       cam?.length === 6 && cam.every(Number.isFinite)
         ? cam
-        : [
+        : (shotFromUrl()?.view ?? [
             ...START_POSITION,
             startAltitude(deck),
             ...START_TARGET,
             TARGET_ALTITUDE,
-          ];
+          ]);
 
     const [px, pz] = nztmToWorld(manifest, pe, pn);
     const [tx, tz] = nztmToWorld(manifest, te, tn);
@@ -269,6 +305,9 @@ function Controls({
   const placed = useRef(false);
   const touched = useRef(false);
 
+  /** Flying to a set view, picked from the shot panel. */
+  const flight = useRef<ViewFlight | null>(null);
+
   // Back to orbiting, from where the follow rig left the camera.
   const handBack = useCallback(() => {
     const c = controls.current;
@@ -303,6 +342,7 @@ function Controls({
 
     const take = () => {
       touched.current = true;
+      flight.current = null;
 
       if (!getSnapshot().following) return;
       stopFollowing();
@@ -313,16 +353,163 @@ function Controls({
       if (e.key === "Escape") stopFollowing();
     };
 
-    element.addEventListener("pointerdown", take, { capture: true });
+    // Clicking a vehicle (not dragging, and with one finger) follows it.
+    // Presses end on the window: they may be let go off the map.
+    const pointers = new Set<number>();
+    let disposed = false;
+    let press: { x: number; y: number; time: number } | null = null;
+
+    // The nearest vehicle to the pointer that isn't behind anything.
+    const vehicleUnder = async (e: PointerEvent) => {
+      const camera = controls.current?.camera;
+
+      if (!(camera instanceof PerspectiveCamera)) return null;
+      const rect = element.getBoundingClientRect();
+
+      const sightings = vehiclesAt(
+        camera,
+        ((e.clientX - rect.left) / rect.width) * 2 - 1,
+        1 - ((e.clientY - rect.top) / rect.height) * 2,
+        rect.height,
+        e.pointerType === "touch" ? TAP_REACH : undefined
+      ).slice(0, DEPTH_POINTS);
+
+      if (!sightings.length) return null;
+      const scene = await sceneDepthsAt(renderer, camera, sightings);
+
+      const seen = sightings.find(
+        ({ depth, length }, i) =>
+          !scene || scene[i] >= depth - length / 2 - depth * HIDDEN_BY
+      );
+
+      return seen?.vehicle ?? null;
+    };
+
+    const down = (e: PointerEvent) => {
+      pointers.add(e.pointerId);
+      press =
+        pointers.size === 1 && e.button === 0
+          ? { x: e.clientX, y: e.clientY, time: e.timeStamp }
+          : null;
+      take();
+    };
+
+    const up = (e: PointerEvent) => {
+      pointers.delete(e.pointerId);
+      const p = press;
+      press = null;
+
+      if (
+        !p ||
+        Math.hypot(e.clientX - p.x, e.clientY - p.y) > CLICK_SLOP ||
+        e.timeStamp - p.time > CLICK_TIME
+      ) {
+        return;
+      }
+
+      vehicleUnder(e).then((vehicle) => {
+        if (vehicle && !disposed) followVehicle(vehicle);
+      }, console.error);
+    };
+
+    const cancel = (e: PointerEvent) => {
+      pointers.delete(e.pointerId);
+      press = null;
+    };
+
+    // A hand over anything that can be clicked. One look at a time: the
+    // latest move waits for it.
+    let looking = false;
+    let waiting: PointerEvent | null = null;
+
+    const hover = (e: PointerEvent) => {
+      if (e.pointerType !== "mouse" || pointers.size || disposed) return;
+
+      if (looking) {
+        waiting = e;
+
+        return;
+      }
+
+      looking = true;
+      vehicleUnder(e)
+        .then((vehicle) => {
+          if (pointers.size || disposed) return;
+          element.style.cursor = vehicle ? "pointer" : "";
+        }, console.error)
+        .finally(() => {
+          looking = false;
+          const next = waiting;
+          waiting = null;
+
+          if (next) hover(next);
+        });
+    };
+
+    element.addEventListener("pointerdown", down, { capture: true });
+    window.addEventListener("pointerup", up, { capture: true });
+    window.addEventListener("pointercancel", cancel, { capture: true });
+    element.addEventListener("pointermove", hover);
     element.addEventListener("wheel", take, { capture: true });
     window.addEventListener("keydown", keys);
 
     return () => {
-      element.removeEventListener("pointerdown", take, { capture: true });
+      element.removeEventListener("pointerdown", down, { capture: true });
+      window.removeEventListener("pointerup", up, { capture: true });
+      window.removeEventListener("pointercancel", cancel, { capture: true });
+      element.removeEventListener("pointermove", hover);
       element.removeEventListener("wheel", take, { capture: true });
       window.removeEventListener("keydown", keys);
+      disposed = true;
+      element.style.cursor = "";
     };
   }, [events, renderer, handBack]);
+
+  // Set views, picked from the shot panel, and the view now, for copying.
+  useEffect(
+    () =>
+      connectCamera(
+        () => {
+          const c = controls.current;
+
+          if (!c) return null;
+          const [oe, on] = manifest.origin;
+          const { x, y, z } = c.camera.position;
+          const t = c.getTarget(new Vector3());
+
+          return [x + oe, on - z, y, t.x + oe, on - t.z, t.y];
+        },
+        ([pe, pn, pAlt, te, tn, tAlt]) => {
+          const c = controls.current;
+
+          if (!c) return;
+          touched.current = true;
+          stopFollowing();
+          handBack();
+          const [px, pz] = nztmToWorld(manifest, pe, pn);
+          const [tx, tz] = nztmToWorld(manifest, te, tn);
+
+          if (getSnapshot().cut) {
+            flight.current = null;
+            c.setLookAt(px, pAlt, pz, tx, tAlt, tz, false);
+
+            return;
+          }
+
+          // Flown here frame by frame, not by the controls' own transition:
+          // lifting the camera off a hill on the way would end that early.
+          const from = c.camera.position.clone();
+          const to = new Vector3(px, pAlt, pz);
+          flight.current = {
+            from: [from, c.getTarget(new Vector3())],
+            to: [to, new Vector3(tx, tAlt, tz)],
+            time: 0,
+            ...flightFor(from.distanceTo(to)),
+          };
+        }
+      ),
+    [manifest, handBack]
+  );
 
   // Where the view starts, and again (gliding there) if the forecast arrives
   // with a lower deck, until the map's been touched or a vehicle followed.
@@ -379,6 +566,31 @@ function Controls({
       c.setLookAt(p.x, p.y, p.z, t.x, t.y, t.z, false);
     } else {
       handBack();
+    }
+
+    const f = flight.current;
+
+    if (shot) {
+      flight.current = null;
+    } else if (f) {
+      // Over the top, turning to the view in the first half of the way.
+      f.time += delta;
+      const u = Math.min(f.time / f.duration, 1);
+      const s = smootherstep(u);
+      const p = flown[0].lerpVectors(f.from[0], f.to[0], s);
+      p.y += f.arc * Math.sin(Math.PI * s);
+
+      const t = flown[1].lerpVectors(
+        f.from[1],
+        f.to[1],
+        smootherstep(Math.min(u * 2, 1))
+      );
+
+      camera.position.copy(p);
+      camera.lookAt(t);
+      c.setLookAt(p.x, p.y, p.z, t.x, t.y, t.z, false);
+
+      if (u === 1) flight.current = null;
     }
 
     // The lens goes back to the scene's when the rig lets go.
@@ -643,6 +855,11 @@ export function Scene({
   const sea = useMemo(() => seaConditions(conditions), [conditions]);
   const lights = nightFor(sun.altitude);
   const deck = conditions.cloudCover > 0 ? lowCloudBase(conditions) : null;
+  const skylight = environment.skylightFor(conditions.cloudCover, 1 - lights);
+
+  useEffect(() => {
+    environment.skylight.value = skylight;
+  }, [skylight]);
 
   const setHeightQuery = useCallback((query: HeightQuery | null) => {
     heightAt.current = query;
@@ -659,10 +876,7 @@ export function Scene({
 
   return (
     <>
-      <ambientLight
-        ref={litForReflections}
-        intensity={0.25 + 0.3 * environment.overcastFor(conditions.cloudCover)}
-      />
+      <ambientLight ref={litForReflections} intensity={skylight} />
       <Atmosphere rootSize={index.manifest.rootSize} conditions={conditions} />
       <Sun
         index={index}

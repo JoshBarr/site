@@ -5,13 +5,17 @@ import type { Shape } from "./airframes";
 // along x; the fuselage centred on y = 0. Flat shaded. Every airframe's white
 // with a grey tail. Each comes plain, for the many seen from afar, and
 // detailed, for the few up close: rounder, with windows, engine intakes,
-// winglets, and, when it's down, gear.
+// winglets, and, when it's down, gear. Props and rotors are apart, so they
+// can turn.
 
 const BODY = 0xf2f2ef;
 const TAIL = 0x8c8f93;
 const WING = 0xd4d6d8;
 const NACELLE = 0xe0e1e2;
 const DARK = 0x2a2d30;
+
+/** Props' and rotors' blades. */
+export const BLADE = DARK;
 const GLASS = 0x1c2226;
 const STRUT = 0x5a5c5e;
 const TYRE = 0x1e1e1e;
@@ -27,10 +31,9 @@ export const RIDE_HEIGHT: Record<Shape, number> = {
   helicopter: 0.156,
 };
 
-/** What hangs out: gear, and props stopped. */
+/** What hangs out: gear. */
 export interface Detail {
   gear?: boolean;
-  blades?: boolean;
 }
 
 type Ring = [number, number, number];
@@ -409,10 +412,7 @@ const PROP_DETAILED: Ring[] = [
 ];
 
 /** Turboprop or light aircraft: high straight wing, T-tail. */
-export function createPropGeometry(
-  detailed = false,
-  { gear, blades: stopped }: Detail = {}
-) {
+export function createPropGeometry(detailed = false, { gear }: Detail = {}) {
   const b = new ModelBuilder();
   b.sides = detailed ? 16 : 8;
   b.use(BODY).tube(detailed ? PROP_DETAILED : PROP);
@@ -454,9 +454,6 @@ export function createPropGeometry(
       ],
       x
     );
-
-    if (stopped)
-      blades(b.use(DARK), [x, 0.025, -0.268], 4, 0.008, 0.078, 0.004);
   }
 
   fin(b, 0.035, [0.28, 0.48], 0.19, [0.41, 0.5], 0.012);
@@ -500,40 +497,14 @@ const HELICOPTER_DETAILED: Ring[] = [
   [0.5, 0.01, 0.065],
 ];
 
-/** Helicopter: cabin pod, tail boom and fin, and a stopped rotor's blades. */
+/** Helicopter: cabin pod, tail boom and fin; its rotors are apart. */
 export function createHelicopterGeometry(detailed = false) {
   const b = new ModelBuilder();
   b.sides = detailed ? 16 : 8;
   b.use(BODY).tube(detailed ? HELICOPTER_DETAILED : HELICOPTER);
   fin(b, 0.04, [0.4, 0.5], 0.12, [0.45, 0.5], 0.012);
 
-  if (!detailed) {
-    b.use(BODY);
-
-    for (const angle of [Math.PI / 4, -Math.PI / 4]) {
-      const [c, s] = [Math.cos(angle), Math.sin(angle)];
-      const half = 0.45;
-      const width = 0.015;
-
-      const blade = (u: number, v: number): Vec => [
-        c * u - s * v,
-        0.15,
-        s * u + c * v - 0.15,
-      ];
-
-      b.slab(
-        [
-          blade(-half, -width),
-          blade(half, -width),
-          blade(half, width),
-          blade(-half, width),
-        ],
-        [0, 0.006, 0]
-      );
-    }
-
-    return b.build();
-  }
+  if (!detailed) return b.build();
 
   // A bubble of glass in front, and windows down the cabin's sides.
   b.use(GLASS);
@@ -555,37 +526,8 @@ export function createHelicopterGeometry(detailed = false) {
   b.use(TAIL);
   wings(b, 0.06, [0.36, 0.4], 0.06, [0.37, 0.4], 0.006);
 
-  // Mast and main rotor; tail rotor on the fin's side.
+  // Mast up to the main rotor.
   b.use(STRUT).cylinder([0, 0.12, -0.15], [0, 0.158, -0.15], 0.012);
-  b.use(DARK);
-
-  for (let i = 0; i < 4; i++) {
-    const a = Math.PI / 4 + (i * Math.PI) / 2;
-    const [c, s] = [Math.cos(a), Math.sin(a)];
-    const [nc, ns] = [-s * 0.014, c * 0.014];
-    b.slab(
-      [
-        [c * 0.02 - nc, 0.155, s * 0.02 - ns - 0.15],
-        [c * 0.45 - nc, 0.155, s * 0.45 - ns - 0.15],
-        [c * 0.45 + nc, 0.155, s * 0.45 + ns - 0.15],
-        [c * 0.02 + nc, 0.155, s * 0.02 + ns - 0.15],
-      ],
-      [0, 0.005, 0]
-    );
-  }
-
-  for (const a of [0.3, 0.3 + Math.PI]) {
-    const [c, s] = [Math.cos(a), Math.sin(a)];
-    b.slab(
-      [
-        [0.008, 0.13, 0.47],
-        [0.008, 0.13 + s * 0.08, 0.47 + c * 0.08],
-        [0.008, 0.13 + s * 0.08 + 0.01, 0.47 + c * 0.08],
-        [0.008, 0.14, 0.47],
-      ],
-      [0.003, 0, 0]
-    );
-  }
 
   // Skids, turned up in front, on cross tubes.
   b.sides = 8;
@@ -601,6 +543,84 @@ export function createHelicopterGeometry(detailed = false) {
       b.cylinder([x, skidY, z], [side * 0.04, -0.09, z], 0.006);
     }
   }
+
+  return b.build();
+}
+
+/** Which way a rotor's shaft runs, in the aircraft. */
+export type Axis = "x" | "y" | "z";
+
+/**
+ * Blades that turn, built apart from the airframe: round the z axis at the
+ * origin, then stood at each hub with their shaft along `axis`.
+ */
+export interface Rotor {
+  hubs: Vec[];
+  axis: Axis;
+  blades: number;
+  /** From `inner` out to `radius`, `width` either side of each blade's line. */
+  inner: number;
+  radius: number;
+  width: number;
+  /**
+   * Turns a second at speed: anticlockwise looking back down the shaft from
+   * its far end, clockwise if negative.
+   */
+  rate: number;
+  /** Turns on the plain model too: big enough to see from afar. */
+  far?: boolean;
+}
+
+/**
+ * Each shape's rotors. Props turn clockwise seen from behind, near 1000 rpm;
+ * the main rotor clockwise seen from above, as Airbus's do, near 390 rpm.
+ */
+export const ROTORS: Record<Shape, Rotor[]> = {
+  jet: [],
+  prop: [
+    {
+      hubs: [
+        [-0.17, 0.025, -0.268],
+        [0.17, 0.025, -0.268],
+      ],
+      axis: "z",
+      blades: 4,
+      inner: 0.008,
+      radius: 0.078,
+      width: 0.004,
+      rate: -17,
+    },
+  ],
+  helicopter: [
+    {
+      hubs: [[0, 0.155, -0.15]],
+      axis: "y",
+      blades: 4,
+      inner: 0.02,
+      radius: 0.45,
+      width: 0.014,
+      rate: -6.5,
+      far: true,
+    },
+    {
+      hubs: [[0.008, 0.13, 0.47]],
+      axis: "x",
+      blades: 2,
+      inner: 0,
+      radius: 0.08,
+      width: 0.005,
+      rate: 33,
+    },
+  ],
+};
+
+/** A rotor's blades, about its hub: plain ones are pale, to read from afar. */
+export function createRotorGeometry(
+  { blades: count, inner, radius, width }: Rotor,
+  detailed = false
+) {
+  const b = new ModelBuilder().use(detailed ? BLADE : BODY);
+  blades(b, [0, 0, 0], count, detailed ? inner : 0, radius, width);
 
   return b.build();
 }

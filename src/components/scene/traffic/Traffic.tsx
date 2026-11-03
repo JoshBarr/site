@@ -55,6 +55,7 @@ import {
   MOUTH,
 } from "./geometry";
 import { loadRoads, Place, Roads } from "./roads";
+import { highways } from "./shared";
 import { Traffic as TrafficSim } from "./sim";
 import { overrideFromUrl } from "./speeds";
 import { useTraffic } from "./useTraffic";
@@ -389,6 +390,14 @@ function Vehicles({
     () => new TrafficSim(roads, index, limit),
     [roads, index, limit]
   );
+
+  useEffect(() => {
+    highways.traffic = traffic;
+
+    return () => {
+      if (highways.traffic === traffic) highways.traffic = null;
+    };
+  }, [traffic]);
 
   const fleets = useMemo(
     () => [

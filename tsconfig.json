@@ -17,5 +17,10 @@
     "target": "ES2017"
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", "**/*.mts"],
-  "exclude": ["node_modules", "tools/oxlint"]
+  "exclude": [
+    "node_modules",
+    "tools/oxlint",
+    // Its own package, checked there.
+    "infra"
+  ]
 }

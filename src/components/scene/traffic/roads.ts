@@ -216,10 +216,35 @@ export class Carriageway {
   }
 }
 
+/** Squares for finding the road under a place, m. */
+const CELL = 50;
+
+/** Segments a carriageway has at most, for packing one's number with its own. */
+const SEGMENTS = 1 << 20;
+
+/** Pointing this nearly along a carriageway (cosine), something's going its way. */
+const ITS_WAY = 0.8;
+
+/** Up or down from the road's surface, m, something's still on it: not on a bridge over or under. */
+const ON_SURFACE = 5;
+
+/** Where on the roads something is: which carriageway, how far along, across. */
+export interface OnRoad {
+  carriageway: number;
+  s: number;
+  /** To the right of the road's line, m. */
+  lateral: number;
+  /** The segment, for its lanes. */
+  i: number;
+}
+
 export class Roads {
   readonly flags: RoadsFile["flags"];
   readonly junction: RoadsFile["junction"];
   readonly carriageways: Carriageway[];
+  /** Segments by the squares they cross, packed as carriageway and segment. */
+  private grid: Map<number, number[]> | null = null;
+  private readonly scratch: OnRoad = { carriageway: 0, s: 0, lateral: 0, i: 0 };
 
   constructor(file: RoadsFile, index: TileIndex) {
     this.flags = file.flags;
@@ -241,7 +266,98 @@ export class Roads {
       }
     }
   }
+
+  private cells() {
+    if (this.grid) return this.grid;
+    const grid = new Map<number, number[]>();
+
+    this.carriageways.forEach((c, k) => {
+      for (let i = 0; i < c.count - 1; i++) {
+        const margin = (c.total[i] * c.laneWidth[i]) / 2 + 2;
+        const x0 = Math.floor((Math.min(c.x[i], c.x[i + 1]) - margin) / CELL);
+        const x1 = Math.floor((Math.max(c.x[i], c.x[i + 1]) + margin) / CELL);
+        const z0 = Math.floor((Math.min(c.z[i], c.z[i + 1]) - margin) / CELL);
+        const z1 = Math.floor((Math.max(c.z[i], c.z[i + 1]) + margin) / CELL);
+
+        for (let cx = x0; cx <= x1; cx++) {
+          for (let cz = z0; cz <= z1; cz++) {
+            const key = cellKey(cx, cz);
+            const cell = grid.get(key);
+
+            if (cell) cell.push(k * SEGMENTS + i);
+            else grid.set(key, [k * SEGMENTS + i]);
+          }
+        }
+      }
+    });
+
+    return (this.grid = grid);
+  }
+
+  /**
+   * The carriageway something at `x`, `y`, `z` heading `dx`, `dz` (a unit
+   * vector) is in the lanes of, going its way, into `out`; false if none.
+   */
+  find(x: number, y: number, z: number, dx: number, dz: number, out: OnRoad) {
+    const cell = this.cells().get(
+      cellKey(Math.floor(x / CELL), Math.floor(z / CELL))
+    );
+
+    if (!cell) return false;
+    let best = Infinity;
+
+    for (const packed of cell) {
+      const k = Math.floor(packed / SEGMENTS);
+      const i = packed - k * SEGMENTS;
+      const c = this.carriageways[k];
+      const tx = c.x[i + 1] - c.x[i];
+      const tz = c.z[i + 1] - c.z[i];
+      const length = Math.hypot(tx, tz);
+
+      if (length < 1e-3 || (dx * tx + dz * tz) / length < ITS_WAY) continue;
+      const ex = x - c.x[i];
+      const ez = z - c.z[i];
+      const along = (ex * tx + ez * tz) / length;
+
+      // Past either end, it's the next segment's.
+      if (along < 0 || along > length) continue;
+      const lateral = (ez * tx - ex * tz) / length;
+      const t = along / length;
+      const surface = c.y[i] + (c.y[i + 1] - c.y[i]) * t;
+
+      if (Math.abs(y - surface) > ON_SURFACE) continue;
+      const kerb = c.kerbAt(i);
+      const width = c.lanes[i] * c.laneWidth[i];
+
+      if (lateral < kerb - 1 || lateral > kerb + width + 1) continue;
+      const off = Math.abs(lateral - kerb - width / 2);
+
+      if (off < best) {
+        best = off;
+        out.carriageway = k;
+        out.s = c.s[i] + along;
+        out.lateral = lateral;
+        out.i = i;
+      }
+    }
+
+    return best < Infinity;
+  }
+
+  /**
+   * How far right something at `x`, `y`, `z` heading `dx`, `dz` would go,
+   * m, to be in the middle of the kerb lane; NaN off the highways.
+   */
+  toKerb(x: number, y: number, z: number, dx: number, dz: number) {
+    const at = this.scratch;
+
+    if (!this.find(x, y, z, dx, dz, at)) return NaN;
+
+    return this.carriageways[at.carriageway].laneCentre(at.i, 0) - at.lateral;
+  }
 }
+
+const cellKey = (cx: number, cz: number) => (cx + 32768) * 65536 + cz + 32768;
 
 export async function loadRoads(index: TileIndex): Promise<Roads> {
   const response = await fetch(`${ROADS_URL}/roads.json`);

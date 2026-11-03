@@ -31,6 +31,9 @@ const PARKED_SPEED = 2;
 
 /** Parked fixes closer than this, metres, are the same spot. */
 const PARKED_DRIFT = 50;
+
+/** A parked aircraft's position wanders this much, metres, standing still. */
+const PARKED_JITTER = 5;
 const GRAVITY = 9.81;
 
 /** Most bank drawn, radians; airliners turn at 25–30°. */
@@ -61,6 +64,12 @@ export type ToWorld = (easting: number, northing: number) => [number, number];
 
 export type GroundAt = (x: number, z: number) => number;
 
+/**
+ * How far, metres, to move an aircraft on the ground at (x, z) along its
+ * heading to keep it out of buildings; negative is backwards.
+ */
+export type Clear = (x: number, z: number, heading: number) => number;
+
 interface Point {
   t: number;
   p: [number, number, number];
@@ -70,8 +79,8 @@ interface Point {
   groundHeight: number;
 }
 
-const parked = ({ ground, v }: Point) =>
-  ground && Math.hypot(v[0] ?? 0, v[2] ?? 0) < PARKED_SPEED;
+const speedOf = ({ v }: Point) => Math.hypot(v[0] ?? 0, v[2] ?? 0);
+const parked = (point: Point) => point.ground && speedOf(point) < PARKED_SPEED;
 
 const wrap = (angle: number) =>
   angle - 2 * Math.PI * Math.round(angle / (2 * Math.PI));
@@ -132,14 +141,33 @@ function hermite(a: Point, b: Point, u: number, out: number[]) {
 /**
  * The path through an aircraft's fixes, carried on past the last one by dead
  * reckoning in case the next is late. Times are seconds since `epoch` (ms).
+ * `clear` keeps it out of buildings on the ground.
  */
 export function buildPath(
   fixes: Fix[],
   epoch: number,
   toWorld: ToWorld,
-  groundAt: GroundAt
+  groundAt: GroundAt,
+  clear?: Clear
 ): Path {
   const points = fixes.map((fix) => toPoint(fix, epoch, toWorld, groundAt));
+
+  // Parked at the gate, a fix can land tens of metres off at no speed: the
+  // aircraft hasn't moved, so it stays where it stopped.
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+
+    if (!parked(a) || !parked(b)) continue;
+    const moved = Math.hypot(b.p[0] - a.p[0], b.p[2] - a.p[2]);
+
+    const explained =
+      PARKED_JITTER + ((speedOf(a) + speedOf(b)) / 2) * (b.t - a.t);
+
+    if (moved > explained && moved < PARKED_DRIFT) {
+      points[i] = { ...b, p: [...a.p], groundHeight: a.groundHeight };
+    }
+  }
 
   // Dead reckoning: straight on, no lower than the ground.
   const last = points[points.length - 1];
@@ -240,6 +268,15 @@ export function buildPath(
     else heading = course[i] ?? heading;
     path.heading[i] = heading;
     path.pitch[i] = path.ground[i] || along < 1 ? 0 : Math.atan2(dy, along);
+  }
+
+  if (clear) {
+    for (let i = 0; i < n; i++) {
+      if (!path.ground[i]) continue;
+      const shift = clear(path.x[i], path.z[i], path.heading[i]);
+      path.x[i] += Math.sin(path.heading[i]) * shift;
+      path.z[i] -= Math.cos(path.heading[i]) * shift;
+    }
   }
 
   for (let i = 1; i < n - 1; i++) {

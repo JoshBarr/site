@@ -3,13 +3,16 @@ import { useFrame } from "@react-three/fiber";
 import {
   AdditiveBlending,
   BufferGeometry,
+  CircleGeometry,
   Color,
+  DoubleSide,
   Euler,
   InstancedBufferAttribute,
   InstancedInterleavedBuffer,
   InstancedMesh,
   InterleavedBufferAttribute,
   Matrix4,
+  MeshStandardNodeMaterial,
   NormalBlending,
   Quaternion,
   Sprite,
@@ -44,11 +47,16 @@ import { pixelAngle, random } from "../landmarks/common";
 import { Fix } from "../../../lib/flights";
 import { Airframe, airframeFor, Shape } from "./airframes";
 import {
+  Axis,
+  BLADE,
   createHelicopterGeometry,
   createJetGeometry,
   createPropGeometry,
+  createRotorGeometry,
   JET_WING_RISE,
   RIDE_HEIGHT,
+  Rotor,
+  ROTORS,
 } from "./geometry";
 import { createModelMaterial, HIDDEN, isNear, NearModels } from "../models/lod";
 import {
@@ -59,6 +67,7 @@ import {
   Pose,
   poseAt,
 } from "./path";
+import { createClearance } from "./clearance";
 import { extend } from "./route";
 import { HOME, landing, runwayInUse, takingOff } from "./runway";
 import { Aircraft, useFlights } from "./useFlights";
@@ -67,6 +76,7 @@ import {
   followed,
   publish,
   useFollowCandidates,
+  useFollowSpots,
 } from "../follow/store";
 
 const SHAPES: Shape[] = ["jet", "prop", "helicopter"];
@@ -75,9 +85,13 @@ const MAX_PER_SHAPE = 64;
 /**
  * Planes are drawn this far behind live, ms, so there's nearly always a fix
  * ahead of them to fly towards rather than guessing. Polls are 10s apart
- * and the edge cache can add another 15s.
+ * and the edge cache can add another 10s, or 20s served stale.
  */
 const DELAY = 30_000;
+
+/** The time drawn now, s since `epoch`, on the feed's clock. */
+const drawnTime = (skew: number, epoch: number) =>
+  (Date.now() - skew - DELAY - epoch) / 1000;
 
 /**
  * Never shorter on screen than this many pixels. Real size, a regional
@@ -86,13 +100,7 @@ const DELAY = 30_000;
 const MIN_PIXELS = 10;
 
 /** Detailed models, each way an aircraft can look up close. */
-type Detailed =
-  | "jet"
-  | "jetGear"
-  | "prop"
-  | "propGear"
-  | "propParked"
-  | "helicopter";
+type Detailed = "jet" | "jetGear" | "prop" | "propGear" | "helicopter";
 
 /** Of each detailed model at once. */
 const MAX_DETAILED = 8;
@@ -100,8 +108,23 @@ const MAX_DETAILED = 8;
 /** Gear's down below this, m above the ground: on short final, and climbing out. */
 const GEAR_DOWN = 400;
 
-/** Slower than this on the ground, m/s, a turboprop's props have stopped. */
+/** Slower than this on the ground, m/s, an aircraft's props or rotors stop. */
 const PARKED = 1;
+
+/** Seconds for rotors to spin up, or run down once parked. */
+const SPIN_UP = 4;
+
+/**
+ * Most of the gap between blades they turn in a frame. Past half, they'd
+ * look to turn backward, as wheels in films; real props are far faster.
+ */
+const MAX_STEP = 1 / 3;
+
+/** Each engine's prop is this far round from the last's, radians. */
+const HUB_STAGGER = 0.4;
+
+/** A turning rotor's blur, up close, at full speed. */
+const DISC_OPACITY = 0.2;
 
 /**
  * Wellington's yellow, against the scene's greys: it's data, not part of the
@@ -284,26 +307,104 @@ function createPlanes() {
     jetGear: detailed(createJetGeometry(true, { gear: true })),
     prop: detailed(createPropGeometry(true)),
     propGear: detailed(createPropGeometry(true, { gear: true })),
-    propParked: detailed(
-      createPropGeometry(true, { gear: true, blades: true })
-    ),
     helicopter: detailed(createHelicopterGeometry(true)),
   };
 
-  return { far, near, material, lit };
+  const turning = (rotor: Rotor, detailed: boolean, capacity: number) => {
+    const models = new NearModels(
+      createRotorGeometry(rotor, detailed),
+      material,
+      capacity * rotor.hubs.length
+    );
+
+    // Its shadow would strobe at the near map's pace.
+    models.mesh.castShadow = false;
+
+    return models;
+  };
+
+  // Up close, a shape's in either of two detailed models.
+  const spinning = (rotor: Rotor) => ({
+    near: turning(rotor, true, 2 * MAX_DETAILED),
+    far: rotor.far ? turning(rotor, false, MAX_PER_SHAPE) : null,
+  });
+
+  const rotors: Record<Shape, ReturnType<typeof spinning>[]> = {
+    jet: ROTORS.jet.map(spinning),
+    prop: ROTORS.prop.map(spinning),
+    helicopter: ROTORS.helicopter.map(spinning),
+  };
+
+  const blurs = SHAPES.flatMap((shape) =>
+    rotors[shape].map(({ near }) => near.capacity)
+  ).reduce((sum, n) => sum + n, 0);
+
+  return { far, near, rotors, discs: createDiscs(blurs), material, lit };
+}
+
+/** The blur of a turning rotor's blades, as a faint disc. */
+function createDiscs(capacity: number) {
+  const opacity = new InstancedBufferAttribute(new Float32Array(capacity), 1);
+
+  const material = new MeshStandardNodeMaterial({
+    color: BLADE,
+    roughness: 0.6,
+    transparent: true,
+    depthWrite: false,
+    side: DoubleSide,
+  });
+
+  material.opacityNode = instancedBufferAttribute<"float">(opacity, "float");
+
+  const mesh = new InstancedMesh(new CircleGeometry(1, 32), material, capacity);
+  mesh.frustumCulled = false;
+  mesh.count = 0;
+  mesh.visible = false;
+
+  return { mesh, opacity, capacity };
 }
 
 /** Which detailed model an aircraft is, up close. */
-function detailedFor(shape: Shape, at: Pose, speed: () => number): Detailed {
+function detailedFor(shape: Shape, at: Pose): Detailed {
   if (shape === "helicopter") return shape;
   const gear = at.ground || at.height < GEAR_DOWN;
 
   if (!gear) return shape;
 
-  if (shape === "jet") return "jetGear";
-
-  return at.ground && speed() < PARKED ? "propParked" : "propGear";
+  return shape === "jet" ? "jetGear" : "propGear";
 }
+
+/** How an aircraft's rotors are turning. */
+interface Spin {
+  /** 0, stopped, to 1, at speed. */
+  speed: number;
+  /** Each rotor's angle, radians. */
+  angles: number[];
+}
+
+/** Turns rotors on by `dt`, s: spinning up, or running down when parked. */
+function turn(spin: Spin, rotors: Rotor[], running: boolean, dt: number) {
+  spin.speed +=
+    ((running ? 1 : 0) - spin.speed) * (1 - Math.exp(-dt / SPIN_UP));
+
+  rotors.forEach((rotor, i) => {
+    const gap = (2 * Math.PI) / rotor.blades;
+
+    const step = Math.min(
+      Math.abs(rotor.rate) * 2 * Math.PI * spin.speed * dt,
+      gap * MAX_STEP
+    );
+
+    spin.angles[i] = (spin.angles[i] + Math.sign(rotor.rate) * step) % gap;
+  });
+}
+
+/** Turns blades built round z to stand along each axis. */
+const SHAFT: Record<Axis, Quaternion> = {
+  x: new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), Math.PI / 2),
+  y: new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), -Math.PI / 2),
+  z: new Quaternion(),
+};
 
 /**
  * Every trail as one set of fat line segments. Each end carries its time, so
@@ -503,6 +604,13 @@ function createLights() {
   return { sprite, light, style, extra };
 }
 
+/** Every rotor's blades, near and far. */
+function spinningModels({ rotors }: ReturnType<typeof createPlanes>) {
+  return SHAPES.flatMap((shape) =>
+    rotors[shape].flatMap(({ near, far }) => (far ? [near, far] : [near]))
+  );
+}
+
 interface Plane {
   aircraft: Aircraft;
   airframe: Airframe;
@@ -571,6 +679,11 @@ const position = new Vector3();
 const offset = new Vector3();
 const forward = new Vector3();
 const toCamera = new Vector3();
+const part = new Matrix4();
+const hub = new Vector3();
+const spun = new Quaternion();
+const ONE = new Vector3(1, 1, 1);
+const Z = new Vector3(0, 0, 1);
 
 const pose: Pose = {
   x: 0,
@@ -583,6 +696,7 @@ const pose: Pose = {
   height: 0,
 };
 
+const probe: Pose = { ...pose };
 const before: Pose = { ...pose };
 const earlier: Pose = { ...pose };
 
@@ -635,6 +749,8 @@ export function Flights({
   const planes = useMemo(createPlanes, []);
   const trails = useMemo(createTrails, []);
   const sprites = useMemo(createLights, []);
+  const spots = useFollowSpots("plane");
+  const spins = useMemo(() => new Map<string, Spin>(), []);
 
   const { toWorld, groundAt } = useMemo(
     () => ({
@@ -644,6 +760,8 @@ export function Flights({
     }),
     [index, heightAt]
   );
+
+  const clearance = useMemo(() => createClearance(toWorld), [toWorld]);
 
   const flying = useMemo(() => {
     const counts: Record<Shape, number> = { jet: 0, prop: 0, helicopter: 0 };
@@ -657,35 +775,45 @@ export function Flights({
         {
           aircraft: a,
           airframe,
-          path: buildPath(a.fixes, epoch, toWorld, groundAt),
+          path: buildPath(a.fixes, epoch, toWorld, groundAt, (x, z, heading) =>
+            clearance(x, z, heading, airframe.length)
+          ),
           slot: counts[airframe.shape]++,
           phase: random(parseInt(a.hex, 16) || 0),
           switchOn: random((parseInt(a.hex, 16) || 0) + 1),
         },
       ];
     });
-  }, [aircraft, toWorld, groundAt, epoch]);
+  }, [aircraft, toWorld, groundAt, clearance, epoch]);
 
   useFollowCandidates(
     "plane",
     useMemo(
       () =>
-        flying.map(({ aircraft }): Candidate => {
+        flying.map(({ aircraft, path }): Candidate => {
           const last = aircraft.fixes[aircraft.fixes.length - 1];
 
           return {
             id: aircraft.hex,
             label: labelFor(aircraft),
             moving: last[2] !== null || last[4] > TAXIING,
+            // Known from the feed but not yet, or no longer, flown.
+            drawn: () => poseAt(path, drawnTime(skew, epoch), probe),
           };
         }),
-      [flying]
+      [flying, skew, epoch]
     )
   );
 
   useEffect(() => {
     planes.lit.value = lights;
   }, [planes, lights]);
+
+  useEffect(() => {
+    const present = new Set(flying.map(({ aircraft }) => aircraft.hex));
+
+    for (const hex of spins.keys()) if (!present.has(hex)) spins.delete(hex);
+  }, [flying, spins]);
 
   useEffect(() => {
     for (const shape of SHAPES) planes.far[shape].count = 0;
@@ -838,6 +966,11 @@ export function Flights({
       }
 
       for (const near of Object.values(planes.near)) near.dispose();
+
+      for (const models of spinningModels(planes)) models.dispose();
+      planes.discs.mesh.geometry.dispose();
+      planes.discs.mesh.material.dispose();
+      planes.discs.mesh.dispose();
       planes.material.dispose();
 
       trails.lines.geometry.dispose();
@@ -847,14 +980,19 @@ export function Flights({
     [planes, trails, sprites]
   );
 
-  useFrame(({ camera }) => {
-    const now = (Date.now() - skew - DELAY - epoch) / 1000;
+  useFrame(({ camera }, dt) => {
+    const now = drawnTime(skew, epoch);
     trailNow.value = now;
     const { light, style, extra } = sprites;
+    const discs = planes.discs;
     let lit = 0;
+    let blurs = 0;
     const watched = followed("plane");
+    spots.begin();
 
     for (const near of Object.values(planes.near)) near.begin();
+
+    for (const models of spinningModels(planes)) models.begin();
 
     for (const { aircraft, airframe, path, slot, phase, switchOn } of flying) {
       const mesh = planes.far[airframe.shape];
@@ -889,15 +1027,56 @@ export function Flights({
 
       const detailed =
         isNear(airframe.length, distance) &&
-        planes.near[
-          detailedFor(
-            airframe.shape,
-            pose,
-            () => motionAt(path, now, pose).speed
-          )
-        ].add(matrix);
+        planes.near[detailedFor(airframe.shape, pose)].add(matrix);
 
       mesh.setMatrixAt(slot, detailed ? HIDDEN : matrix);
+      const rotors = ROTORS[airframe.shape];
+
+      if (rotors.length) {
+        const running =
+          !pose.ground || motionAt(path, now, pose).speed >= PARKED;
+
+        let spin = spins.get(aircraft.hex);
+
+        if (!spin) {
+          spin = {
+            speed: running ? 1 : 0,
+            angles: rotors.map((_, i) => (phase + i * 0.37) * 2 * Math.PI),
+          };
+
+          spins.set(aircraft.hex, spin);
+        }
+
+        turn(spin, rotors, running, dt);
+
+        rotors.forEach((rotor, i) => {
+          const models = planes.rotors[airframe.shape][i];
+          const into = detailed ? models.near : models.far;
+
+          if (!into) return;
+          const blur = DISC_OPACITY * spin.speed ** 2;
+
+          rotor.hubs.forEach((at, j) => {
+            hub.set(...at);
+            spun.setFromAxisAngle(Z, spin.angles[i] + j * HUB_STAGGER);
+            spun.premultiply(SHAFT[rotor.axis]);
+            into.add(part.compose(hub, spun, ONE).premultiply(matrix));
+
+            if (!detailed || blur < 0.005 || blurs >= discs.capacity) return;
+            part.compose(hub, SHAFT[rotor.axis], scale.setScalar(rotor.radius));
+            discs.mesh.setMatrixAt(blurs, part.premultiply(matrix));
+            discs.opacity.setX(blurs++, blur);
+          });
+        });
+      }
+
+      spots.add(
+        aircraft.hex,
+        position.x,
+        position.y,
+        position.z,
+        airframe.length
+      );
 
       if (aircraft.hex === watched) {
         publish({
@@ -951,6 +1130,15 @@ export function Flights({
       planes.far[shape].instanceMatrix.needsUpdate = true;
 
     for (const near of Object.values(planes.near)) near.end();
+
+    for (const models of spinningModels(planes)) models.end();
+
+    if (blurs > 0 || discs.mesh.visible) {
+      discs.mesh.instanceMatrix.needsUpdate = discs.opacity.needsUpdate = true;
+    }
+
+    discs.mesh.count = blurs;
+    discs.mesh.visible = blurs > 0;
     sprites.sprite.count = lit;
     sprites.sprite.visible = lit > 0;
     light.needsUpdate = style.needsUpdate = extra.needsUpdate = true;
@@ -964,6 +1152,10 @@ export function Flights({
       {Object.entries(planes.near).map(([name, near]) => (
         <primitive key={name} object={near.mesh} name={`detailed ${name}`} />
       ))}
+      {spinningModels(planes).map((models, i) => (
+        <primitive key={i} object={models.mesh} name="rotor blades" />
+      ))}
+      <primitive object={planes.discs.mesh} name="rotor blur" />
       <primitive object={trails.lines} name="flight trails" />
       <primitive object={sprites.sprite} name="aircraft lights" />
     </>
