@@ -1,29 +1,40 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { FlightsResponse, HISTORY, RECENT } from "../../lib/flights";
 import { loadAircraft } from "../../lib/live";
+import { cacheFor, replayTime } from "../../lib/replay";
 
 /**
  * Aircraft around Wellington for the homepage scene, from adsb.lol, as the
  * AWS poller logged them (see lib/live.ts), with where they've been: the last two
- * minutes, or with `?history` the last seven.
+ * minutes, or with `?history` the last seven. Now, or with `?at=<epoch ms>`
+ * then (lib/replay.ts).
  */
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<FlightsResponse | { error: string }>
 ) {
+  const at = replayTime(req.query.at);
+
+  if (at === null) {
+    res.setHeader("Cache-Control", "public, s-maxage=60");
+    res.status(400).json({ error: "can't replay that time" });
+
+    return;
+  }
+
   try {
-    const now = Date.now();
+    const time = at ?? Date.now();
     const window = "history" in req.query ? HISTORY : RECENT;
-    const aircraft = await loadAircraft(window, now);
+    const aircraft = await loadAircraft(window, at);
 
     res.setHeader(
       "Cache-Control",
       // Planes are drawn 30 s behind live; a fix can wait up to 10 s to be
       // polled, then 10 s here and up to 10 s more served stale.
-      "public, s-maxage=10, stale-while-revalidate=10"
+      cacheFor("public, s-maxage=10, stale-while-revalidate=10", at)
     );
     res.status(200).json({
-      time: now,
+      time,
       aircraft,
     });
   } catch (e) {

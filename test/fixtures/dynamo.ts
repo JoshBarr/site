@@ -56,6 +56,14 @@ function matches(
       return sk >= (values[":from"]?.S ?? "");
     case "pk = :pk AND begins_with(sk, :prefix)":
       return sk.startsWith(values[":prefix"]?.S ?? "");
+    case "pk = :pk AND sk BETWEEN :from AND :to":
+      return sk >= (values[":from"]?.S ?? "") && sk <= (values[":to"]?.S ?? "");
+    case "pk = :pk AND sk BETWEEN :prefix AND :to":
+      return (
+        sk >= (values[":prefix"]?.S ?? "") && sk <= (values[":to"]?.S ?? "")
+      );
+    case "pk = :pk AND sk <= :to":
+      return sk <= (values[":to"]?.S ?? "");
     default:
       throw new Error(`fake table: ${KeyConditionExpression} isn't served`);
   }

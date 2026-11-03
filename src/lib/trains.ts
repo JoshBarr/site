@@ -50,7 +50,7 @@ const [WEST, SOUTH, EAST, NORTH] = MAP_BOUNDS;
 export const onMap = ({ position: [e, n] }: { position: [number, number] }) =>
   e > WEST && e < EAST && n > SOUTH && n < NORTH;
 
-/** Whether a fix is too old to show. */
-export function isStale({ time }: Pick<Train, "time">) {
-  return Date.now() - time > STALE;
+/** Whether a fix is too old to show at `now`. */
+export function isStale({ time }: Pick<Train, "time">, now = Date.now()) {
+  return now - time > STALE;
 }

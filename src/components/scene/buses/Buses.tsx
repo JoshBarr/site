@@ -31,6 +31,7 @@ import { BusRoutes, loadBusRoutes } from "./routes";
 import { follow, keepToKerb, Run } from "./run";
 import { createSpacing } from "./spacing";
 import { useBuses } from "./useBuses";
+import { sceneNow, useSeek } from "../clock";
 
 const MAX_BUSES = 640;
 
@@ -192,7 +193,7 @@ function Fleet({
   lights: number;
 }) {
   const buses = useBuses();
-  const epoch = useMemo(() => Date.now(), []);
+  const { epoch } = useSeek();
   const fleet = useMemo(createBuses, []);
 
   const trails = useMemo(
@@ -301,7 +302,7 @@ function Fleet({
   );
 
   useFrame(({ camera }, delta) => {
-    const target = (Date.now() - DELAY - epoch) / 1000;
+    const target = (sceneNow() - DELAY - epoch) / 1000;
     const { light, tint } = sprites;
     let lit = 0;
 

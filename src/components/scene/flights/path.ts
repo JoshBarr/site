@@ -36,6 +36,13 @@ const PARKED_DRIFT = 50;
 const PARKED_JITTER = 5;
 const GRAVITY = 9.81;
 
+/**
+ * Between fixes, in the air, at least this far above the ground, metres, or
+ * as high as the fixes either side are if they're lower: a topdresser's
+ * fixes skim the hills, and the path between them would cut through ridges.
+ */
+const CLEARANCE = 30;
+
 /** Most bank drawn, radians; airliners turn at 25–30°. */
 const MAX_BANK = (35 * Math.PI) / 180;
 
@@ -81,6 +88,10 @@ interface Point {
 
 const speedOf = ({ v }: Point) => Math.hypot(v[0] ?? 0, v[2] ?? 0);
 const parked = (point: Point) => point.ground && speedOf(point) < PARKED_SPEED;
+
+/** How far above the ground a fix keeps the path near it, metres. */
+const clearanceOf = (point: Point) =>
+  point.ground ? 0 : Math.min(point.p[1] - point.groundHeight, CLEARANCE);
 
 const wrap = (angle: number) =>
   angle - 2 * Math.PI * Math.round(angle / (2 * Math.PI));
@@ -169,7 +180,9 @@ export function buildPath(
     }
   }
 
-  // Dead reckoning: straight on, no lower than the ground.
+  // Dead reckoning: straight on, no lower than the ground. It's the end of
+  // the path, so it doesn't hold the path up: a landing's last fix is often
+  // just off the runway.
   const last = points[points.length - 1];
   const hold = parked(last) ? PARKED_HOLD : EXTRAPOLATE;
   const [vx, vy, vz] = last.v.map((v) => v ?? 0);
@@ -187,6 +200,10 @@ export function buildPath(
     p: [ahead[0], Math.max(ahead[1], aheadGround), ahead[2]],
     groundHeight: aheadGround,
   });
+
+  const clearance = points.map((point, i) =>
+    i === points.length - 1 ? 0 : clearanceOf(point)
+  );
 
   const t: number[] = [];
   const position: number[][] = [];
@@ -215,10 +232,18 @@ export function buildPath(
     for (let s = 0; s < steps; s++) {
       const u = s / steps;
       hermite(a, b, u, out);
+      const onGround = a.ground && (u === 0 || b.ground);
+      const below = groundAt(out[0], out[2]);
+
+      if (!onGround) {
+        const above = clearance[i] + (clearance[i + 1] - clearance[i]) * u;
+        out[1] = Math.max(out[1], below + above);
+      }
+
       t.push(a.t + u * dt);
       position.push([...out]);
-      ground.push(a.ground && (u === 0 || b.ground) ? 1 : 0);
-      groundHeight.push(a.groundHeight + (b.groundHeight - a.groundHeight) * u);
+      ground.push(onGround ? 1 : 0);
+      groundHeight.push(below);
       joined.push(gap ? 0 : 1);
       const [vx, , vz] = a.v;
       course.push(vx === null || vz === null ? null : Math.atan2(vx, -vz));

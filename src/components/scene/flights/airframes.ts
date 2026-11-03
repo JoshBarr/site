@@ -3,7 +3,7 @@ import type { Aircraft } from "../../../lib/flights";
 // What to draw for an aircraft: a shape and how long it is, from its ICAO
 // type where we know it, else its ADS-B category.
 
-export type Shape = "jet" | "prop" | "helicopter";
+export type Shape = "jet" | "prop" | "light" | "helicopter";
 
 export interface Airframe {
   shape: Shape;
@@ -44,17 +44,26 @@ const TYPES = new Map(
     BE20: ["prop", 13.4],
     B350: ["prop", 14.2],
     PC12: ["prop", 14.4],
-    C208: ["prop", 11.5],
+    C208: ["light", 11.5],
     P68: ["prop", 9.4],
     BN2P: ["prop", 10.9],
-    C152: ["prop", 7.3],
-    C172: ["prop", 8.3],
-    C182: ["prop", 8.8],
-    C206: ["prop", 8.6],
-    PA28: ["prop", 7.3],
+    C150: ["light", 7.3],
+    C152: ["light", 7.3],
+    C172: ["light", 8.3],
+    C182: ["light", 8.8],
+    C185: ["light", 7.9],
+    C206: ["light", 8.6],
+    C210: ["light", 8.6],
+    PA18: ["light", 6.9],
+    PA28: ["light", 7.3],
+    PA32: ["light", 8.4],
+    BE36: ["light", 8.4],
     PA31: ["prop", 9.9],
-    SR22: ["prop", 7.9],
-    DA40: ["prop", 8],
+    SR22: ["light", 7.9],
+    DA40: ["light", 8],
+    // Topdressers.
+    CRES: ["light", 11.1],
+    P750: ["light", 11.8],
     DA42: ["prop", 8.6],
     EC35: ["helicopter", 10.2],
     EC30: ["helicopter", 10.7],
@@ -78,7 +87,7 @@ const TYPES = new Map(
 /** By ADS-B emitter category when the type isn't known. */
 const CATEGORIES = new Map(
   Object.entries({
-    A1: ["prop", 9],
+    A1: ["light", 9],
     A2: ["prop", 26],
     A3: ["jet", 38],
     A4: ["jet", 47],
@@ -89,7 +98,7 @@ const CATEGORIES = new Map(
 );
 
 export function airframeFor({ type, category }: Aircraft): Airframe {
-  const fallback: [Shape, number] = ["prop", 9];
+  const fallback: [Shape, number] = ["light", 9];
 
   const [shape, length] =
     TYPES.get(type ?? "") ?? CATEGORIES.get(category ?? "") ?? fallback;

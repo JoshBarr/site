@@ -20,5 +20,5 @@ export function foldBuses(
     now - TRAIL,
     (fix, latest) =>
       fix.route === latest.route && fix.direction === latest.direction
-  ).filter((bus) => !isStale(bus));
+  ).filter((bus) => !isStale(bus, now));
 }

@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Conditions } from "../../lib/weather";
+import { layerUrl, useSeek } from "./clock";
+import { sceneShown } from "./visibility";
 
 export type { Conditions };
 
@@ -81,26 +83,62 @@ function withOverrides(conditions: Conditions): Conditions {
   return next;
 }
 
+/**
+ * How often the conditions are asked for again, ms. MetService's are
+ * fetched every half hour; replaying, a step of this is close enough.
+ */
+const POLL = 10 * 60_000;
+
+/**
+ * MetService's conditions at the scene's time (./clock.ts), asked for again
+ * as it runs on and when it's set; the defaults until they arrive.
+ */
 export function useConditions(): Conditions {
+  const seek = useSeek();
+
   const [conditions, setConditions] = useState(() =>
     withOverrides(DEFAULT_CONDITIONS)
   );
 
   useEffect(() => {
-    let cancelled = false;
-    fetch("/api/weather")
-      .then((response) => (response.ok ? response.json() : null))
-      .then((latest: Conditions | null) => {
-        if (latest && !cancelled) {
-          setConditions(withOverrides(withoutTrace(latest)));
+    let timer: ReturnType<typeof setTimeout>;
+    let stopped = false;
+    let asked = false;
+    // MetService's time for the conditions shown: the same again isn't news.
+    let shown: string | null = null;
+
+    const poll = async () => {
+      if (sceneShown() || !asked) {
+        const url = layerUrl("/api/weather", POLL);
+
+        asked = true;
+
+        try {
+          const response = url ? await fetch(url) : null;
+
+          const latest: Conditions | null = response?.ok
+            ? await response.json()
+            : null;
+
+          if (latest && latest.time !== shown && !stopped) {
+            shown = latest.time;
+            setConditions(withOverrides(withoutTrace(latest)));
+          }
+        } catch (e) {
+          console.error("[weather]", e);
         }
-      })
-      .catch(() => {});
+      }
+
+      if (!stopped) timer = setTimeout(poll, POLL);
+    };
+
+    poll();
 
     return () => {
-      cancelled = true;
+      stopped = true;
+      clearTimeout(timer);
     };
-  }, []);
+  }, [seek]);
 
   return conditions;
 }

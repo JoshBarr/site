@@ -52,9 +52,12 @@ export const TRAIL = 15 * 60_000;
  */
 export const TRAIL_GAP = 4 * 60_000;
 
-/** Whether a report is too old to show. */
-export function isStale({ speed, time }: Pick<Vessel, "speed" | "time">) {
-  const age = Date.now() - time;
+/** Whether a report is too old to show at `now`. */
+export function isStale(
+  { speed, time }: Pick<Vessel, "speed" | "time">,
+  now = Date.now()
+) {
+  const age = now - time;
 
   return age > (speed > UNDER_WAY ? STALE_UNDER_WAY : STALE_STATIONARY);
 }

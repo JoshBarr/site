@@ -53,6 +53,7 @@ import {
 } from "./geometry";
 import { TRAIL, TRAIL_GAP, UNDER_WAY } from "../../../lib/vessels";
 import { useVessels, Vessel } from "./useVessels";
+import { sceneNow, useSeek } from "../clock";
 import { useShore } from "./shore";
 import { createShipModel, Kind, Lights, Point } from "./models";
 import { createModelMaterial, HIDDEN, isNear } from "../models/lod";
@@ -505,7 +506,7 @@ function createDetailed() {
   return { group, models, lit, get, keep, dispose };
 }
 
-/** Seconds since the page's epoch. */
+/** Seconds since the scene clock's epoch (../clock.ts). */
 const trailNow = uniform(0);
 
 /** Fat line segments, each end with its time, so it can fade with age. */
@@ -685,7 +686,7 @@ export function Vessels({
 }) {
   const vessels = useVessels();
   const shore = useShore(index);
-  const epoch = useMemo(() => Date.now(), []);
+  const { epoch } = useSeek();
   const meshes = useMemo(createMeshes, []);
   const trails = useMemo(createTrails, []);
   const sprites = useMemo(createLights, []);
@@ -851,7 +852,7 @@ export function Vessels({
   useFrame(({ camera, clock }, delta) => {
     if (!shore) return;
     const { hulls, parts, wakes } = meshes;
-    const now = Date.now();
+    const now = sceneNow();
     const decay = Math.exp(-delta / SETTLE);
     let partCount = 0;
     let wakeCount = 0;

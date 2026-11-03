@@ -28,6 +28,7 @@ const TYRE = 0x1e1e1e;
 export const RIDE_HEIGHT: Record<Shape, number> = {
   jet: 0.11,
   prop: 0.08,
+  light: 0.13,
   helicopter: 0.156,
 };
 
@@ -411,7 +412,7 @@ const PROP_DETAILED: Ring[] = [
   [0.5, 0.008, 0.04],
 ];
 
-/** Turboprop or light aircraft: high straight wing, T-tail. */
+/** Twin turboprop or piston twin: high straight wing, T-tail. */
 export function createPropGeometry(detailed = false, { gear }: Detail = {}) {
   const b = new ModelBuilder();
   b.sides = detailed ? 16 : 8;
@@ -467,6 +468,103 @@ export function createPropGeometry(detailed = false, { gear }: Detail = {}) {
 
     for (const x of [-0.17, 0.17])
       leg(b, ground, [x, 0.01, -0.06], 0.012, 0.008, 0.004);
+  }
+
+  return b.build();
+}
+
+const LIGHT: Ring[] = [
+  [-0.5, 0.012, 0],
+  [-0.47, 0.045, 0],
+  [-0.38, 0.062, 0.005],
+  [-0.3, 0.07, 0.012],
+  [-0.08, 0.07, 0.012],
+  [0.08, 0.045, 0.02],
+  [0.45, 0.016, 0.032],
+  [0.5, 0.01, 0.034],
+];
+
+const LIGHT_DETAILED: Ring[] = [
+  [-0.5, 0.012, 0],
+  [-0.492, 0.03, 0],
+  [-0.47, 0.045, 0],
+  [-0.43, 0.055, 0.002],
+  [-0.38, 0.062, 0.005],
+  [-0.33, 0.068, 0.01],
+  [-0.3, 0.07, 0.012],
+  [-0.08, 0.07, 0.012],
+  [0.0, 0.06, 0.016],
+  [0.08, 0.045, 0.02],
+  [0.3, 0.026, 0.028],
+  [0.45, 0.016, 0.032],
+  [0.5, 0.01, 0.034],
+];
+
+/** The light single's wing: on the cabin roof. */
+export const LIGHT_WING_Y = 0.075;
+const LIGHT_SPAN = 0.66;
+
+/**
+ * Light single, a Cessna more or less: high straight wing on struts, one
+ * prop in the nose, and fixed gear, so it's always down.
+ */
+export function createLightGeometry(detailed = false) {
+  const b = new ModelBuilder();
+  b.sides = detailed ? 16 : 8;
+  b.use(BODY).tube(detailed ? LIGHT_DETAILED : LIGHT);
+
+  if (detailed) {
+    windscreen(b, LIGHT_DETAILED, -0.38, -0.31);
+    cabinWindows(b, LIGHT_DETAILED, -0.29, -0.15, 0.085, 0.07, [4, 48]);
+    b.use(WING);
+    sweptWings(
+      b,
+      LIGHT_WING_Y,
+      [-0.21, -0.03],
+      LIGHT_SPAN,
+      [-0.19, -0.06],
+      [0.02, 0.012]
+    );
+  } else {
+    wings(b, LIGHT_WING_Y, [-0.21, -0.03], LIGHT_SPAN, [-0.19, -0.06], 0.016);
+  }
+
+  fin(b, 0.04, [0.3, 0.5], 0.16, [0.42, 0.49], 0.01);
+  b.use(TAIL);
+  wings(b, 0.025, [0.38, 0.5], 0.2, [0.43, 0.5], 0.007);
+
+  if (!detailed) return b.build();
+
+  // Struts from the cabin floor out under the wing.
+  b.sides = 6;
+  b.use(STRUT);
+
+  for (const side of [-1, 1]) {
+    b.cylinder(
+      [side * 0.055, -0.035, -0.13],
+      [side * 0.36, LIGHT_WING_Y, -0.13],
+      0.004
+    );
+  }
+
+  // Nose leg, and spring steel mains splayed out from the belly.
+  b.sides = 10;
+  const ground = -RIDE_HEIGHT.light;
+  const radius = 0.024;
+  leg(b, ground, [0, -0.04, -0.42], radius, 0.008, 0.004);
+
+  for (const side of [-1, 1]) {
+    const x = side * 0.13;
+    b.use(STRUT).cylinder(
+      [side * 0.04, -0.06, -0.06],
+      [x, ground + radius, -0.06],
+      0.004
+    );
+    b.use(TYRE).cylinder(
+      [x - 0.006, ground + radius, -0.06],
+      [x + 0.006, ground + radius, -0.06],
+      radius
+    );
   }
 
   return b.build();
@@ -589,6 +687,17 @@ export const ROTORS: Record<Shape, Rotor[]> = {
       radius: 0.078,
       width: 0.004,
       rate: -17,
+    },
+  ],
+  light: [
+    {
+      hubs: [[0, 0, -0.505]],
+      axis: "z",
+      blades: 2,
+      inner: 0.012,
+      radius: 0.115,
+      width: 0.006,
+      rate: -40,
     },
   ],
   helicopter: [

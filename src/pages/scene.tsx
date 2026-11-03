@@ -3,6 +3,7 @@ import dynamic from "next/dynamic";
 import SEO from "../components/seo";
 import { FollowPanel } from "../components/scene/follow/FollowPanel";
 import { ShotPanel } from "../components/scene/shots/ShotPanel";
+import { TimePanel } from "../components/scene/time/TimePanel";
 
 // Full-viewport development page for the homepage scene.
 const WellingtonScene = dynamic(
@@ -44,6 +45,7 @@ const ScenePage: React.FC = () => {
       </label>
       <FollowPanel />
       <ShotPanel />
+      <TimePanel style={{ top: 56 }} />
     </div>
   );
 };

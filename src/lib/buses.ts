@@ -36,7 +36,7 @@ export const TRAIL = 3 * 60_000;
 /** A bus not heard from in this long has finished its trip, or gone dark. */
 const STALE = 5 * 60_000;
 
-/** Whether a fix is too old to show. */
-export function isStale({ time }: Pick<Bus, "time">) {
-  return Date.now() - time > STALE;
+/** Whether a fix is too old to show at `now`. */
+export function isStale({ time }: Pick<Bus, "time">, now = Date.now()) {
+  return now - time > STALE;
 }

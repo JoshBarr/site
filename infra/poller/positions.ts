@@ -38,8 +38,10 @@ type Feeds = Effect.Success<typeof makeFeeds>;
 const kb = (bytes: number) => `${(bytes / 1024).toFixed(1)} KB`;
 
 /**
- * Publishes the positions every 10 s, after flights (polled every 10 s from
- * 0 s) and trains (from 3 s), when a feed's written something since.
+ * Publishes the positions once a minute, 51 s in, after every feed's last
+ * poll has started, when a feed's written something since. The site reads
+ * the table and only falls back to these, so a minute old will do: ~44k
+ * PUTs a month, where every 10 s was ~220k (about $1.20).
  */
 export const publisher = ({ logs, routes }: Feeds) =>
   Effect.gen(function* () {
@@ -109,8 +111,8 @@ export const publisher = ({ logs, routes }: Feeds) =>
 
     return {
       name: "positions",
-      every: 10_000,
-      offset: 9_000,
+      every: 60_000,
+      offset: 51_000,
       poll,
       report,
     } satisfies Feed;

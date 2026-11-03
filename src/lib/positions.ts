@@ -12,10 +12,10 @@ import {
 } from "./liveRecords";
 import { readJson, trailPoint } from "./schemas";
 
-// What the AWS poller publishes every 10 s or so, to a private S3 object
+// What the AWS poller publishes once a minute, to a private S3 object
 // served through CloudFront (see plans/dynamo.md): every live layer folded
 // from its log as its API serves it. The site's API routes serve from it
-// until they can read the table themselves.
+// when they can't read the table.
 
 const route = z.object({ from: routeEnd, to: routeEnd });
 

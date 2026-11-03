@@ -86,3 +86,54 @@ describe("aircraft on the ground", () => {
     expect(clearance(...toWorld(1751200, 5423000), 0, B738)).toBe(0);
   });
 });
+
+describe("aircraft in the air", () => {
+  /** A ridge 290 m high across x = 0, on 100 m hills. */
+  const ridge = (x: number) => (Math.abs(x) < 50 ? 290 : 100);
+
+  it("keeps clear of a ridge between two fixes", () => {
+    // ZK-LTU, a Cresco topdressing near Pāuatahanui, skims the hills: fixes
+    // either side of the ridge, both higher than it.
+    const fixes: Fix[] = [
+      [ORIGIN[0] - 600, ORIGIN[1], 300, T, 60, 90, 0],
+      [ORIGIN[0] + 600, ORIGIN[1], 300, T + 20_000, 60, 90, 0],
+    ];
+
+    const path = buildPath(fixes, T, toWorld, ridge);
+    let lowest = Infinity;
+
+    for (let i = 0; i < path.t.length; i++) {
+      if (Math.abs(path.x[i]) < 50) lowest = Math.min(lowest, path.y[i]);
+    }
+
+    expect(lowest).toBeGreaterThanOrEqual(320);
+  });
+
+  it("comes down onto the runway it's landing on", () => {
+    const fixes: Fix[] = [
+      [ORIGIN[0], ORIGIN[1] - 1000, 40, T, 65, 0, -3.5],
+      [ORIGIN[0], ORIGIN[1] - 500, 15, T + 8_000, 63, 0, -3],
+      [ORIGIN[0], ORIGIN[1], null, T + 16_000, 55, 0, null],
+    ];
+
+    const path = buildPath(fixes, T, toWorld, groundAt);
+    const at = pose();
+
+    // A second out, the clearance has all but gone.
+    expect(poseAt(path, 15, at)).toBe(true);
+    expect(at.y).toBeLessThan(7);
+    expect(poseAt(path, 16, at)).toBe(true);
+    expect(at.ground).toBe(true);
+  });
+
+  it("isn't held up off the ground past its last fix", () => {
+    const fixes: Fix[] = [
+      [ORIGIN[0], ORIGIN[1] - 1000, 40, T, 65, 0, -3.5],
+      [ORIGIN[0], ORIGIN[1] - 500, 15, T + 8_000, 63, 0, -3],
+    ];
+
+    const path = buildPath(fixes, T, toWorld, groundAt);
+
+    expect(path.y[path.y.length - 1]).toBe(5);
+  });
+});

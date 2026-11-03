@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { layerUrl, useSeek } from "../clock";
 import { sceneShown } from "../visibility";
 import { STALE } from "../../../lib/traffic";
 import type { TrafficResponse, TrafficSpeeds } from "../../../lib/traffic";
@@ -9,9 +10,12 @@ const POLL = 60_000;
 /**
  * NZTA's speeds on SH1 and SH2, polled from /api/traffic: null until the
  * first answer, or when the last good one's gone stale. `ready` once the
- * first poll's done, answered or not, so traffic can start without.
+ * first poll's done, answered or not, so traffic can start without. At the
+ * scene's time (../clock.ts): setting the clock asks again for then.
  */
 export function useTraffic() {
+  const seek = useSeek();
+
   const [state, setState] = useState<{
     speeds: TrafficSpeeds | null;
     ready: boolean;
@@ -24,10 +28,12 @@ export function useTraffic() {
 
     const poll = async () => {
       if (sceneShown() || !known) {
-        try {
-          const response = await fetch("/api/traffic");
+        const url = layerUrl("/api/traffic");
 
-          if (response.ok) known = await response.json();
+        try {
+          const response = url ? await fetch(url) : null;
+
+          if (response?.ok) known = await response.json();
         } catch (e) {
           console.error("[traffic]", e);
         }
@@ -53,7 +59,7 @@ export function useTraffic() {
       stopped = true;
       clearTimeout(timer);
     };
-  }, []);
+  }, [seek]);
 
   return state;
 }

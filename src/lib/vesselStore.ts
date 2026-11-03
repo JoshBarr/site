@@ -127,7 +127,7 @@ export function foldVessels(
   }
 
   return (polls.at(-1)?.data.vessels ?? [])
-    .filter((vessel) => !isStale(vessel))
+    .filter((vessel) => !isStale(vessel, now))
     .map((vessel) => ({
       ...vessel,
       trail: byTime(tracks.get(vessel.mmsi) ?? []).filter(

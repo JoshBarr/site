@@ -76,6 +76,7 @@ import { DEPTH_POINTS, sceneDepthsAt } from "./sceneDepth";
 import { connectCamera, shotFromUrl } from "./shots/shots";
 import { useRenderer } from "./renderer";
 import { useInView } from "./visibility";
+import { sceneNow, useSeek } from "./clock";
 import { attachInspector, showStats, Stats, switchedOff } from "./stats";
 
 // Over the harbour, looking west across Te Aro to Kelburn.
@@ -687,34 +688,28 @@ function nightFor(altitude: number) {
 const CLOCK_TICK = 20000;
 
 /**
- * The scene's moment: now, moving on in real time while the page is open.
- * `?t=<ISO date>` starts it from another time; `?freeze` holds it there.
+ * The scene's moment, as a Date for the sun and the lights: its clock
+ * (./clock.ts), read every CLOCK_TICK and whenever it's set.
  */
 function useSceneTime() {
-  const clock = useMemo(() => {
-    const params = new URLSearchParams(location.search);
-    const t = params.get("t");
-
-    return {
-      start: t ? new Date(t).getTime() : Date.now(),
-      openedAt: Date.now(),
-      frozen: params.has("freeze"),
-    };
-  }, []);
-
-  const [time, setTime] = useState(() => new Date(clock.start));
+  const seek = useSeek();
+  const [time, setTime] = useState(() => new Date(sceneNow()));
 
   useEffect(() => {
-    if (clock.frozen) return;
+    // Held still (?freeze), the same time isn't a new one.
+    const tick = () =>
+      setTime((last) => {
+        const now = sceneNow();
 
-    // From the wall clock, not a count of ticks: background tabs skip them.
-    const id = setInterval(
-      () => setTime(new Date(clock.start + Date.now() - clock.openedAt)),
-      CLOCK_TICK
-    );
+        return last.getTime() === now ? last : new Date(now);
+      });
+
+    tick();
+    // From the clock, not a count of ticks: background tabs skip them.
+    const id = setInterval(tick, CLOCK_TICK);
 
     return () => clearInterval(id);
-  }, [clock]);
+  }, [seek]);
 
   return time;
 }

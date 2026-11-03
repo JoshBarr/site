@@ -205,4 +205,137 @@ describe("the live API routes, from the table", () => {
       expect.anything()
     );
   });
+
+  describe("replaying, with ?at=", () => {
+    /** An hour ago: long enough for every poll up to then to be in. */
+    const AT = ago(3600);
+
+    /** `seconds` before AT. */
+    const before = (seconds: number) => 3600 + seconds;
+
+    const conditions = (cloudCover: number) => ({
+      time: "2026-11-02T06:00:00.000Z",
+      cloudCover,
+      cloudBase: null,
+      visibility: 30000,
+      humidity: 0.87,
+      precipitation: 0,
+      wind: { speed: 10.2, direction: 329 },
+      windAloft: { speed: 15.4, direction: 327.1 },
+    });
+
+    it("serve each layer as it was then, cached for a day", async () => {
+      table.seed(trains, ago(before(50)), {
+        trains: [train(PETONE, before(55))],
+      });
+      table.seed(trains, ago(before(10)), {
+        trains: [train(STATION, before(12))],
+      });
+      // Polled since: not yet, then.
+      table.seed(trains, ago(10), { trains: [train(PETONE, 12)] });
+
+      const response = await call(trainsRoute, `/?at=${AT}`);
+
+      expect(response.headers.get("cache-control")).toBe(
+        "public, s-maxage=86400"
+      );
+
+      expect(await response.json()).toEqual({
+        time: AT,
+        trains: [
+          {
+            ...train(STATION, before(12)),
+            trail: [
+              [...PETONE, ago(before(55))],
+              [...STATION, ago(before(12))],
+            ],
+          },
+        ],
+      });
+    });
+
+    it("join aircraft to the route as looked up by then", async () => {
+      const heard = {
+        aircraft: {
+          hex: "c81e2c",
+          callsign: "ANZ441",
+          registration: "ZK-NHA",
+          type: "A21N",
+          category: "A3",
+        },
+        fix: [1752000, 5450000, 3000, ago(before(5)), 120, 0, 5] satisfies Fix,
+      };
+
+      table.seed(flights, ago(before(5)), { sightings: [heard] });
+
+      table.seed(
+        routes,
+        { callsign: "ANZ441", time: ago(before(3600)) },
+        { airports: [WLG, AKL] }
+      );
+
+      table.seed(
+        routes,
+        { callsign: "ANZ441", time: ago(60) },
+        { airports: [NSN, WLG] }
+      );
+
+      const response = await call(flightsRoute, `/?at=${AT}`);
+      const [aircraft] = (await response.json()).aircraft;
+
+      expect(aircraft.route).toEqual({ from: WLG, to: AKL });
+    });
+
+    it("serve the speeds and weather of then", async () => {
+      const then = { links: { "Ngauranga To Aotea|2.1": 42 }, legs: {} };
+
+      table.seed(traffic, ago(before(30)), then);
+      table.seed(traffic, ago(30), { links: {}, legs: {} });
+      table.seed(weather, ago(before(600)), conditions(0.9));
+      table.seed(weather, ago(600), conditions(0.1));
+
+      const trafficResponse = await call(trafficRoute, `/?at=${AT}`);
+
+      expect(await trafficResponse.json()).toEqual({
+        time: AT,
+        fetched: ago(before(30)),
+        ...then,
+      });
+
+      const weatherResponse = await call(weatherRoute, `/?at=${AT}`);
+
+      expect(await weatherResponse.json()).toEqual(conditions(0.9));
+    });
+
+    it("cache the last few minutes as briefly as now", async () => {
+      table.seed(trains, ago(40), { trains: [train(STATION, 42)] });
+
+      const response = await call(trainsRoute, `/?at=${ago(30)}`);
+
+      expect(response.headers.get("cache-control")).toBe(
+        "public, s-maxage=5, stale-while-revalidate=10"
+      );
+    });
+
+    it("fail rather than serve what's published, which is now", async () => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      tableDenied();
+      published({ trains: [{ ...train(STATION, 12), trail: [] }] });
+
+      const response = await call(trainsRoute, `/?at=${AT}`);
+
+      expect(response.status).toBe(502);
+    });
+
+    it.each([
+      ["further back than the logs go", ago(31 * 86_400)],
+      ["yet to come", NOW + 5 * 60_000],
+      ["that isn't one", "yesterday"],
+    ])("refuse a time %s", async (_, at) => {
+      const response = await call(trainsRoute, `/?at=${at}`);
+
+      expect(response.status).toBe(400);
+      expect(table.queries).toHaveLength(0);
+    });
+  });
 });

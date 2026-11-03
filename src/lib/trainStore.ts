@@ -16,5 +16,5 @@ export function foldTrains(
   return foldTrails(
     polls.map(({ data }) => data.trains),
     now - TRAIL
-  ).filter((train) => !isStale(train));
+  ).filter((train) => !isStale(train, now));
 }

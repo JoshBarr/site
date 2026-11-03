@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { layerUrl, sceneNow, type Seek, skewFrom, useSeek } from "../clock";
 import { sceneShown } from "../visibility";
 import { HISTORY } from "../../../lib/flights";
 import type { Aircraft, FlightsResponse } from "../../../lib/flights";
@@ -15,7 +16,7 @@ const POLL = 10_000;
 const CURFEW = { from: [1, 0], to: [5, 30] };
 const CURFEW_POLL = 120_000;
 
-function inCurfew(date = new Date()) {
+function inCurfew(date: Date) {
   const [hour, minute] = new Intl.DateTimeFormat("en-NZ", {
     timeZone: "Pacific/Auckland",
     hour: "numeric",
@@ -34,17 +35,25 @@ function inCurfew(date = new Date()) {
 
 export interface Flights {
   aircraft: Aircraft[];
-  /** This browser's clock minus the server's, ms. Fixes are server time. */
+  /** The scene's clock minus the server's, ms. Fixes are server time. */
   skew: number;
 }
+
+const NONE: Flights = { aircraft: [], skew: 0 };
 
 /**
  * Aircraft around Wellington and their trails, polled from /api/flights. The
  * first poll fetches HISTORY's worth of fixes; later ones only recent fixes,
- * which are merged in.
+ * which are merged in. At the scene's time (../clock.ts): setting the clock
+ * starts over from then.
  */
 export function useFlights(): Flights {
-  const [flights, setFlights] = useState<Flights>({ aircraft: [], skew: 0 });
+  const seek = useSeek();
+
+  const [shown, setShown] = useState<{ seek: Seek; flights: Flights }>({
+    seek,
+    flights: NONE,
+  });
 
   useEffect(() => {
     const known = new Map<string, Aircraft>();
@@ -55,14 +64,14 @@ export function useFlights(): Flights {
 
     const poll = async () => {
       if (sceneShown()) {
-        try {
-          const response = await fetch(
-            history ? "/api/flights?history" : "/api/flights"
-          );
+        const url = layerUrl(history ? "/api/flights?history" : "/api/flights");
 
-          if (response.ok) {
+        try {
+          const response = url ? await fetch(url) : null;
+
+          if (response?.ok) {
             const body: FlightsResponse = await response.json();
-            skew = Date.now() - body.time;
+            skew = skewFrom(body.time);
 
             for (const { fixes, ...details } of body.aircraft) {
               const before = known.get(details.hex);
@@ -87,7 +96,7 @@ export function useFlights(): Flights {
           console.error("[flights]", e);
         }
 
-        const oldest = Date.now() - skew - HISTORY;
+        const oldest = sceneNow() - skew - HISTORY;
 
         for (const [hex, plane] of known) {
           plane.fixes = plane.fixes.filter((fix) => fix[3] > oldest);
@@ -96,13 +105,16 @@ export function useFlights(): Flights {
         }
 
         if (stopped) return;
-        setFlights({ aircraft: [...known.values()], skew });
+        setShown({ seek, flights: { aircraft: [...known.values()], skew } });
       } else {
         // Hidden or scrolled away: catch up on what's missed when back.
         history = true;
       }
 
-      timer = setTimeout(poll, inCurfew() ? CURFEW_POLL : POLL);
+      timer = setTimeout(
+        poll,
+        inCurfew(new Date(sceneNow())) ? CURFEW_POLL : POLL
+      );
     };
 
     poll();
@@ -111,7 +123,8 @@ export function useFlights(): Flights {
       stopped = true;
       clearTimeout(timer);
     };
-  }, []);
+  }, [seek]);
 
-  return flights;
+  // Until the first answer after the clock's set, nothing.
+  return shown.seek === seek ? shown.flights : NONE;
 }

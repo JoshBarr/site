@@ -63,7 +63,7 @@ export interface Run {
   s: number[];
   arrived: number[];
   left: number[];
-  /** Distance along and time, seconds since the page's epoch, of each fix. */
+  /** Distance along and time, seconds since the scene clock's epoch, of each fix. */
   fixes: { s: number; time: number }[];
   /** How far through lighting-up its driver switches on, 0..1. */
   switchOn: number;

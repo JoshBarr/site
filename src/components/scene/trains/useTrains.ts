@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
+import { layerUrl, sceneNow, type Seek, skewFrom, useSeek } from "../clock";
 import { sceneShown } from "../visibility";
 import { isStale } from "../../../lib/trains";
 import type { Train, TrainsResponse } from "../../../lib/trains";
 
 export type { Train };
+
+const NONE: Train[] = [];
 
 /** As often as /api/trains refreshes. */
 const POLL = 10_000;
@@ -11,10 +14,16 @@ const POLL = 10_000;
 /**
  * Trains on the network and their trails, polled from /api/trains, which
  * answers with everything it knows each time. A failed poll keeps the last
- * answer. Times are on this browser's clock.
+ * answer. Times are on the scene's clock (../clock.ts); setting it starts
+ * over from then.
  */
 export function useTrains() {
-  const [trains, setTrains] = useState<Train[]>([]);
+  const seek = useSeek();
+
+  const [shown, setShown] = useState<{ seek: Seek; trains: Train[] }>({
+    seek,
+    trains: [],
+  });
 
   useEffect(() => {
     let known: Train[] = [];
@@ -23,12 +32,14 @@ export function useTrains() {
 
     const poll = async () => {
       if (sceneShown()) {
-        try {
-          const response = await fetch("/api/trains");
+        const url = layerUrl("/api/trains");
 
-          if (response.ok) {
+        try {
+          const response = url ? await fetch(url) : null;
+
+          if (response?.ok) {
             const body: TrainsResponse = await response.json();
-            const skew = Date.now() - body.time;
+            const skew = skewFrom(body.time);
             known = body.trains.map((train) => ({
               ...train,
               time: train.time + skew,
@@ -39,10 +50,10 @@ export function useTrains() {
           console.error("[trains]", e);
         }
 
-        known = known.filter((train) => !isStale(train));
+        known = known.filter((train) => !isStale(train, sceneNow()));
 
         if (stopped) return;
-        setTrains(known);
+        setShown({ seek, trains: known });
       }
 
       timer = setTimeout(poll, POLL);
@@ -54,7 +65,8 @@ export function useTrains() {
       stopped = true;
       clearTimeout(timer);
     };
-  }, []);
+  }, [seek]);
 
-  return trains;
+  // Until the first answer after the clock's set, nothing.
+  return shown.seek === seek ? shown.trains : NONE;
 }

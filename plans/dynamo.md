@@ -154,6 +154,10 @@ the bucket policy allows only that distribution). The API routes read it
 from `LIVE_POSITIONS_URL`, the distribution's URL. Redis is gone already. Once the
 routes read the table, this goes back to being the fallback below.
 
+Since the routes read the table, it's published once a minute, 51 s into
+each invocation: every 10 s was ~5 PUTs a minute measured, ~220k a month
+(~$1.20), the only recurring charge.
+
 At the end of each invocation the poller writes what every API would
 serve right then (each layer folded over its window, plus traffic and
 weather) to one private S3 object, `live/positions.json`. When a DynamoDB
@@ -324,7 +328,17 @@ until measured (step 1).
 4. **Deploy.** infra.md's deploy commands, then Vercel's OIDC settings
    (`AWS_ROLE_ARN`, `AWS_REGION`, `LIVE_TABLE`, the bucket), functions
    pinned to syd1. Budget alert in AWS Budgets at $1/month.
-5. **Scene clock + replay** (separate plan). Every layer reads one scene
-   clock instead of `Date.now()` (the hooks, `isStale`, each layer's drawn
-   time; the sun already takes `?t=`), and replay loads aligned chunks,
-   immutable once finished, weather included.
+5. **Scene clock + replay.** Done 2026-11-04, simpler than chunks: every
+   layer reads one scene clock (`src/components/scene/clock.ts`) instead of
+   `Date.now()`, the sun and lights included; `?t=` or the time panel on
+   /scene sets it, and it runs on in real time from there. The hooks ask
+   the same API routes with `?at=<ms>` (on a whole 10 s, weather 10 min),
+   which read the same windows with an upper bound (`sk <= at`, routes as
+   looked up by then), never fall back on positions.json (it's now), and
+   are cached a day once `at` is over 2 min old. A time past 30 days is a 400. Picks settle 1 s and jump at most every 5 s.
+   - **Budget:** replay windows aren't shared through the CDN the way live
+     ones are, so each replaying viewer reads ~2 RCU/s (buses' 3-min
+     window every 10 s is most of it). A dozen at once would throttle the
+     25 RCU; live layers then fall back on positions.json, replays 502.
+     Aligned immutable chunks (an hour of raw polls, folded in the
+     browser) are the fix if that's ever real.

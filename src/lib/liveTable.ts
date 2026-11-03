@@ -74,29 +74,48 @@ async function query<C extends Collection>(
   return records;
 }
 
-/** `c`'s items since `from` (epoch ms), oldest first. */
-export const readSince = <C extends Collection>(c: C, from: number) =>
+/** `c`'s items since `from` (epoch ms), up to `to` if given, oldest first. */
+export const readSince = <C extends Collection>(
+  c: C,
+  from: number,
+  to?: number
+) =>
   query(c, {
-    KeyConditionExpression: "pk = :pk AND sk >= :from",
+    KeyConditionExpression:
+      to === undefined
+        ? "pk = :pk AND sk >= :from"
+        : "pk = :pk AND sk BETWEEN :from AND :to",
     ExpressionAttributeValues: {
       ":pk": { S: c.pk },
       ":from": { S: sortTime(from) },
+      ...(to !== undefined && { ":to": { S: sortTime(to) } }),
     },
   });
 
 /**
- * `c`'s newest item, of those whose sort key starts with `prefix`: null if
- * there's none, or it isn't one `c` reads.
+ * `c`'s newest item, of those whose sort key starts with `prefix`, and if
+ * `at` is given, of those from then or before (sort keys that are times
+ * after the prefix): null if there's none, or it isn't one `c` reads.
  */
-export async function readNewest<C extends Collection>(c: C, prefix?: string) {
+export async function readNewest<C extends Collection>(
+  c: C,
+  prefix = "",
+  at?: number
+) {
+  // Key values can't be empty strings, so no prefix is no condition on it.
+  const sk =
+    at === undefined
+      ? prefix && "begins_with(sk, :prefix)"
+      : prefix
+        ? "sk BETWEEN :prefix AND :to"
+        : "sk <= :to";
+
   const [record] = await query(c, {
-    KeyConditionExpression:
-      prefix === undefined
-        ? "pk = :pk"
-        : "pk = :pk AND begins_with(sk, :prefix)",
+    KeyConditionExpression: sk ? `pk = :pk AND ${sk}` : "pk = :pk",
     ExpressionAttributeValues: {
       ":pk": { S: c.pk },
-      ...(prefix !== undefined && { ":prefix": { S: prefix } }),
+      ...(prefix && { ":prefix": { S: prefix } }),
+      ...(at !== undefined && { ":to": { S: prefix + sortTime(at) } }),
     },
     ScanIndexForward: false,
     Limit: 1,

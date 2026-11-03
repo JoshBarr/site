@@ -51,9 +51,11 @@ import {
   BLADE,
   createHelicopterGeometry,
   createJetGeometry,
+  createLightGeometry,
   createPropGeometry,
   createRotorGeometry,
   JET_WING_RISE,
+  LIGHT_WING_Y,
   RIDE_HEIGHT,
   Rotor,
   ROTORS,
@@ -71,6 +73,7 @@ import { createClearance } from "./clearance";
 import { extend } from "./route";
 import { HOME, landing, runwayInUse, takingOff } from "./runway";
 import { Aircraft, useFlights } from "./useFlights";
+import { sceneNow, useSeek } from "../clock";
 import {
   Candidate,
   followed,
@@ -79,7 +82,7 @@ import {
   useFollowSpots,
 } from "../follow/store";
 
-const SHAPES: Shape[] = ["jet", "prop", "helicopter"];
+const SHAPES: Shape[] = ["jet", "prop", "light", "helicopter"];
 const MAX_PER_SHAPE = 64;
 
 /**
@@ -91,7 +94,7 @@ const DELAY = 30_000;
 
 /** The time drawn now, s since `epoch`, on the feed's clock. */
 const drawnTime = (skew: number, epoch: number) =>
-  (Date.now() - skew - DELAY - epoch) / 1000;
+  (sceneNow() - skew - DELAY - epoch) / 1000;
 
 /**
  * Never shorter on screen than this many pixels. Real size, a regional
@@ -100,7 +103,13 @@ const drawnTime = (skew: number, epoch: number) =>
 const MIN_PIXELS = 10;
 
 /** Detailed models, each way an aircraft can look up close. */
-type Detailed = "jet" | "jetGear" | "prop" | "propGear" | "helicopter";
+type Detailed =
+  | "jet"
+  | "jetGear"
+  | "prop"
+  | "propGear"
+  | "light"
+  | "helicopter";
 
 /** Of each detailed model at once. */
 const MAX_DETAILED = 8;
@@ -179,6 +188,7 @@ const FUTURE = 1e9;
 const CRUISE: Record<Shape, number> = {
   jet: 10_500,
   prop: 7000,
+  light: 2500,
   helicopter: 1000,
 };
 
@@ -268,13 +278,20 @@ const LIGHTS: Record<Shape, LightSpec[]> = {
     JET_WING_RISE
   ),
   prop: lightsFor(0.55, 0.05, -0.06, [0, 0.215, 0.45], [0, 0.0, -0.35]),
+  light: lightsFor(
+    0.66,
+    LIGHT_WING_Y + 0.01,
+    -0.13,
+    [0, 0.205, 0.46],
+    [0, -0.02, -0.47]
+  ),
   helicopter: lightsFor(0.1, 0, -0.1, [0, 0.13, 0.1], [0, -0.1, -0.38]),
 };
 
 const LIGHTS_PER_AIRCRAFT = 7;
 const MAX_LIGHTS = SHAPES.length * MAX_PER_SHAPE * LIGHTS_PER_AIRCRAFT;
 
-/** Seconds since the page's epoch, where trails are now. */
+/** Seconds since the scene clock's epoch, where trails are now. */
 const trailNow = uniform(0);
 
 function createPlanes() {
@@ -296,6 +313,7 @@ function createPlanes() {
   const far: Record<Shape, InstancedMesh> = {
     jet: simple("jet", createJetGeometry()),
     prop: simple("prop", createPropGeometry()),
+    light: simple("light", createLightGeometry()),
     helicopter: simple("helicopter", createHelicopterGeometry()),
   };
 
@@ -307,6 +325,7 @@ function createPlanes() {
     jetGear: detailed(createJetGeometry(true, { gear: true })),
     prop: detailed(createPropGeometry(true)),
     propGear: detailed(createPropGeometry(true, { gear: true })),
+    light: detailed(createLightGeometry(true)),
     helicopter: detailed(createHelicopterGeometry(true)),
   };
 
@@ -332,6 +351,7 @@ function createPlanes() {
   const rotors: Record<Shape, ReturnType<typeof spinning>[]> = {
     jet: ROTORS.jet.map(spinning),
     prop: ROTORS.prop.map(spinning),
+    light: ROTORS.light.map(spinning),
     helicopter: ROTORS.helicopter.map(spinning),
   };
 
@@ -366,7 +386,8 @@ function createDiscs(capacity: number) {
 
 /** Which detailed model an aircraft is, up close. */
 function detailedFor(shape: Shape, at: Pose): Detailed {
-  if (shape === "helicopter") return shape;
+  // Their gear doesn't come up.
+  if (shape === "helicopter" || shape === "light") return shape;
   const gear = at.ground || at.height < GEAR_DOWN;
 
   if (!gear) return shape;
@@ -745,7 +766,7 @@ export function Flights({
   windFrom: number;
 }) {
   const { aircraft, skew } = useFlights();
-  const epoch = useMemo(() => Date.now(), []);
+  const { epoch } = useSeek();
   const planes = useMemo(createPlanes, []);
   const trails = useMemo(createTrails, []);
   const sprites = useMemo(createLights, []);
@@ -764,7 +785,12 @@ export function Flights({
   const clearance = useMemo(() => createClearance(toWorld), [toWorld]);
 
   const flying = useMemo(() => {
-    const counts: Record<Shape, number> = { jet: 0, prop: 0, helicopter: 0 };
+    const counts: Record<Shape, number> = {
+      jet: 0,
+      prop: 0,
+      light: 0,
+      helicopter: 0,
+    };
 
     return aircraft.flatMap((a): Plane[] => {
       const airframe = airframeFor(a);
@@ -1148,6 +1174,7 @@ export function Flights({
     <>
       <primitive object={planes.far.jet} name="jets" />
       <primitive object={planes.far.prop} name="turboprops" />
+      <primitive object={planes.far.light} name="light aircraft" />
       <primitive object={planes.far.helicopter} name="helicopters" />
       {Object.entries(planes.near).map(([name, near]) => (
         <primitive key={name} object={near.mesh} name={`detailed ${name}`} />

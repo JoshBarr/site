@@ -62,6 +62,7 @@ import {
 } from "./models";
 import { createModelMaterial, isNear, NearModels } from "../models/lod";
 import { useTrains } from "./useTrains";
+import { sceneNow, useSeek } from "../clock";
 import type { Line } from "../../../lib/trains";
 import {
   Candidate,
@@ -79,10 +80,11 @@ const MAX_DETAILED = 24;
 
 /**
  * Trains are drawn this far behind live, ms, so there's nearly always a
- * fix ahead of them to run to: they report about every 30 seconds, and the
- * fix takes a while to reach the page.
+ * fix ahead of them to run to: they report in a batch every 30 seconds,
+ * and through Metlink, the poller and the page's own polls, the newest fix
+ * is up to ~55 s old when it arrives (measured 2026-11-04).
  */
-const DELAY = 45_000;
+const DELAY = 60_000;
 
 /**
  * Seconds over which a train that's fallen behind (it waited at its last
@@ -389,7 +391,7 @@ export function Trains({
   lights?: number;
 }) {
   const trains = useTrains();
-  const epoch = useMemo(() => Date.now(), []);
+  const { epoch } = useSeek();
   const cars = useMemo(createCars, []);
   const detailed = useMemo(createDetailedCars, []);
 
@@ -428,7 +430,7 @@ export function Trains({
       return route;
     };
 
-    const peak = isPeak();
+    const peak = isPeak(new Date(sceneNow()));
 
     const result = trains
       .slice(0, MAX_TRAINS)
@@ -505,7 +507,7 @@ export function Trains({
   );
 
   useFrame(({ camera }, delta) => {
-    const target = (Date.now() - DELAY - epoch) / 1000;
+    const target = (sceneNow() - DELAY - epoch) / 1000;
     const { light, tint } = sprites;
     let lit = 0;
 

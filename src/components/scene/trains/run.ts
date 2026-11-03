@@ -62,7 +62,7 @@ export const LOCOMOTIVE: Car = {
 export const GAP = 0.8;
 
 /** Weekday rush hours, NZ time: when the longest trains run. */
-export function isPeak(date = new Date()) {
+export function isPeak(date: Date) {
   const parts = new Intl.DateTimeFormat("en-NZ", {
     timeZone: "Pacific/Auckland",
     weekday: "short",
@@ -110,7 +110,7 @@ export interface Run {
   points: Point[];
   s: number[];
   times: number[];
-  /** Distance along and time, seconds since the page's epoch, of each fix. */
+  /** Distance along and time, seconds since the scene clock's epoch, of each fix. */
   fixes: { s: number; time: number }[];
   /** How far through lighting-up its crew switch on, 0..1. */
   switchOn: number;
