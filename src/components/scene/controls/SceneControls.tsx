@@ -172,7 +172,7 @@ const PlacesPanel: React.FC<{
                             <Icon name="check" size={16} />
                           </Select.ItemIndicator>
                         </Select.Item>
-                      ),
+                      )
                     )}
                   </Select.Group>
                 ))}

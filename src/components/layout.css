@@ -1379,7 +1379,10 @@ h1 {
 .hero__scene {
   position: relative;
   width: 100%;
+  /* The small viewport: 100vh on iOS Safari runs on under its toolbar, and
+     the scene's controls along the bottom with it. */
   height: 100vh;
+  height: 100svh;
 }
 
 /* The scene's controls, under the floating header. */

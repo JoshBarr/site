@@ -14,7 +14,18 @@ const ScenePage: React.FC = () => {
   const [clouds, setClouds] = useState(true);
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "#141414" }}>
+    // As tall as the small viewport, so the controls along the bottom stay
+    // above iOS Safari's toolbar.
+    <div
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        height: "100svh",
+        background: "#141414",
+      }}
+    >
       <SEO title="Scene" thumbnail={undefined} />
       <WellingtonScene clouds={clouds} />
       <SceneControls clouds={clouds} onCloudsChange={setClouds} />
