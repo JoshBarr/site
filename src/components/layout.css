@@ -1383,6 +1383,9 @@ h1 {
      the scene's controls along the bottom with it. */
   height: 100vh;
   height: 100svh;
+  /* The time-travel drawer waits below it, closed. */
+  overflow: hidden;
+  overflow: clip;
 }
 
 /* The scene's controls, under the floating header. */

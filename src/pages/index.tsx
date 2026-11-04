@@ -6,6 +6,7 @@ import { GetStaticProps } from "next";
 import dynamic from "next/dynamic";
 import { SceneControls } from "../components/scene/controls/SceneControls";
 import { CreditsSentence } from "../components/scene/credits";
+import { useVisibleHeight } from "../components/scene/useVisibleHeight";
 
 const WellingtonScene = dynamic(
   async () =>
@@ -28,6 +29,7 @@ const IndexPage: React.FC = () => {
   const [typed, setTyped] = useState(false);
   const [returned, setReturned] = useState(false);
   const [clouds, setClouds] = useState(true);
+  const height = useVisibleHeight();
   const onLoaded = useCallback(() => setLoaded(true), []);
   const onTyped = useCallback(() => setTyped(true), []);
   // The intro is typed out while the scene loads, then gives way to it.
@@ -51,7 +53,7 @@ const IndexPage: React.FC = () => {
     <Layout theme="theme--hero" credits={SCENE_CREDITS} floatingHeader>
       <SEO title="Home" thumbnail={undefined} />
 
-      <div className="hero__scene">
+      <div className="hero__scene" style={{ height }}>
         <WellingtonScene
           clouds={clouds}
           hidden={!revealed}

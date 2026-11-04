@@ -1,5 +1,6 @@
 import "../components/layout.css";
 import { IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
+import Head from "next/head";
 import { useEffect } from "react";
 
 const plex = IBM_Plex_Sans({
@@ -24,6 +25,14 @@ export default function JoshBarrSite({ Component, pageProps }) {
 
   return (
     <>
+      {/* At scale 1 on a phone, rather than whatever iOS Safari picks. */}
+      <Head>
+        <meta
+          key="viewport"
+          name="viewport"
+          content="width=device-width, initial-scale=1"
+        />
+      </Head>
       <style jsx global>{`
         :root {
           --font-mono: ${plexMono.style.fontFamily};
