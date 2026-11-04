@@ -88,12 +88,16 @@ function typedSentences(count: number) {
 export const TypedIntro: React.FC<{
   /** Fades it out. */
   hidden: boolean;
+  /** Starts typed out, without typing or calling `onTyped`. */
+  typed?: boolean;
   /** Called a beat after the last letter. */
   onTyped: () => void;
-}> = ({ hidden, onTyped }) => {
-  const [count, setCount] = useState(0);
+}> = ({ hidden, typed: skip = false, onTyped }) => {
+  const [count, setCount] = useState(skip ? TEXT.length : 0);
 
   useEffect(() => {
+    if (skip) return;
+
     const instant = matchMedia("(prefers-reduced-motion: reduce)").matches;
     let typed = 0;
     let timer: ReturnType<typeof setTimeout>;
@@ -113,7 +117,7 @@ export const TypedIntro: React.FC<{
     timer = setTimeout(step, instant ? 0 : START);
 
     return () => clearTimeout(timer);
-  }, [onTyped]);
+  }, [skip, onTyped]);
 
   return (
     <div className={`hero__intro${hidden ? " hero__intro--hidden" : ""}`}>
