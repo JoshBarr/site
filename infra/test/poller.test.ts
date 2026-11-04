@@ -516,6 +516,19 @@ describe("the poller", () => {
 
       expect(table.records(flights)).toHaveLength(1);
     });
+
+    it("logs nothing, and looks nothing up, when adsb.lol turns it away", async () => {
+      const requests = adsb(() => new HttpResponse(null, { status: 429 }));
+
+      await expect(run((await coldFeed("flights")).poll)).rejects.toMatchObject(
+        {
+          cause: { message: expect.stringContaining("HTTP 429") },
+        }
+      );
+
+      expect(requests.routes).toEqual([]);
+      expect(table.items()).toEqual([]);
+    });
   });
 
   describe("vessels", () => {
@@ -663,6 +676,66 @@ describe("the poller", () => {
 
       expect(table.records(vessels)[0].data.vessels[1].heading).toBe(120);
     });
+
+    it("fetches a failed track from where the trail ended, the next poll", async () => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      const feed = await coldFeed("vessels");
+
+      await run(feed.poll);
+
+      server.use(
+        http.get(TRACK, ({ request }) => {
+          trackFrom.push(new URL(request.url).searchParams.get("from") ?? "");
+
+          return new HttpResponse(null, { status: 503 });
+        })
+      );
+
+      freezeTime(NOW + 60_000);
+      await run(feed.poll);
+
+      // Logged as listed, without a trail.
+      expect(table.records(vessels)[1].data.vessels[0]).toMatchObject({
+        position: at(OFF_ORIENTAL_BAY),
+        time: ago(20),
+        trail: [],
+      });
+
+      server.use(
+        http.get(TRACK, ({ request }) => {
+          trackFrom.push(new URL(request.url).searchParams.get("from") ?? "");
+
+          return HttpResponse.json({
+            geometry: null,
+            properties: { times: [], sog: [], cog: [], heading: [] },
+          });
+        })
+      );
+
+      freezeTime(NOW + 120_000);
+      await run(feed.poll);
+
+      expect(trackFrom).toEqual([
+        iso(NOW - 15 * 60_000),
+        iso(ago(25)),
+        // Again from where the last track it got ended.
+        iso(ago(25)),
+      ]);
+    });
+
+    it("logs nothing when Open Waters fails", async () => {
+      server.use(
+        http.get(HARBOUR, () => new HttpResponse(null, { status: 502 }))
+      );
+
+      await expect(run((await coldFeed("vessels")).poll)).rejects.toMatchObject(
+        {
+          cause: { message: expect.stringContaining("HTTP 502") },
+        }
+      );
+
+      expect(table.items()).toEqual([]);
+    });
   });
 
   it("logs traffic every poll, changed or not", async () => {
@@ -712,6 +785,28 @@ describe("the poller", () => {
       { sk: NOW, data: speeds },
       { sk: NOW + 60_000, data: speeds },
     ]);
+  });
+
+  it("logs no traffic when NZTA fails, keeping the last speeds", async () => {
+    table.seed(
+      traffic,
+      ago(60),
+      { links: { "Ngauranga To Aotea|2.1": 81 }, legs: {} },
+      ago(60)
+    );
+
+    server.use(
+      http.get(
+        "http://trafficnz.info/service/traffic/rest/4/journeys/byregion/9/1",
+        () => new HttpResponse(null, { status: 504 })
+      )
+    );
+
+    await expect(run((await coldFeed("traffic")).poll)).rejects.toMatchObject({
+      cause: { message: expect.stringContaining("nzta: 504") },
+    });
+
+    expect(table.records(traffic).map(({ sk }) => sk)).toEqual([ago(60)]);
   });
 
   describe("weather", () => {
@@ -788,6 +883,40 @@ describe("the poller", () => {
       await run((await coldFeed("weather")).poll);
 
       expect(asked).toBe(0);
+    });
+
+    it("asks again the next minute when MetService fails, not half an hour on", async () => {
+      vi.spyOn(console, "error").mockImplementation(() => {});
+
+      server.use(
+        http.post("https://forecast-v2.metoceanapi.com/point/time", () => {
+          asked++;
+
+          return new HttpResponse("busy", { status: 503 });
+        })
+      );
+
+      const feed = await coldFeed("weather");
+
+      await run(feed.poll);
+      expect(table.records(weather)).toEqual([]);
+
+      freezeTime(NOW + 60_000);
+
+      server.use(
+        http.post("https://forecast-v2.metoceanapi.com/point/time", () => {
+          asked++;
+
+          return HttpResponse.json({ variables: {} });
+        })
+      );
+
+      await run(feed.poll);
+
+      expect(asked).toBe(2);
+      expect(table.records(weather).map(({ sk }) => sk)).toEqual([
+        NOW + 60_000,
+      ]);
     });
   });
 
@@ -871,6 +1000,26 @@ describe("the poller", () => {
       await run(feed.poll);
       expect(table.records(quakes)).toHaveLength(2);
     });
+
+    it("logs an empty list the first time, so the site knows it's been asked", async () => {
+      await run((await coldFeed("quakes")).poll);
+
+      expect(table.records(quakes).map(({ data }) => data)).toEqual([
+        { quakes: [] },
+      ]);
+    });
+
+    it("logs nothing when GeoNet fails", async () => {
+      server.use(
+        http.get(GEONET, () => new HttpResponse(null, { status: 500 }))
+      );
+
+      await expect(run((await coldFeed("quakes")).poll)).rejects.toMatchObject({
+        cause: { message: expect.stringContaining("geonet: HTTP 500") },
+      });
+
+      expect(table.items()).toEqual([]);
+    });
   });
 
   describe("tide", () => {
@@ -945,6 +1094,63 @@ describe("the poller", () => {
       await run((await coldFeed("tide")).poll);
 
       expect(table.records(tide)).toHaveLength(0);
+    });
+
+    it("asks for the mean again once it's a day old", async () => {
+      const feed = await coldFeed("tide");
+
+      await run(feed.poll);
+      freezeTime(NOW + 23 * 3600_000);
+      await run(feed.poll);
+      freezeTime(NOW + 24 * 3600_000);
+      await run(feed.poll);
+
+      expect(asked).toEqual(["30d 1d", "30m 1m", "30m 1m", "30d 1d", "30m 1m"]);
+    });
+
+    it("goes by the last poll stored when it starts", async () => {
+      table.seed(
+        tide,
+        ago(60),
+        { time: ago(90), level: 0.2, rate: 0.5 },
+        ago(60)
+      );
+
+      await run((await coldFeed("tide")).poll);
+
+      expect(asked).toEqual([]);
+    });
+
+    it("logs nothing without a mean to measure from, and asks again", async () => {
+      server.use(
+        http.get(SERIES, () => HttpResponse.json([{ data: [], series: {} }]))
+      );
+
+      const feed = await coldFeed("tide");
+
+      await expect(run(feed.poll)).rejects.toMatchObject({
+        cause: { message: expect.stringContaining("no days measured") },
+      });
+      expect(table.items()).toEqual([]);
+
+      server.use(
+        http.get(SERIES, ({ params }) =>
+          HttpResponse.json([
+            {
+              series: {},
+              data:
+                params.period === "30d"
+                  ? [{ val: 2.6, ts: "2026-10-01T00:00:00Z" }]
+                  : [{ val: 2.8, ts: "2026-11-02T07:00:00Z" }],
+            },
+          ])
+        )
+      );
+
+      freezeTime(NOW + 60_000);
+      await run(feed.poll);
+
+      expect(table.records(tide)[0].data).toMatchObject({ level: 0.2 });
     });
   });
 });
