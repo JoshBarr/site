@@ -1365,12 +1365,6 @@ h1 {
   padding-bottom: 6vh;
 }
 
-.footer__credits {
-  max-width: 48rem;
-  margin-bottom: 0;
-  padding-left: 0;
-}
-
 .hero {
   min-height: 60vh;
   margin-bottom: 0;
@@ -1379,11 +1373,10 @@ h1 {
 .hero__scene {
   position: relative;
   width: 100%;
-  /* The small viewport: 100vh on iOS Safari runs on under its toolbar, and
-     the scene's controls along the bottom with it. */
+  /* The large viewport: on a phone it runs on under iOS Safari's toolbar,
+     which the scene shows through. Its controls stay above the toolbar. */
   height: 100vh;
-  height: 100svh;
-  /* The time-travel drawer waits below it, closed. */
+  height: 100lvh;
   overflow: hidden;
   overflow: clip;
 }

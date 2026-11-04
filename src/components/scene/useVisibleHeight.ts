@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 
 /**
- * The scene's height: the small viewport, or what's visible on load if
- * that's less. iOS Safari can run 100svh on under its toolbar, and the
- * controls along the scene's foot with it; `innerHeight` is the height
- * between its bars. Measured again only when the width changes (a turn),
- * not as the toolbar collapses on a scroll, which would resize the scene.
+ * The scene controls' height: the small viewport, or what's visible on load
+ * if that's less. iOS Safari can run 100svh on under its toolbar, and the
+ * controls along the foot with it; `innerHeight` is the height between its
+ * bars. Measured again only when the width changes (a turn), not as the
+ * toolbar collapses on a scroll, which would move the controls.
  */
 export const useVisibleHeight = (): string => {
   const [height, setHeight] = useState<number | null>(null);

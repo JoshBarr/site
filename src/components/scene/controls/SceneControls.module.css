@@ -43,6 +43,19 @@
   -webkit-backdrop-filter: var(--blur);
 }
 
+/* What's visible of the scene, from its top: on a phone the scene runs on
+   under iOS Safari's toolbar, but the controls stay above it. Clipped, so
+   the closed time-travel drawer waits out of sight below. */
+.Frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  overflow: hidden;
+  overflow: clip;
+  pointer-events: none;
+}
+
 /* The bar along the time-travel drawer's top edge: Info at the left, the
    rest at the right. Only what's on it takes the pointer, not the gap. */
 

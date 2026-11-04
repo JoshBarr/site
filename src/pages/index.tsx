@@ -5,16 +5,12 @@ import { TypedIntro } from "../components/TypedIntro";
 import { GetStaticProps } from "next";
 import dynamic from "next/dynamic";
 import { SceneControls } from "../components/scene/controls/SceneControls";
-import { CreditsSentence } from "../components/scene/credits";
-import { useVisibleHeight } from "../components/scene/useVisibleHeight";
 
 const WellingtonScene = dynamic(
   async () =>
     (await import("../components/scene/WellingtonScene")).WellingtonScene,
   { ssr: false }
 );
-
-const SCENE_CREDITS = <CreditsSentence linkClass="theme-link" />;
 
 /**
  * Set once the scene's been shown. Back on the homepage its tiles are in the
@@ -29,7 +25,6 @@ const IndexPage: React.FC = () => {
   const [typed, setTyped] = useState(false);
   const [returned, setReturned] = useState(false);
   const [clouds, setClouds] = useState(true);
-  const height = useVisibleHeight();
   const onLoaded = useCallback(() => setLoaded(true), []);
   const onTyped = useCallback(() => setTyped(true), []);
   // The intro is typed out while the scene loads, then gives way to it.
@@ -50,10 +45,10 @@ const IndexPage: React.FC = () => {
   }, [skipIntro]);
 
   return (
-    <Layout theme="theme--hero" credits={SCENE_CREDITS} floatingHeader>
+    <Layout theme="theme--hero" footer={false} floatingHeader>
       <SEO title="Home" thumbnail={undefined} />
 
-      <div className="hero__scene" style={{ height }}>
+      <div className="hero__scene">
         <WellingtonScene
           clouds={clouds}
           hidden={!revealed}

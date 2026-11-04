@@ -909,6 +909,8 @@ export const TimeTravel: React.FC<{
         inert={!open}
         style={{
           height: "100%",
+          // Its frame passes touches through to the scene.
+          pointerEvents: "auto",
           background: SURFACE,
           backdropFilter: "blur(10px)",
           borderTop: "1px solid rgba(255, 255, 255, 0.08)",

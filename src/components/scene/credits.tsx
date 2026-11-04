@@ -1,7 +1,7 @@
 import React from "react";
 
 // Where the Wellington scene's data comes from, and the attribution each
-// source asks for: shown in the scene's Info panel and the homepage footer.
+// source asks for: shown in the scene's Info panel.
 // A new data source goes here.
 
 type Licence = { name: string; href: string };
@@ -126,8 +126,6 @@ export const LIVE_CREDITS: Credit[] = [
   },
 ];
 
-const CREDITS = [...MAP_CREDITS, ...LIVE_CREDITS];
-
 /** "A, B and C". */
 const and = (parts: React.ReactNode[]) =>
   parts.map((part, i) => (
@@ -160,25 +158,4 @@ export const LicenceLink: React.FC<{
   <a className={linkClass} href={licence.href}>
     {licence.name}
   </a>
-);
-
-/** All of it as a sentence, for a page's footer. */
-export const CreditsSentence: React.FC<{ linkClass?: string }> = ({
-  linkClass,
-}) => (
-  <>
-    The Wellington scene is adapted from:{" "}
-    {CREDITS.map((credit, i) => (
-      <React.Fragment key={credit.what}>
-        {i > 0 && "; "}
-        {credit.what} from <Sources credit={credit} linkClass={linkClass} />
-        {credit.licence && (
-          <>
-            , <LicenceLink licence={credit.licence} linkClass={linkClass} />
-          </>
-        )}
-      </React.Fragment>
-    ))}
-    .
-  </>
 );
