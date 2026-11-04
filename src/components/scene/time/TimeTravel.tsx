@@ -607,7 +607,11 @@ export const TimeTravel: React.FC<{
   const [view, setView] = useState({ left: 0, width: 0 });
   const scroller = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
-  const placed = useRef(false);
+  /**
+   * Whether it's been scrolled to the scene's time: until then the view's
+   * at the start of the range, and no days are asked for.
+   */
+  const [placed, setPlaced] = useState(false);
   /** The time to keep where it is on screen when the zoom changes. */
   const anchor = useRef<{ time: number; at: number } | null>(null);
 
@@ -657,7 +661,7 @@ export const TimeTravel: React.FC<{
   const { days: loaded, settled } = useTimelineDays(
     visible.map(({ day }) => day),
     today,
-    open
+    open && placed
   );
 
   // A spinner until the first days in view are in; after that, days
@@ -699,12 +703,15 @@ export const TimeTravel: React.FC<{
   useLayoutEffect(() => {
     const element = scroller.current;
 
-    if (!open || !element || !view.width || placed.current) return;
+    if (!open || !element || !view.width || placed) return;
 
-    placed.current = true;
     element.scrollLeft = xOf(playhead) - view.width * 0.8;
+    // Measured now: the scroll event comes after this render's effects,
+    // which would ask for the days at the start.
+    setView({ left: element.scrollLeft, width: element.clientWidth });
+    setPlaced(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, view.width]);
+  }, [open, view.width, placed]);
 
   // Zoom about the scene's time, or the middle if it's out of view.
   useLayoutEffect(() => {
