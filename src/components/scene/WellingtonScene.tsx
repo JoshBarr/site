@@ -72,6 +72,7 @@ import { Traffic } from "./traffic/Traffic";
 import { AirfieldLights } from "./airport/AirfieldLights";
 import { updateLens } from "./lens";
 import { DEFAULT_FOV, flightFor, FollowRig, smootherstep } from "./follow/rig";
+import { groundAlong } from "./ground";
 import {
   followVehicle,
   Following,
@@ -233,8 +234,12 @@ const carried: [Vector3, Vector3] = [new Vector3(), new Vector3()];
 /** Which way's ahead and to the right, walking. */
 const walked: [Vector3, Vector3] = [new Vector3(), new Vector3()];
 
-/** Handing back from following, the orbit target's this far off, m. */
-const HAND_BACK: [number, number] = [50, 2000];
+/**
+ * Handing back from following, the orbit target's on the ground no nearer
+ * than the first, m, or the second ahead if the view misses the ground within
+ * the third.
+ */
+const HAND_BACK: [number, number, number] = [MIN_DISTANCE * 2, 2000, 8000];
 
 /** Seconds for the pivot to settle most of the way onto a vehicle looked around. */
 const PIVOT = 0.6;
@@ -376,18 +381,27 @@ function Controls({
     c.enabled = true;
     turnAbout(c, false);
 
-    // Orbiting what it was looking at, no higher than the camera.
-    const distance = Math.min(
-      Math.max(camera.position.distanceTo(c.getTarget(orbit)), HAND_BACK[0]),
-      HAND_BACK[1]
-    );
-
+    // Orbiting the ground it was looking at, the way it does anywhere else:
+    // the controls pan and zoom by how far off the target is, so one left at
+    // the vehicle (often in the air, or under the road beyond it) drags the
+    // land at a crawl and stops the zoom short. Looking at the sky, a point
+    // well ahead, no higher than the camera.
     camera.getWorldDirection(orbit);
+
+    const hit = heightAt.current
+      ? groundAlong(camera.position, orbit, heightAt.current, HAND_BACK[2])
+      : null;
+
+    const distance =
+      hit === null
+        ? HAND_BACK[1]
+        : Math.min(Math.max(hit, HAND_BACK[0]), HAND_BACK[2]);
+
     orbit.multiplyScalar(distance).add(camera.position);
     orbit.y = Math.min(orbit.y, camera.position.y);
     const { x, y, z } = camera.position;
     c.setLookAt(x, y, z, orbit.x, orbit.y, orbit.z, false);
-  }, [boundary, orbit]);
+  }, [boundary, orbit, heightAt]);
 
   // Turning about the followed vehicle by hand, from where the rig had the
   // camera, the pivot sliding over onto the vehicle from what it aimed at.

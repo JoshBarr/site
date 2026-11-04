@@ -7,7 +7,8 @@ the national 1m DEM: a canopy height model at 2m. Over the terrain's
 high-detail core that's its level 7 mosaic and a cached DSM on the same grid;
 elsewhere both are fetched a tile at a time, in parallel, and their
 difference cached. Building footprints from OpenStreetMap (the terrain
-build's cache) are cut out, then each crown is a local maximum of the
+build's cache) are cut out, and the scene's own towers, turbines and
+lighthouses with the blades the lidar caught mid-turn, then each crown is a local maximum of the
 smoothed canopy, its radius from the watershed around it.
 
 Each tree's ground is the published terrain's under it, from the finest
@@ -33,6 +34,7 @@ Usage:
 
 import importlib.util
 import json
+import re
 import sys
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
@@ -52,6 +54,7 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 OUT_DIR = ROOT_DIR / "public" / "trees"
 CACHE_DIR = ROOT_DIR / ".cache" / "trees"
 CHM_DIR = CACHE_DIR / "chm"
+SITES_TS = ROOT_DIR / "src" / "components" / "scene" / "landmarks" / "sites.ts"
 
 _spec = importlib.util.spec_from_file_location(
     "terrain", ROOT_DIR / "scripts" / "terrain" / "build_tiles.py"
@@ -158,6 +161,29 @@ PEAK_RADII = [(8.0, 1), (20.0, 2), (MAX_HEIGHT, 3)]
 MAX_SPREAD = 0.6
 MAX_RADIUS = 15.0
 
+# The scene draws these landmarks itself (src/components/scene/landmarks/),
+# by their export in sites.ts: (footprint, rotor) radii in m. Everything is
+# cleared over the footprint (with the turbines' towers and nacelles, the
+# lidar caught the blades: tall "trees" in a ring out to the rotor's tips),
+# and canopy taller than BLADE_CLEAR over the rotor's sweep.
+LANDMARKS = {
+    "WEST_WIND": (8.0, 41.2 + 6),
+    "MILL_CREEK": (8.0, 41.2 + 6),
+    "BROOKLYN": (8.0, 22.0 + 6),
+    "KAUKAU": (12.0, 0),
+    "MT_VICTORIA": (6.0, 0),
+    "PENCARROW": (6.0, 0),
+    "PENCARROW_LOWER": (6.0, 0),
+    "BARING_HEAD": (6.0, 0),
+    "POINT_HALSWELL": (6.0, 0),
+}
+# Blades are smoothed into the canopy much lower than they stand (their tips
+# pass 27 m up at the lowest), metres.
+BLADE_CLEAR = 12.0
+# A blade is a line a sample or two wide, its edges lower: they're cleared
+# this many samples out from it.
+BLADE_GROW = 2
+
 # Fractions of each tile's trees, cumulative, stored as separate files: a
 # distant tile only fetches the first.
 BANDS = [1 / 64, 1 / 16, 1 / 4, 1]
@@ -173,6 +199,41 @@ def canopy_height(dem, dsm):
     chm = np.where(land, dsm - dem, 0).astype(np.float32)
     chm[(chm > MAX_HEIGHT) | (chm < 0)] = 0
     return chm
+
+
+def landmark_sites():
+    """(easting, northing, footprint, rotor) for each landmark in LANDMARKS."""
+    sites = []
+    for name, body in re.findall(r"export const (\w+)[^=]*= (\[.*?\]);", SITES_TS.read_text(), re.S):
+        if name not in LANDMARKS:
+            continue
+        for e, n in re.findall(r"\[\s*([\d.]+),\s*([\d.]+),\s*-?[\d.]+\s*\]", body):
+            sites.append((float(e), float(n), *LANDMARKS[name]))
+    missing = set(LANDMARKS) - set(re.findall(r"export const (\w+)", SITES_TS.read_text()))
+    if missing:
+        raise SystemExit(f"no sites for {sorted(missing)} in {SITES_TS}")
+    return sites
+
+
+def clear_landmarks(chm, window, grid, sites):
+    """Zero the canopy at the landmarks in a window of the tree grid, in place."""
+    res = grid.a
+    for east, north, footprint, rotor in sites:
+        reach = max(footprint, rotor)
+        # Sample (r, c) is centred at west + (c + 0.5) * res.
+        c = (east - grid.c) / res - 0.5 - window[1].start
+        r = (grid.f - north) / res - 0.5 - window[0].start
+        r0, r1 = max(int(r - reach / res), 0), min(int(r + reach / res) + 2, chm.shape[0])
+        c0, c1 = max(int(c - reach / res), 0), min(int(c + reach / res) + 2, chm.shape[1])
+        if r1 <= r0 or c1 <= c0:
+            continue
+        rr, cc = np.ogrid[r0:r1, c0:c1]
+        distance = np.hypot(rr - r, cc - c) * res
+        patch = chm[r0:r1, c0:c1]
+        blade = (distance <= rotor) & (patch > BLADE_CLEAR)
+        if blade.any():
+            blade = ndimage.binary_dilation(blade, iterations=BLADE_GROW) & (distance <= rotor)
+        patch[(distance <= footprint) | blade] = 0
 
 
 def tiles():
@@ -469,6 +530,8 @@ def build():
     print(f"  footprints over {cols}x{rows}")
     built = footprints(grid, (rows, cols))
     built |= port_yards(grid, (rows, cols))
+    sites = landmark_sites()
+    print(f"  clearing {len(sites)} landmarks")
     canopy = np.zeros((rows, cols), dtype=np.uint8)
     res = grid.a
     # Sample centres: column c is at west + (c + 0.5) * res.
@@ -483,6 +546,7 @@ def build():
             print(f"  row {row}: {total_trees} trees, {total_bytes / 1e6:.1f}MB")
         row = ty
         chm, window = chm_tile(tx, ty)
+        clear_landmarks(chm, window, grid, sites)
         tile_built = built[window]
         west, north, size = tile_bounds(tx, ty)
 
