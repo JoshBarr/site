@@ -1,4 +1,9 @@
-import React, { useEffect, useState, useSyncExternalStore } from "react";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { firstViewProgress, subscribeFirstViewProgress } from "./scene/loading";
 import { TypingTime } from "./TypedIntro";
 
@@ -16,9 +21,10 @@ function typedShare(typing: TypingTime | null, now: number) {
 
 /**
  * The page as a progress bar for the scene's first view: a lighter shade
- * rising from the bottom, with the percentage riding its top edge until it
- * meets the header. They move by transform, so they glide on even while the
- * scene keeps the main thread busy.
+ * rising from the bottom, with the percentage riding just under its top edge,
+ * to rest under the header at 100%; it fades in once the fill's tall enough
+ * to hold it. They move by transform, so they glide on even while the scene
+ * keeps the main thread busy.
  *
  * The scene shows once it's loaded and the intro's typed, so the bar follows
  * whichever's further behind: it never fills before the words are out.
@@ -57,6 +63,20 @@ export const LoadingFill: React.FC<{
   const progress = Math.min(loaded, typedShare(typing, now));
   const percent = Math.round(progress * 100);
 
+  // Whether the fill's risen past the percentage's height, so it fits under
+  // the edge.
+  const edge = useRef<HTMLDivElement>(null);
+  const [room, setRoom] = useState(false);
+
+  useEffect(() => {
+    const el = edge.current;
+    const scene = el?.parentElement;
+
+    if (!el || !scene) return;
+
+    setRoom(progress * scene.clientHeight >= el.offsetHeight);
+  }, [progress]);
+
   return (
     <div
       className={`hero__loading${hidden ? " hero__loading--hidden" : ""}`}
@@ -70,7 +90,10 @@ export const LoadingFill: React.FC<{
       style={{ "--rest": 1 - progress } as React.CSSProperties}
     >
       <div className="hero__loading-fill" />
-      <div className="hero__loading-edge container">
+      <div
+        ref={edge}
+        className={`hero__loading-edge container${room ? " hero__loading-edge--room" : ""}`}
+      >
         <span className="hero__loading-count">{percent}%</span>
       </div>
     </div>

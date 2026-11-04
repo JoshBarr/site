@@ -1452,21 +1452,29 @@ h1 {
 }
 
 /*
-  Just above the fill's top edge, at the page's right gutter, but no higher
-  than just under the floating header. The scene, and so the fill, is the
-  large viewport's height.
+  Just below the fill's top edge, at the page's right gutter, so it comes to
+  rest under the floating header as the fill reaches the top. It's below the
+  page at first, so it's faded in once the fill has room for it. The scene,
+  and so the fill, is the large viewport's height.
 */
 .hero__loading-edge {
   position: absolute;
   top: 0;
   right: 0;
   left: 0;
-  padding-bottom: 8px;
+  padding-top: 8px;
   text-align: right;
-  transform: translateY(max(calc(var(--rest) * 100vh - 100%), 56px));
-  transform: translateY(max(calc(var(--rest) * 100lvh - 100%), 56px));
-  transition: transform var(--glide);
+  opacity: 0;
+  transform: translateY(max(calc(var(--rest) * 100vh), 56px));
+  transform: translateY(max(calc(var(--rest) * 100lvh), 56px));
+  transition:
+    transform var(--glide),
+    opacity 0.4s ease;
   will-change: transform;
+}
+
+.hero__loading-edge--room {
+  opacity: 1;
 }
 
 .hero__loading-count {
