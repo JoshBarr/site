@@ -153,16 +153,14 @@ const PLOT = ROWS_BOTTOM + 8;
 /** The drawer's height, px. */
 const PANEL_HEIGHT = PAD + PLOT + 6;
 
-/** On a phone, the zoom's row above the ruler, px: too narrow to float it. */
-const PICKER_ROW = 34;
-
-const LABELS = 64;
+/** Wide enough for the zoom, which sits atop the labels, left of the ruler. */
+const LABELS = 112;
 const VALUES = 76;
 
 const ZOOMS = [
-  { days: 1, label: "Day", short: "1d" },
-  { days: 3, label: "3 days", short: "3d" },
-  { days: 7, label: "7 days", short: "7d" },
+  { days: 1, label: "1d", title: "A day" },
+  { days: 3, label: "3d", title: "3 days" },
+  { days: 7, label: "7d", title: "7 days" },
 ];
 
 /** A phone: no values column, and shorter words. */
@@ -845,24 +843,34 @@ export const TimeTravel: React.FC<{
     />
   );
 
-  const height = PANEL_HEIGHT + (narrow ? PICKER_ROW : 0);
+  const height = PANEL_HEIGHT;
+  const inset = narrow ? 8 : 16;
 
-  // Over the ruler's right end; on a phone, a row of its own above it.
+  // Top left, over the labels, in the gap beside the ruler.
   const picker = (
     <ToggleGroup
       aria-label="Zoom"
       className={`${ui.Theme} ${ui.Glass} ${ui.Segments}`}
       style={{
-        ...(!narrow && { position: "absolute", top: -3, right: 12, zIndex: 1 }),
+        position: "absolute",
+        top: -2,
+        left: inset - 4,
         background: "var(--glass-solid)",
       }}
       value={[String(zoom)]}
       // Pressing the pressed one empties the group: keep it as it is.
       onValueChange={([days]) => days && zoomTo(Number(days))}
     >
-      {ZOOMS.map(({ days: span, label: name, short }) => (
-        <Toggle key={span} value={String(span)} className={ui.Segment}>
-          {narrow ? short : name}
+      {ZOOMS.map(({ days: span, label: name, title }) => (
+        <Toggle
+          key={span}
+          value={String(span)}
+          aria-label={title}
+          title={title}
+          className={ui.Segment}
+          style={{ padding: "3px 7px", fontSize: 11 }}
+        >
+          {name}
         </Toggle>
       ))}
     </ToggleGroup>
@@ -906,19 +914,6 @@ export const TimeTravel: React.FC<{
           borderTop: "1px solid rgba(255, 255, 255, 0.08)",
         }}
       >
-        {narrow && (
-          <div
-            style={{
-              height: PICKER_ROW,
-              display: "flex",
-              justifyContent: "flex-end",
-              alignItems: "flex-end",
-              padding: "0 12px",
-            }}
-          >
-            {picker}
-          </div>
-        )}
         <div
           style={{
             position: "relative",
@@ -927,20 +922,19 @@ export const TimeTravel: React.FC<{
             marginTop: PAD,
           }}
         >
-          {!narrow && picker}
-
           <div
             style={{
-              width: narrow ? LABELS - 12 : LABELS,
+              width: narrow ? LABELS - 8 : LABELS,
               flex: "none",
               position: "relative",
             }}
           >
+            {picker}
             <span
               style={{
                 position: "absolute",
                 top: AXIS + 1,
-                left: narrow ? 8 : 16,
+                left: inset,
                 fontSize: 10,
                 color: FAINT,
               }}
@@ -954,7 +948,7 @@ export const TimeTravel: React.FC<{
                 style={{
                   position: "absolute",
                   top: ROWS_TOP + i * ROW,
-                  left: narrow ? 8 : 16,
+                  left: inset,
                   height: ROW,
                   display: "flex",
                   alignItems: "center",
