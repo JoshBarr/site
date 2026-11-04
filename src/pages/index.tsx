@@ -5,6 +5,7 @@ import { TypedIntro } from "../components/TypedIntro";
 import { GetStaticProps } from "next";
 import dynamic from "next/dynamic";
 import { SceneControls } from "../components/scene/controls/SceneControls";
+import { CreditsSentence } from "../components/scene/credits";
 
 const WellingtonScene = dynamic(
   async () =>
@@ -12,51 +13,7 @@ const WellingtonScene = dynamic(
   { ssr: false }
 );
 
-const CC_BY = (
-  <a className="theme-link" href="https://creativecommons.org/licenses/by/4.0/">
-    CC BY 4.0
-  </a>
-);
-
-const SCENE_CREDITS = (
-  <>
-    The Wellington scene is adapted from: elevation, tree canopy and building
-    heights from Toitū Te Whenua Land Information New Zealand, {CC_BY}; 3D
-    buildings © Wellington City Council and AAM Ltd, {CC_BY}; map data and
-    building footprints ©{" "}
-    <a className="theme-link" href="https://www.openstreetmap.org/copyright">
-      OpenStreetMap contributors
-    </a>
-    . Weather from{" "}
-    <a className="theme-link" href="https://www.metservice.com">
-      MetService
-    </a>
-    , ship positions from{" "}
-    <a className="theme-link" href="https://openwaters.io/ais/">
-      Open Waters AIS
-    </a>{" "}
-    and{" "}
-    <a className="theme-link" href="https://www.aishub.net">
-      AISHub
-    </a>
-    , train and bus positions, bus routes and the cable car's timetable from{" "}
-    <a className="theme-link" href="https://opendata.metlink.org.nz">
-      Metlink
-    </a>
-    , traffic speeds and counts from{" "}
-    <a
-      className="theme-link"
-      href="https://www.nzta.govt.nz/traffic-and-travel-information/use-our-data/"
-    >
-      NZTA
-    </a>
-    , and earthquakes and the tide from{" "}
-    <a className="theme-link" href="https://www.geonet.org.nz">
-      GeoNet
-    </a>
-    , {CC_BY}.
-  </>
-);
+const SCENE_CREDITS = <CreditsSentence linkClass="theme-link" />;
 
 /**
  * Set once the scene's been shown. Back on the homepage its tiles are in the

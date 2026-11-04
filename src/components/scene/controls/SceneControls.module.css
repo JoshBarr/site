@@ -1,5 +1,6 @@
-/* The scene's controls: a toolbar of icon buttons at the top right, each
-   opening its panel in one popover that moves and resizes between them.
+/* The scene's controls: a toolbar of icon buttons at the bottom right, each
+   opening its panel in one popover that moves and resizes between them, and
+   Info at the bottom left.
    Dark glass after DialKit (dialkit.dev), translucent over the map. */
 
 .Theme {
@@ -42,27 +43,38 @@
   -webkit-backdrop-filter: var(--blur);
 }
 
-/* The bar at the bottom right, on the time-travel drawer's top edge */
+/* The bar along the time-travel drawer's top edge: Info at the left, the
+   rest at the right. Only what's on it takes the pointer, not the gap. */
 
 .Bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 8px;
+  width: 100%;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.End {
   display: flex;
   /* Short of room, the pills go above the toolbar. */
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
   align-items: center;
-  max-width: 100%;
-  pointer-events: auto;
-  user-select: none;
-  -webkit-user-select: none;
+  min-width: 0;
 }
 
 .Toolbar {
   display: flex;
+  flex: none;
   gap: 2px;
   padding: 3px;
   border-radius: 14px;
   box-shadow: var(--shadow-small);
+  pointer-events: auto;
 }
 
 .ToolButton {
@@ -110,6 +122,7 @@
   padding: 0 3px 0 12px;
   border-radius: 14px;
   box-shadow: var(--shadow-small);
+  pointer-events: auto;
   animation: arrive var(--duration) var(--ease);
 }
 
@@ -295,6 +308,59 @@
   font-size: 12px;
   font-weight: 600;
   color: var(--muted);
+}
+
+/* Info: the data's sources, scrolling if the screen's short. */
+
+.InfoPanel {
+  width: min(340px, calc(100vw - 32px));
+  max-height: min(var(--available-height), 560px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  user-select: text;
+  -webkit-user-select: text;
+
+  & .Section:first-of-type {
+    margin-top: 0;
+  }
+}
+
+.Credit {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--muted);
+
+  &::first-letter {
+    text-transform: uppercase;
+  }
+}
+
+.CreditWhat {
+  color: var(--ink);
+}
+
+.Link {
+  color: var(--label);
+  text-decoration: underline;
+  text-decoration-color: var(--border);
+  text-underline-offset: 2px;
+  transition:
+    color 150ms,
+    text-decoration-color 150ms;
+
+  &:hover {
+    color: var(--ink);
+    text-decoration-color: currentColor;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 1px;
+    border-radius: 2px;
+  }
 }
 
 /* Rows: a label at the left, a value or control at the right. Buttons

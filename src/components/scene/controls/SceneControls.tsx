@@ -19,6 +19,13 @@ import { sceneNow, useSeek } from "../clock";
 import { currentView, goTo, SHOTS } from "../shots/shots";
 import { jump } from "../time/jump";
 import { TimeTravel } from "../time/TimeTravel";
+import {
+  Credit,
+  LicenceLink,
+  LIVE_CREDITS,
+  MAP_CREDITS,
+  Sources,
+} from "../credits";
 import { Icon, IconName } from "./icons";
 import styles from "./SceneControls.module.css";
 
@@ -26,7 +33,7 @@ import styles from "./SceneControls.module.css";
 // transport and settings, opening its panel in one popover that moves and
 // resizes from one to the next, and one for the time-travel drawer, which
 // they ride up on; and, while replaying or following, a pill saying when or
-// what, with the way back.
+// what, with the way back. Bottom left, Info: where the data's from.
 
 type PanelId = "places" | "transport" | "settings";
 
@@ -165,7 +172,7 @@ const PlacesPanel: React.FC<{
                             <Icon name="check" size={16} />
                           </Select.ItemIndicator>
                         </Select.Item>
-                      )
+                      ),
                     )}
                   </Select.Group>
                 ))}
@@ -278,6 +285,63 @@ const SettingsPanel: React.FC<{
   );
 };
 
+const CreditList: React.FC<{ title: string; credits: Credit[] }> = ({
+  title,
+  credits,
+}) => (
+  <>
+    <h3 className={styles.Section}>{title}</h3>
+    {credits.map((credit) => (
+      <p key={credit.what} className={styles.Credit}>
+        <span className={styles.CreditWhat}>{credit.what}</span> from{" "}
+        <Sources credit={credit} linkClass={styles.Link} />
+        {credit.licence && (
+          <>
+            , <LicenceLink licence={credit.licence} linkClass={styles.Link} />
+          </>
+        )}
+        .
+      </p>
+    ))}
+  </>
+);
+
+/** Where the scene's data comes from, with the attribution each asks for. */
+const Info: React.FC = () => (
+  <Popover.Root>
+    <div className={cx(styles.Glass, styles.Toolbar)}>
+      <Tip
+        label="About the data"
+        trigger={
+          <Popover.Trigger
+            aria-label="About the data"
+            className={styles.ToolButton}
+          >
+            <Icon name="info" />
+          </Popover.Trigger>
+        }
+      />
+    </div>
+    <Popover.Portal>
+      <Popover.Positioner
+        side="top"
+        align="start"
+        sideOffset={8}
+        collisionPadding={16}
+        className={styles.Theme}
+      >
+        <Popover.Popup className={cx(styles.Glass, styles.Popup)}>
+          <div className={cx(styles.Panel, styles.InfoPanel)}>
+            <Header title="Data" hint="" />
+            <CreditList title="Map" credits={MAP_CREDITS} />
+            <CreditList title="Live" credits={LIVE_CREDITS} />
+          </div>
+        </Popover.Popup>
+      </Popover.Positioner>
+    </Popover.Portal>
+  </Popover.Root>
+);
+
 const replayed = new Intl.DateTimeFormat("en-NZ", {
   timeZone: "Pacific/Auckland",
   weekday: "short",
@@ -335,61 +399,65 @@ export const SceneControls: React.FC<{
     <Tooltip.Provider delay={500}>
       <TimeTravel open={travelling}>
         <div className={cx(styles.Theme, styles.Bar)}>
-          <Replaying />
-          {following && (
+          <Info />
+          <div className={styles.End}>
+            <Replaying />
+            {following && (
+              <div
+                className={`${styles.Glass} ${styles.Following}`}
+                data-tint={following.category}
+              >
+                <span className={styles.Tinted}>
+                  <Icon name={VEHICLES[following.category].icon} size={18} />
+                </span>
+                <span className={styles.FollowingLabel}>{following.label}</span>
+                <Tip
+                  label={
+                    <>
+                      Back to moving freely
+                      <span className={styles.Kbd}>Esc</span>
+                    </>
+                  }
+                  trigger={
+                    <button
+                      type="button"
+                      className={cx(styles.ToolButton, styles.Labelled)}
+                      onClick={stop}
+                    >
+                      <Icon name="close" size={18} />
+                      Stop following
+                    </button>
+                  }
+                />
+              </div>
+            )}
             <div
-              className={`${styles.Glass} ${styles.Following}`}
-              data-tint={following.category}
+              role="toolbar"
+              aria-label="Map"
+              className={`${styles.Glass} ${styles.Toolbar}`}
             >
-              <span className={styles.Tinted}>
-                <Icon name={VEHICLES[following.category].icon} size={18} />
-              </span>
-              <span className={styles.FollowingLabel}>{following.label}</span>
+              <PanelButton panel="places" label="Places" icon="place" />
+              <PanelButton
+                panel="transport"
+                label="Follow transport"
+                icon="commute"
+              />
+              <PanelButton panel="settings" label="Settings" icon="settings" />
               <Tip
-                label={
-                  <>
-                    Back to moving freely<span className={styles.Kbd}>Esc</span>
-                  </>
-                }
+                label="Time travel"
                 trigger={
                   <button
                     type="button"
-                    className={cx(styles.ToolButton, styles.Labelled)}
-                    onClick={stop}
+                    aria-label="Time travel"
+                    aria-expanded={travelling}
+                    className={styles.ToolButton}
+                    onClick={() => setTravelling((open) => !open)}
                   >
-                    <Icon name="close" size={18} />
-                    Stop following
+                    <Icon name={travelling ? "close" : "history"} />
                   </button>
                 }
               />
             </div>
-          )}
-          <div
-            role="toolbar"
-            aria-label="Map"
-            className={`${styles.Glass} ${styles.Toolbar}`}
-          >
-            <PanelButton panel="places" label="Places" icon="place" />
-            <PanelButton
-              panel="transport"
-              label="Follow transport"
-              icon="commute"
-            />
-            <PanelButton panel="settings" label="Settings" icon="settings" />
-            <Tip
-              label="Time travel"
-              trigger={
-                <button
-                  type="button"
-                  aria-label="Time travel"
-                  aria-expanded={travelling}
-                  className={styles.ToolButton}
-                  onClick={() => setTravelling((open) => !open)}
-                >
-                  <Icon name={travelling ? "close" : "history"} />
-                </button>
-              }
-            />
           </div>
         </div>
       </TimeTravel>
