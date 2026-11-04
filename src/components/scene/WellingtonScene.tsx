@@ -70,6 +70,7 @@ import { CableCar } from "./cablecar/CableCar";
 import { Buses } from "./buses/Buses";
 import { Traffic } from "./traffic/Traffic";
 import { AirfieldLights } from "./airport/AirfieldLights";
+import { Sky } from "./sky/Sky";
 import { updateLens } from "./lens";
 import { DEFAULT_FOV, flightFor, FollowRig, smootherstep } from "./follow/rig";
 import { groundAlong } from "./ground";
@@ -1058,6 +1059,7 @@ export function Scene({
         cloudCover={conditions.cloudCover}
         position={sun}
       />
+      {!switchedOff("sky") && <Sky time={time} sunAltitude={sun.altitude} />}
       {!switchedOff("terrain") && (
         <Terrain
           onHeightQuery={setHeightQuery}

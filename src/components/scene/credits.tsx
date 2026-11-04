@@ -19,6 +19,11 @@ const CC_BY: Licence = {
   href: "https://creativecommons.org/licenses/by/4.0/",
 };
 
+const CC_BY_SA: Licence = {
+  name: "CC BY-SA 4.0",
+  href: "https://creativecommons.org/licenses/by-sa/4.0/",
+};
+
 const ODBL: Licence = {
   name: "ODbL",
   href: "https://opendatacommons.org/licenses/odbl/1-0/",
@@ -55,6 +60,17 @@ export const MAP_CREDITS: Credit[] = [
       },
     ],
     licence: ODBL,
+  },
+  {
+    what: "stars",
+    who: [
+      { name: "d3-celestial", href: "https://github.com/ofrohn/d3-celestial" },
+      {
+        name: "the HYG database",
+        href: "https://www.astronexus.com/projects/hyg",
+      },
+    ],
+    licence: CC_BY_SA,
   },
 ];
 
@@ -99,6 +115,10 @@ export const LIVE_CREDITS: Credit[] = [
     what: "earthquakes and the tide",
     who: [{ name: "GeoNet", href: "https://www.geonet.org.nz" }],
     licence: CC_BY,
+  },
+  {
+    what: "satellite orbits",
+    who: [{ name: "CelesTrak", href: "https://celestrak.org" }],
   },
   {
     what: "public holidays",

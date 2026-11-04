@@ -10,6 +10,7 @@ import {
   quakes,
   routePrefix,
   routes,
+  satellites,
   tide,
   timeline,
   traffic,
@@ -17,9 +18,10 @@ import {
   vessels,
   weather,
 } from "./liveRecords";
-import { canRead, readNewest, readSince } from "./liveTable";
+import { canRead, readNewest, readOldest, readSince } from "./liveTable";
 import { loadPositions, type Positions } from "./positions";
 import type { Quake } from "./quakes";
+import type { Orbit } from "./satellites";
 import type { Tide } from "./tide";
 import { nextDay, nzMidnight, type TimelineDay, toDay } from "./timeline";
 import type { TrafficResponse } from "./traffic";
@@ -233,6 +235,23 @@ export async function loadTimetable(): Promise<Omit<Timetable, "etag"> | null> {
   const { etag: _etag, ...timetable } = stored.data;
 
   return timetable;
+}
+
+/**
+ * The visual satellites' orbits as fetched last before `at` (or now), with
+ * when they were fetched; null if none have been. A replay from before the
+ * first fetch gets the first: run back a few days, they're still close.
+ */
+export async function loadSatellites(
+  at?: number
+): Promise<{ fetched: number; orbits: Orbit[] } | null> {
+  if (!canRead()) throw new Error("no table to read the satellites from");
+
+  const stored =
+    (await readNewest(satellites, "", at)) ??
+    (at === undefined ? null : await readOldest(satellites));
+
+  return stored && { fetched: stored.sk, orbits: stored.data.orbits };
 }
 
 /**

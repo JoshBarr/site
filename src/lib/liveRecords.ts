@@ -5,6 +5,7 @@ import type { CableCarTrip, Timetable } from "./cablecar";
 import type { Fix, RouteEnd } from "./flights";
 import type { Sighting } from "./flightStore";
 import type { Quake } from "./quakes";
+import { orbit } from "./satellites";
 import { point, trailPoint } from "./schemas";
 import type { TrafficSpeeds } from "./traffic";
 import type { Tide } from "./tide";
@@ -346,4 +347,15 @@ export const timeline = collection("timeline", 1, {
   sk: time,
   data: timelineHour,
   ttl: 366 * DAY,
+});
+
+/**
+ * The visual satellites' orbits, from CelesTrak (./satellites.ts), as they
+ * were fetched each day: a replay runs them on from the day's. Kept a little
+ * longer than replays go back.
+ */
+export const satellites = collection("satellites", 1, {
+  sk: time,
+  data: z.object({ orbits: z.array(orbit) }),
+  ttl: 35 * DAY,
 });

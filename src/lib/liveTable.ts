@@ -123,3 +123,14 @@ export async function readNewest<C extends Collection>(
 
   return record ?? null;
 }
+
+/** `c`'s oldest item; null if there's none, or it isn't one `c` reads. */
+export async function readOldest<C extends Collection>(c: C) {
+  const [record] = await query(c, {
+    KeyConditionExpression: "pk = :pk",
+    ExpressionAttributeValues: { ":pk": { S: c.pk } },
+    Limit: 1,
+  });
+
+  return record ?? null;
+}

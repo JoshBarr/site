@@ -19,6 +19,7 @@
     "next-mdx-remote": "^6.0.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",
+    "satellite.js": "7.1.0",
     "three": "0.187.0",
     "typescript": "7.0.2",
     "yaml": "^2.8.1",

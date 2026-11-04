@@ -2,7 +2,7 @@
 // timezone and across daylight saving. NOAA general solar position equations:
 // https://gml.noaa.gov/grad/solcalc/solareqns.PDF (accurate to ~0.1°).
 
-const WELLINGTON = { latitude: -41.2865, longitude: 174.7762 };
+export const WELLINGTON = { latitude: -41.2865, longitude: 174.7762 };
 
 const RAD = Math.PI / 180;
 
