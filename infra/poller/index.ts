@@ -10,9 +10,10 @@ import { makeFeeds } from "./feeds";
 import { pollMinute } from "./minute";
 import { LiveBucket, publisher } from "./positions";
 import { LiveTable } from "./table";
+import { counter } from "./timeline";
 
-// Polls the live feeds into DynamoDB every minute, and publishes what the
-// site serves to S3 (see plans/infra.md and plans/dynamo.md). The
+// Polls the live feeds into DynamoDB every minute, counts what's out for
+// the timeline, and publishes what the site serves to S3 (see plans/infra.md and plans/dynamo.md). The
 // constructor runs once per container, and at deploy, when the bindings and
 // schedule below become IAM grants, env vars and an EventBridge schedule.
 
@@ -55,7 +56,12 @@ export default class Poller extends AWS.Lambda.Function<Poller>()(
     });
 
     const made = yield* makeFeeds;
-    const feeds = [...Object.values(made.logs), yield* publisher(made)];
+
+    const feeds = [
+      ...Object.values(made.logs),
+      yield* counter(made),
+      yield* publisher(made),
+    ];
 
     // src/lib looks for its keys in process.env.
     const useKeys = Effect.sync(() => {

@@ -3,7 +3,11 @@ import dynamic from "next/dynamic";
 import SEO from "../components/seo";
 import { FollowPanel } from "../components/scene/follow/FollowPanel";
 import { ShotPanel } from "../components/scene/shots/ShotPanel";
-import { TimePanel } from "../components/scene/time/TimePanel";
+import {
+  PANEL_HEIGHT,
+  TAB_HEIGHT,
+  TimeTravel,
+} from "../components/scene/time/TimeTravel";
 
 // Full-viewport development page for the homepage scene.
 const WellingtonScene = dynamic(
@@ -14,6 +18,7 @@ const WellingtonScene = dynamic(
 
 const ScenePage: React.FC = () => {
   const [clouds, setClouds] = useState(true);
+  const [travelling, setTravelling] = useState(false);
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "#141414" }}>
@@ -43,9 +48,15 @@ const ScenePage: React.FC = () => {
         />
         Clouds
       </label>
-      <FollowPanel />
+      <FollowPanel
+        style={{
+          // Clear of the time-travel tab, and its drawer when it's open.
+          bottom: TAB_HEIGHT + 12 + (travelling ? PANEL_HEIGHT : 0),
+          transition: "bottom 380ms cubic-bezier(0.2, 0.8, 0.2, 1)",
+        }}
+      />
       <ShotPanel />
-      <TimePanel style={{ top: 56 }} />
+      <TimeTravel open={travelling} onOpenChange={setTravelling} />
     </div>
   );
 };

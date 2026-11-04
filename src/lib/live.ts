@@ -11,6 +11,7 @@ import {
   routePrefix,
   routes,
   tide,
+  timeline,
   traffic,
   trains,
   vessels,
@@ -20,6 +21,7 @@ import { canRead, readNewest, readSince } from "./liveTable";
 import { loadPositions, type Positions } from "./positions";
 import type { Quake } from "./quakes";
 import type { Tide } from "./tide";
+import { nextDay, nzMidnight, type TimelineDay, toDay } from "./timeline";
 import type { TrafficResponse } from "./traffic";
 import { type Train, TRAIL } from "./trains";
 import { foldTrains } from "./trainStore";
@@ -268,3 +270,20 @@ export const loadTide = (at?: number): Promise<Tide | null> =>
     (positions) => positions.tide,
     at
   );
+
+/**
+ * The timeline (./timeline.ts) for the NZ date `day`: its hours, and the
+ * one after, for quakes reported just after midnight. Only in the table:
+ * nothing's published for it.
+ */
+export async function loadTimelineDay(day: string): Promise<TimelineDay> {
+  if (!canRead()) throw new Error("no table to read the timeline from");
+
+  const hours = await readSince(
+    timeline,
+    nzMidnight(day),
+    nzMidnight(nextDay(day))
+  );
+
+  return toDay(day, hours);
+}

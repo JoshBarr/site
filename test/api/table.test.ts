@@ -6,15 +6,18 @@ import {
   routes,
   sortTime,
   tide,
+  timeline,
   traffic,
   trains,
   vessels,
   weather,
 } from "../../src/lib/liveRecords";
+import { HOUR, nzMidnight } from "../../src/lib/timeline";
 import type { Vessel } from "../../src/lib/vessels";
 import * as flightsRoute from "../../src/pages/api/flights";
 import * as quakesRoute from "../../src/pages/api/quakes";
 import * as tideRoute from "../../src/pages/api/tide";
+import * as timelineRoute from "../../src/pages/api/timeline";
 import * as trafficRoute from "../../src/pages/api/traffic";
 import * as trainsRoute from "../../src/pages/api/trains";
 import * as vesselsRoute from "../../src/pages/api/vessels";
@@ -387,6 +390,76 @@ describe("the live API routes, from the table", () => {
       ["that isn't one", "yesterday"],
     ])("refuse a time %s", async (_, at) => {
       const response = await call(trainsRoute, `/?at=${at}`);
+
+      expect(response.status).toBe(400);
+      expect(table.queries).toHaveLength(0);
+    });
+  });
+
+  describe("the timeline", () => {
+    /** Twelve slots, with `value` in the first. */
+    const first = (value: number) => [value, ...Array<number>(11).fill(0)];
+
+    it("serve a day, each slot's mean, briefly cached while it's today", async () => {
+      // NOW is 8 pm on 2 November, NZ time.
+      const start = nzMidnight("2026-11-02");
+
+      table.seed(timeline, start + 8 * HOUR, {
+        sums: { buses: first(290) },
+        counts: { buses: first(2) },
+        quakes: [],
+      });
+      // The day before.
+      table.seed(timeline, start - HOUR, {
+        sums: { buses: first(20) },
+        counts: { buses: first(1) },
+        quakes: [],
+      });
+
+      const response = await call(timelineRoute, "/?day=2026-11-02");
+      const day = await response.json();
+
+      expect(day).toMatchObject({
+        day: "2026-11-02",
+        start,
+        end: start + 24 * HOUR,
+        quakes: [],
+      });
+      expect(day.series.buses[8 * 12]).toBe(145);
+      expect(
+        day.series.buses.filter((mean: number | null) => mean !== null)
+      ).toHaveLength(1);
+      expect(response.headers.get("cache-control")).toBe(
+        "public, s-maxage=60, stale-while-revalidate=300"
+      );
+
+      // One query, from the day's first hour to the one after its last.
+      expect(table.queries).toHaveLength(1);
+      expect(table.queries[0].ExpressionAttributeValues[":to"]).toEqual({
+        S: sortTime(start + 24 * HOUR),
+      });
+    });
+
+    it("cache a day that's done for an hour at a time", async () => {
+      table.seed(timeline, nzMidnight("2026-10-30"), {
+        sums: { trains: first(12) },
+        counts: { trains: first(1) },
+        quakes: [],
+      });
+
+      const response = await call(timelineRoute, "/?day=2026-10-30");
+
+      expect(response.headers.get("cache-control")).toBe(
+        "public, s-maxage=3600, stale-while-revalidate=86400"
+      );
+    });
+
+    it.each([
+      ["further back than replays go", "2026-09-30"],
+      ["yet to come", "2026-11-03"],
+      ["that isn't one", "yesterday"],
+    ])("refuse a day %s", async (_, day) => {
+      const response = await call(timelineRoute, `/?day=${day}`);
 
       expect(response.status).toBe(400);
       expect(table.queries).toHaveLength(0);

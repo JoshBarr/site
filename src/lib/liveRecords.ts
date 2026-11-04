@@ -8,6 +8,7 @@ import type { Quake } from "./quakes";
 import { point, trailPoint } from "./schemas";
 import type { TrafficSpeeds } from "./traffic";
 import type { Tide } from "./tide";
+import { METRICS, SLOTS, type TimelineHour } from "./timeline";
 import type { Train } from "./trains";
 import type { Vessel } from "./vessels";
 import type { Conditions } from "./weather";
@@ -224,6 +225,7 @@ export const conditions = z.object({
   visibility: z.number(),
   humidity: z.number(),
   precipitation: z.number(),
+  temperature: z.number().nullable().optional(),
   wind,
   windAloft: wind,
 }) satisfies z.ZodType<Conditions>;
@@ -317,4 +319,31 @@ export const cableCar = collection("cablecar", 1, {
   sk: key("timetable"),
   data: timetable,
   ttl: 365 * DAY,
+});
+
+const slots = z.array(z.number()).length(SLOTS);
+
+const timelineHour = z.object({
+  sums: z.partialRecord(z.enum(METRICS), slots),
+  counts: z.partialRecord(z.enum(METRICS), slots),
+  quakes: z.array(
+    z.object({
+      id: z.string(),
+      time: z.number(),
+      magnitude: z.number(),
+      depth: z.number(),
+      locality: z.string(),
+    })
+  ),
+}) satisfies z.ZodType<TimelineHour>;
+
+/**
+ * An hour of the time-travel timeline (./timeline.ts), by when it began:
+ * rewritten each minute with that minute added. Kept for a year, though
+ * replays only go back 30 days: it's ~1 KB an hour.
+ */
+export const timeline = collection("timeline", 1, {
+  sk: time,
+  data: timelineHour,
+  ttl: 366 * DAY,
 });

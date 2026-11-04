@@ -14,6 +14,11 @@ export interface Conditions {
   humidity: number;
   /** mm/h. */
   precipitation: number;
+  /**
+   * °C at 2 m. Missing from conditions logged before it was asked for, and
+   * null when MetService has none.
+   */
+  temperature?: number | null;
   /** At 10m: drives the sea. Direction is where the wind blows from. */
   wind: { speed: number; direction: number };
   /** At 100m: drives the clouds. */
@@ -26,6 +31,7 @@ const CONDITION_VARIABLES = [
   "air.visibility",
   "air.humidity.at-2m",
   "precipitation.rate",
+  "air.temperature.at-2m",
   "wind.speed.at-10m",
   "wind.direction.at-10m",
   "wind.speed.at-100m",
@@ -80,6 +86,9 @@ export async function getConditions(): Promise<Conditions | null> {
     const value = (name: string): number | null =>
       variables[name]?.data[0] ?? null;
 
+    // MetOcean gives it in kelvin.
+    const kelvin = value("air.temperature.at-2m");
+
     return {
       time: hour.toISOString(),
       cloudCover: (value("cloud.cover") ?? 0) / 100,
@@ -87,6 +96,7 @@ export async function getConditions(): Promise<Conditions | null> {
       visibility: value("air.visibility") ?? 30000,
       humidity: (value("air.humidity.at-2m") ?? 70) / 100,
       precipitation: value("precipitation.rate") ?? 0,
+      temperature: kelvin === null ? null : kelvin - 273.15,
       wind: {
         speed: value("wind.speed.at-10m") ?? 5,
         direction: value("wind.direction.at-10m") ?? 340,

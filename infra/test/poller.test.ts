@@ -12,12 +12,14 @@ import {
   routes,
   quakes,
   tide,
+  timeline,
   traffic,
   trains,
   vessels,
   weather,
 } from "../../src/lib/liveRecords";
 import { toNztm } from "../../src/lib/nztm";
+import { HOUR, hourOf } from "../../src/lib/timeline";
 import { ago, freezeTime, NOW } from "../../test/clock";
 import {
   adsb,
@@ -34,6 +36,7 @@ import { Feed, makeFeeds } from "../poller/feeds";
 import { pollMinute } from "../poller/minute";
 import { KEY, LiveBucket, publisher } from "../poller/positions";
 import { LiveTable } from "../poller/table";
+import { counter } from "../poller/timeline";
 import { makeBucket } from "./bucket";
 import { makeTable } from "./table";
 
@@ -1120,5 +1123,66 @@ describe("a minute's polling", () => {
     });
 
     expect(reported.sort()).toEqual(["failing", "trains"]);
+  });
+});
+
+describe("the timeline counter", () => {
+  beforeEach(() => {
+    table = makeTable();
+    bucket = makeBucket();
+    freezeTime();
+    vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+
+  /** The trains feed and the counter, as a newly started container has them. */
+  async function coldStart() {
+    const made = await Effect.runPromise(makeFeeds);
+
+    return {
+      trains: made.logs.trains,
+      count: await Effect.runPromise(counter(made)),
+    };
+  }
+
+  it("adds each minute's count to the hour's item", async () => {
+    metlink(atStation(10));
+    const { trains, count } = await coldStart();
+
+    await run(trains.poll);
+    await run(count.poll);
+
+    // Another container, cold, the next minute: it reads what's there.
+    freezeTime(NOW + 60_000);
+    await run((await coldStart()).count.poll);
+
+    const [hour] = table.records(timeline);
+    const slot = Math.floor((NOW - hourOf(NOW)) / 300_000);
+
+    expect(hour.sk).toBe(hourOf(NOW));
+    expect(hour.expires).toBe(Math.floor((NOW + 60_000) / 1000) + 366 * DAY);
+    expect(hour.data.counts.trains?.[slot]).toBe(2);
+    expect(hour.data.sums.trains?.[slot]).toBe(2);
+    // Nothing polled, nothing known.
+    expect(hour.data.sums.buses).toBeUndefined();
+  });
+
+  it("starts a new item each hour", async () => {
+    metlink(atStation(10));
+    const { trains, count } = await coldStart();
+
+    await run(trains.poll);
+    await run(count.poll);
+    freezeTime(hourOf(NOW) + HOUR + 1_000);
+    await run(count.poll);
+
+    const hours = table.records(timeline);
+
+    expect(hours.map(({ sk }) => sk)).toEqual([
+      hourOf(NOW),
+      hourOf(NOW) + HOUR,
+    ]);
+    // Its fix is stale by then.
+    expect(hours[1].data.sums.trains?.[0]).toBe(0);
+    expect(hours[1].data.counts.trains?.[0]).toBe(1);
   });
 });
