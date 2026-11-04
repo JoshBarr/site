@@ -91,6 +91,15 @@ describe("folding the logs", () => {
     ]);
   });
 
+  it("keeps a quiet bus's own fix as its trail, though it's older than the trail", () => {
+    // Heard from four minutes ago: past the 3 min trail, short of stale.
+    const [folded] = foldBuses([
+      { sk: ago(5), data: { buses: [bus(STATION, 240)] } },
+    ]);
+
+    expect(folded.trail).toEqual([[...STATION, ago(240)]]);
+  });
+
   describe("vessels", () => {
     const ferry = (
       trail: [number, number, number][],

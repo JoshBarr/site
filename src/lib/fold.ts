@@ -48,8 +48,12 @@ export function foldTrails<T extends Fixed>(
   }
 
   return (polls.at(-1) ?? []).map((latest) => {
+    // Its own fix always, even from before `since`: a vehicle that's gone
+    // quiet but isn't stale yet still has its position.
     const earlier = (fixes.get(latest.id) ?? [])
-      .filter(({ time }) => time > since && time <= latest.time)
+      .filter(
+        (fix) => fix === latest || (fix.time > since && fix.time <= latest.time)
+      )
       .sort((a, b) => a.time - b.time);
 
     const cut = earlier.findLastIndex((fix) => !sameRun(fix, latest));

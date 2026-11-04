@@ -306,6 +306,9 @@ export function follow(
   epoch: number,
   heightAt: HeightQuery | null
 ): Run | null {
+  // Nothing to place it by.
+  if (!bus.trail.length) return null;
+
   let fixes: Fix[] = bus.trail.map(([e, n, time]) => [
     ...nztmToWorld(index.manifest, e, n),
     (time - epoch) / 1000,
