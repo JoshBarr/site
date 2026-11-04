@@ -7,7 +7,7 @@ import React, {
   useState,
 } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { CameraControls } from "@react-three/drei";
+import { CameraControls, CameraControlsImpl } from "@react-three/drei";
 import {
   Box3,
   DirectionalLight,
@@ -68,6 +68,7 @@ import { updateLens } from "./lens";
 import { DEFAULT_FOV, flightFor, FollowRig, smootherstep } from "./follow/rig";
 import {
   followVehicle,
+  Following,
   getSnapshot,
   stop as stopFollowing,
   vehiclesAt,
@@ -216,14 +217,42 @@ interface ViewFlight {
 
 const flown: [Vector3, Vector3] = [new Vector3(), new Vector3()];
 
+/** Where the pivot's going, looking around a vehicle, and by how much. */
+const carried: [Vector3, Vector3] = [new Vector3(), new Vector3()];
+
 /** Handing back from following, the orbit target's this far off, m. */
 const HAND_BACK: [number, number] = [50, 2000];
+
+/** Seconds for the pivot to settle most of the way onto a vehicle looked around. */
+const PIVOT = 0.6;
+
+/**
+ * Looking around a vehicle in the air, lowest the camera may look up at it
+ * from. One on the ground is looked at from no lower than itself.
+ */
+const LOOK_POLAR_ANGLE = Math.PI * 0.95;
+
+const keyOf = ({ category, id }: Following) => `${category}:${id}`;
+
+type Controller = React.ComponentRef<typeof CameraControls>;
+
+const { ACTION } = CameraControlsImpl;
+
+/**
+ * Looking around a vehicle every drag turns about it: panning off it would
+ * only be pulled back onto it.
+ */
+function turnAbout(c: Controller, around: boolean) {
+  c.mouseButtons.right = around ? ACTION.ROTATE : ACTION.TRUCK;
+  c.touches.two = around ? ACTION.TOUCH_DOLLY_ROTATE : ACTION.TOUCH_DOLLY_TRUCK;
+  c.touches.three = around ? ACTION.TOUCH_ROTATE : ACTION.TOUCH_TRUCK;
+}
 
 /**
  * Keeps the orbit target well inside the terrain so the edge fade stays
  * distant, and the camera above ground. Following a vehicle, the follow rig
- * has the camera instead, without those limits, until it's stopped or the
- * map's touched.
+ * has the camera instead, without those limits, until it's stopped. Touching
+ * the map then turns and zooms about the vehicle, carried along with it.
  */
 function Controls({
   index,
@@ -275,7 +304,7 @@ function Controls({
     [half]
   );
 
-  const controls = useRef<React.ComponentRef<typeof CameraControls>>(null);
+  const controls = useRef<Controller>(null);
   const orbit = useMemo(() => new Vector3(), []);
   const renderer = useRenderer();
 
@@ -302,6 +331,12 @@ function Controls({
   /** Whether the rig has the camera. */
   const followingRef = useRef(false);
 
+  /**
+   * Looking around the followed vehicle by hand: which it is, and how far
+   * off it the pivot still is, from where the rig was aiming.
+   */
+  const lookingAround = useRef<{ key: string; offset: Vector3 } | null>(null);
+
   /** Whether the view's been set, and since moved by hand. */
   const placed = useRef(false);
   const touched = useRef(false);
@@ -315,6 +350,7 @@ function Controls({
 
     if (!c || !followingRef.current) return;
     followingRef.current = false;
+    lookingAround.current = null;
     const { camera } = c;
     c.minDistance = MIN_DISTANCE;
     c.maxDistance = MAX_DISTANCE;
@@ -322,10 +358,11 @@ function Controls({
     c.boundaryEnclosesCamera = true;
     c.setBoundary(boundary);
     c.enabled = true;
+    turnAbout(c, false);
 
     // Orbiting what it was looking at, no higher than the camera.
     const distance = Math.min(
-      Math.max(camera.position.distanceTo(rig.shot.target), HAND_BACK[0]),
+      Math.max(camera.position.distanceTo(c.getTarget(orbit)), HAND_BACK[0]),
       HAND_BACK[1]
     );
 
@@ -334,20 +371,46 @@ function Controls({
     orbit.y = Math.min(orbit.y, camera.position.y);
     const { x, y, z } = camera.position;
     c.setLookAt(x, y, z, orbit.x, orbit.y, orbit.z, false);
-  }, [boundary, rig, orbit]);
+  }, [boundary, orbit]);
 
-  // Touching the map takes the camera back, and carries on as that drag or
-  // zoom: this runs before the controls see the event.
+  // Turning about the followed vehicle by hand, from where the rig had the
+  // camera, the pivot sliding over onto the vehicle from what it aimed at.
+  const lookAround = useCallback(() => {
+    const c = controls.current;
+    const { following } = getSnapshot();
+
+    if (
+      !c ||
+      !following ||
+      !followingRef.current ||
+      !rig.tracking ||
+      lookingAround.current
+    ) {
+      return;
+    }
+
+    const { position: p, target: t } = rig.shot;
+    lookingAround.current = {
+      key: keyOf(following),
+      offset: t.clone().sub(rig.at),
+    };
+    c.setLookAt(p.x, p.y, p.z, t.x, t.y, t.z, false);
+    // No nearer than a length off its middle.
+    c.minDistance = Math.max(rig.length, MIN_DISTANCE);
+    c.maxDistance = MAX_DISTANCE;
+    c.enabled = true;
+    turnAbout(c, true);
+  }, [rig]);
+
+  // Touching the map while following looks around the vehicle, and carries
+  // on as that drag or zoom: this runs before the controls see the event.
   useEffect(() => {
     const element = events ?? renderer.domElement;
 
     const take = () => {
       touched.current = true;
       flight.current = null;
-
-      if (!getSnapshot().following) return;
-      stopFollowing();
-      handBack();
+      lookAround();
     };
 
     const keys = (e: KeyboardEvent) => {
@@ -464,7 +527,7 @@ function Controls({
       disposed = true;
       element.style.cursor = "";
     };
-  }, [events, renderer, handBack]);
+  }, [events, renderer, lookAround]);
 
   // Set views, picked from the shot panel, and the view now, for copying.
   useEffect(
@@ -545,8 +608,30 @@ function Controls({
     if (!(camera instanceof PerspectiveCamera)) return;
 
     const shot = rig.update(camera, delta);
+    const { following } = getSnapshot();
 
-    if (shot) {
+    // On to another vehicle: the rig has the camera again.
+    if (
+      lookingAround.current &&
+      following &&
+      lookingAround.current.key !== keyOf(following)
+    ) {
+      lookingAround.current = null;
+      followingRef.current = false;
+    }
+
+    const around = shot && lookingAround.current;
+
+    if (around) {
+      // Carried along with it, turned about it by hand.
+      c.maxPolarAngle = rig.ground ? MAX_POLAR_ANGLE : LOOK_POLAR_ANGLE;
+      around.offset.multiplyScalar(Math.exp(-delta / PIVOT));
+      const pivot = carried[0].copy(rig.at).add(around.offset);
+      const move = carried[1].subVectors(pivot, c.getTarget(orbit, false));
+      c.moveTo(pivot.x, pivot.y, pivot.z, false);
+      // The controls have already placed it this frame.
+      camera.position.add(move);
+    } else if (shot) {
       if (!followingRef.current) {
         // Out of the orbit's limits: landings are watched from the ground,
         // looking up, and aircraft fly off the edge of the map.
@@ -557,6 +642,7 @@ function Controls({
         c.maxDistance = Infinity;
         c.maxPolarAngle = Math.PI;
         c.enabled = false;
+        turnAbout(c, false);
       }
 
       // Straight onto the camera for this frame, and into the controls so
@@ -604,6 +690,8 @@ function Controls({
       camera.updateProjectionMatrix();
     }
 
+    // What the camera's aimed at: the rig's, unless the controls have it.
+    const aim = shot && !around ? shot.target : c.getTarget(orbit);
     const ground = heightAt.current(camera.position.x, camera.position.z);
 
     if (ground === undefined) return;
@@ -616,9 +704,9 @@ function Controls({
       // The controls only move the camera when they update, and they've
       // already done that this frame: without lifting it here too, every
       // frame of a drag into a hillside renders from under the ground.
-      if (!shot) c.setPosition(x, allowed, z, false);
+      if (!shot || around) c.setPosition(x, allowed, z, false);
       camera.position.y = allowed;
-      camera.lookAt(shot?.target ?? c.getTarget(orbit));
+      camera.lookAt(aim);
     }
 
     // Pull the near plane in when low so nearby waves and ground aren't cut
@@ -633,7 +721,7 @@ function Controls({
       camera.updateProjectionMatrix();
     }
 
-    updateLens(renderer, camera, shot?.target ?? c.getTarget(orbit), delta);
+    updateLens(renderer, camera, aim, delta);
   }, CAMERA_PRIORITY);
 
   return (

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import {
   AdditiveBlending,
@@ -58,6 +58,7 @@ import { loadRoads, Place, Roads } from "./roads";
 import { highways } from "./shared";
 import { Traffic as TrafficSim } from "./sim";
 import { overrideFromUrl } from "./speeds";
+import { useHolidays } from "./useHolidays";
 import { useTraffic } from "./useTraffic";
 
 /**
@@ -377,7 +378,8 @@ function Vehicles({
   lights: number;
   time: Date;
 }) {
-  const { speeds, ready } = useTraffic();
+  const { speeds, ready, seek } = useTraffic();
+  const { holidays, ready: knowHolidays } = useHolidays(time);
 
   const mobile = useMemo(
     () => window.matchMedia("(pointer: coarse)").matches,
@@ -411,10 +413,25 @@ function Vehicles({
   // The time of day, to the quarter hour: how busy it should be.
   const quarter = Math.floor(time.getTime() / (15 * 60_000));
 
+  // The clock's setting the roads were filled for: jumped, they're filled
+  // again once the speeds for then are in, not left to drain or fill slowly.
+  const filledFor = useRef(seek);
+
   useEffect(() => {
-    if (!ready) return;
-    traffic.setConditions(speeds, override, new Date(quarter * 15 * 60_000));
-  }, [traffic, speeds, ready, override, quarter]);
+    if (!ready || !knowHolidays) return;
+
+    if (seek !== filledFor.current) {
+      filledFor.current = seek;
+      traffic.refill();
+    }
+
+    traffic.setConditions(
+      speeds,
+      override,
+      new Date(quarter * 15 * 60_000),
+      holidays
+    );
+  }, [traffic, speeds, ready, seek, override, quarter, holidays, knowHolidays]);
 
   useEffect(
     () => () => {

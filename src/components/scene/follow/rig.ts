@@ -185,7 +185,10 @@ export class FollowRig {
   private lost = 0;
   /** The shot's heading, swinging round after the subject's. */
   private heading = 0;
-  private last = new Vector3();
+  /** Where the subject was last seen, how long it is, and if it's on the ground. */
+  readonly at = new Vector3();
+  length = 10;
+  ground = true;
   private mode: PlaneMode | null = null;
   /** On the shot, eased. */
   private rig = shot();
@@ -203,6 +206,11 @@ export class FollowRig {
     private floorAt: FloorAt
   ) {
     this.runway = runwayIn(toWorld);
+  }
+
+  /** Whether the subject's been seen since it was picked. */
+  get tracking() {
+    return this.ready;
   }
 
   /** The shot for this frame, or null with nothing followed. */
@@ -245,16 +253,18 @@ export class FollowRig {
 
     subject.fresh = false;
     this.lost = 0;
+    this.length = subject.length;
+    this.ground = subject.ground;
 
     if (!this.ready) {
       this.ready = true;
-      this.last.set(subject.x, subject.y, subject.z);
+      this.at.set(subject.x, subject.y, subject.z);
       this.heading = subject.heading;
       // Still looking the way it was, as far off as the subject.
       look.subVectors(this.from.target, this.from.position);
       this.from.target
         .copy(this.from.position)
-        .addScaledVector(look, this.from.position.distanceTo(this.last));
+        .addScaledVector(look, this.from.position.distanceTo(this.at));
       this.aim();
       this.rig.position.copy(this.wanted.position);
       this.rig.target.copy(this.wanted.target);
@@ -265,8 +275,8 @@ export class FollowRig {
       ));
     } else {
       this.time += delta;
-      move.set(subject.x, subject.y, subject.z).sub(this.last);
-      this.last.add(move);
+      move.set(subject.x, subject.y, subject.z).sub(this.at);
+      this.at.add(move);
       this.heading +=
         wrap(subject.heading - this.heading) * ease(delta, TURN[this.category]);
       this.aim();

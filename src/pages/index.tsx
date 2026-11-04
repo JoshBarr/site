@@ -52,7 +52,7 @@ const SCENE_CREDITS = (
     <a className="theme-link" href="https://opendata.metlink.org.nz">
       Metlink
     </a>
-    , and traffic speeds from{" "}
+    , and traffic speeds and counts from{" "}
     <a
       className="theme-link"
       href="https://www.nzta.govt.nz/traffic-and-travel-information/use-our-data/"

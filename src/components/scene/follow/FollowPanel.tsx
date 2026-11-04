@@ -30,7 +30,8 @@ const button: React.CSSProperties = {
 /**
  * Pick a kind of vehicle and the camera follows one of them, chosen at
  * random, or click one on the map; Next moves on to another. Cut jumps straight to each instead of
- * flying there. Touching the map, Esc or × hands the camera back.
+ * flying there. Dragging or zooming the map turns about the one followed;
+ * Esc or Stop following hands the camera back.
  */
 export const FollowPanel: React.FC<{ style?: React.CSSProperties }> = ({
   style,
@@ -117,10 +118,10 @@ export const FollowPanel: React.FC<{ style?: React.CSSProperties }> = ({
           <button
             type="button"
             onClick={stop}
-            aria-label="Stop following"
+            title="Back to moving the camera freely (Esc)"
             style={button}
           >
-            ×
+            Stop following
           </button>
         </>
       )}

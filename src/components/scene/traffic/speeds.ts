@@ -20,26 +20,49 @@ export const HEADWAY = 1.2;
 const MEAN_LENGTH = 5;
 
 /**
- * Free-flowing traffic per lane, vehicles an hour, by hour from midnight:
- * weekdays toward the city and away from it, and weekends either way. A
- * guess with the shape of Wellington's commute, not counts.
+ * Traffic per lane, vehicles an hour, each hour from midnight, as NZTA's
+ * counters (TMS, CC BY 4.0) had it in June 2024, a month of NZ standard
+ * time, so local. On the commuter motorways north of the city (SH1 at Tawa
+ * and Newlands, SH2 north of Ngauranga in; SH1 and SH2 at Ngauranga and
+ * the Terrace Tunnel out), weekdays toward the city and away from it, and
+ * weekends either way: the morning comes in early from Porirua and the
+ * Hutt, busiest from 6 to 7 at Tawa.
  */
-const WEEKDAY_IN = [
-  60, 40, 30, 30, 50, 200, 800, 1500, 1500, 1000, 800, 800, 850, 850, 900, 1000,
-  1100, 1100, 800, 550, 400, 330, 220, 120,
+const COMMUTE_IN = [
+  40, 30, 40, 70, 110, 340, 1130, 1290, 1160, 920, 780, 780, 760, 770, 820, 890,
+  1010, 940, 620, 400, 320, 260, 160, 90,
 ];
 
-const WEEKDAY_OUT = [
-  60, 40, 30, 30, 40, 120, 450, 850, 900, 800, 800, 800, 850, 850, 950, 1200,
-  1500, 1500, 1000, 600, 450, 350, 230, 120,
+const COMMUTE_OUT = [
+  60, 30, 30, 30, 50, 120, 360, 720, 740, 610, 580, 640, 710, 740, 860, 830,
+  880, 770, 740, 550, 460, 360, 200, 120,
 ];
 
-const WEEKEND = [
-  120, 80, 60, 40, 40, 80, 180, 300, 500, 700, 850, 950, 950, 950, 950, 900,
-  850, 800, 650, 500, 400, 330, 250, 180,
+const COMMUTE_WEEKEND = [
+  120, 80, 60, 60, 60, 80, 170, 260, 400, 600, 760, 860, 920, 920, 910, 900,
+  860, 740, 560, 420, 340, 280, 200, 130,
 ];
 
-/** Where "toward the city" is toward: Lambton Quay, NZTM. */
+/**
+ * South of the city, through Te Aro and out to the airport: the shape of
+ * Ruahine St, Calabar Rd, Patterson St and Vivian St, either way, at the
+ * mean of those, Cobham Dr's and Arthur St's weekday counts. Busy all day,
+ * but later in the morning than the motorways.
+ */
+const CITY_WEEKDAY = [
+  90, 50, 30, 70, 120, 240, 520, 780, 850, 770, 720, 740, 790, 780, 800, 860,
+  840, 830, 810, 690, 550, 400, 250, 150,
+];
+
+const CITY_WEEKEND = [
+  190, 130, 90, 110, 130, 120, 190, 390, 520, 640, 760, 850, 860, 860, 860, 860,
+  820, 790, 710, 570, 440, 340, 260, 180,
+];
+
+/**
+ * Where "toward the city" is toward, and south of which traffic's the
+ * city's: Lambton Quay, NZTM.
+ */
 const CITY: [number, number] = [1748700, 5427800];
 
 /**
@@ -58,20 +81,40 @@ const NARROWS = 600;
 /** Slowest any traffic's shown going, m/s: a crawl, not a car park. */
 const CRAWL = 1.5;
 
-/** How busy the hour is, per lane, vehicles a second. */
-function demand(date: Date, inbound: boolean) {
+/**
+ * How busy it is, per lane, vehicles a second: between the hours' counts,
+ * each an average over its hour, so at its middle. Public holidays
+ * ("YYYY-MM-DD") are as quiet as weekends.
+ */
+function demand(
+  date: Date,
+  holidays: ReadonlySet<string> | null,
+  inbound: boolean,
+  city: boolean
+) {
   const parts = new Intl.DateTimeFormat("en-NZ", {
     timeZone: "Pacific/Auckland",
     weekday: "short",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
     hour: "numeric",
     minute: "numeric",
     hourCycle: "h23",
   }).formatToParts(date);
 
   const get = (type: string) => parts.find((p) => p.type === type)!.value;
-  const weekend = ["Sat", "Sun"].includes(get("weekday"));
-  const profile = weekend ? WEEKEND : inbound ? WEEKDAY_IN : WEEKDAY_OUT;
-  const hour = Number(get("hour")) + Number(get("minute")) / 60;
+  const day = `${get("year")}-${get("month")}-${get("day")}`;
+
+  const weekend =
+    ["Sat", "Sun"].includes(get("weekday")) || !!holidays?.has(day);
+
+  let profile = inbound ? COMMUTE_IN : COMMUTE_OUT;
+
+  if (city) profile = weekend ? CITY_WEEKEND : CITY_WEEKDAY;
+  else if (weekend) profile = COMMUTE_WEEKEND;
+
+  const hour = Number(get("hour")) + Number(get("minute")) / 60 + 23.5;
   const a = profile[Math.floor(hour) % 24];
   const b = profile[(Math.floor(hour) + 1) % 24];
 
@@ -101,10 +144,14 @@ const smoothstep = (a: number, b: number, x: number) => {
   return t * t * (3 - 2 * t);
 };
 
-/** A carriageway's bins: which way's the city, lanes, and the limit. */
+/**
+ * A carriageway's bins: which way's the city and whether they're south of
+ * it, lanes, and the limit.
+ */
 export interface Bins {
   count: number;
   inbound: Uint8Array;
+  city: Uint8Array;
   lanes: Uint8Array;
   /** The fewest lanes within NARROWS. */
   narrows: Uint8Array;
@@ -119,6 +166,7 @@ export function createBins(road: Carriageway, index: TileIndex): Bins {
   const bins: Bins = {
     count,
     inbound: new Uint8Array(count),
+    city: new Uint8Array(count),
     lanes: new Uint8Array(count),
     narrows: new Uint8Array(count),
     limit: new Float32Array(count),
@@ -133,6 +181,7 @@ export function createBins(road: Carriageway, index: TileIndex): Bins {
     const tx = road.x[i + 1] - road.x[i];
     const tz = road.z[i + 1] - road.z[i];
     bins.inbound[b] = tx * (cx - road.x[i]) + tz * (cz - road.z[i]) > 0 ? 1 : 0;
+    bins.city[b] = road.z[i] > cz ? 1 : 0;
     bins.lanes[b] = road.lanes[i];
     bins.limit[b] = road.limit[i];
     bins.town[b] = road.limit[i] <= 50 / 3.6 + 0.1 ? 1 : 0;
@@ -257,14 +306,21 @@ export function fillDensity(
   bins: Bins,
   speed: Float32Array,
   date: Date,
+  holidays: ReadonlySet<string> | null,
   density: Float32Array,
   eager: Float32Array
 ) {
-  const flow = [demand(date, false), demand(date, true)];
+  const commute = [
+    demand(date, holidays, false, false),
+    demand(date, holidays, true, false),
+  ];
+
+  const city = demand(date, holidays, false, true);
 
   for (let b = 0; b < bins.count; b++) {
     const v = speed[b];
-    const q = (flow[bins.inbound[b]] * bins.narrows[b]) / bins.lanes[b];
+    const busy = bins.city[b] ? city : commute[bins.inbound[b]];
+    const q = (busy * bins.narrows[b]) / bins.lanes[b];
     const queue = queueDensity(v);
     const free = Math.min(q / Math.max(v, CRAWL), queue);
     const freeSpeed = bins.limit[b] * (bins.town[b] ? TOWN_FREE : 0.95);

@@ -28,6 +28,7 @@ const TYRE = 0x1e1e1e;
 export const RIDE_HEIGHT: Record<Shape, number> = {
   jet: 0.11,
   prop: 0.08,
+  twin: 0.12,
   light: 0.13,
   helicopter: 0.156,
 };
@@ -412,7 +413,7 @@ const PROP_DETAILED: Ring[] = [
   [0.5, 0.008, 0.04],
 ];
 
-/** Twin turboprop or piston twin: high straight wing, T-tail. */
+/** Regional turboprop, a Dash 8 or ATR: high straight wing, T-tail. */
 export function createPropGeometry(detailed = false, { gear }: Detail = {}) {
   const b = new ModelBuilder();
   b.sides = detailed ? 16 : 8;
@@ -468,6 +469,132 @@ export function createPropGeometry(detailed = false, { gear }: Detail = {}) {
 
     for (const x of [-0.17, 0.17])
       leg(b, ground, [x, 0.01, -0.06], 0.012, 0.008, 0.004);
+  }
+
+  return b.build();
+}
+
+const TWIN: Ring[] = [
+  [-0.5, 0.006, -0.012],
+  [-0.46, 0.035, -0.008],
+  [-0.37, 0.054, 0],
+  [0.12, 0.058, 0.002],
+  [0.38, 0.03, 0.025],
+  [0.5, 0.012, 0.035],
+];
+
+const TWIN_DETAILED: Ring[] = [
+  [-0.5, 0.006, -0.012],
+  [-0.485, 0.022, -0.01],
+  [-0.46, 0.035, -0.008],
+  [-0.42, 0.045, -0.004],
+  [-0.37, 0.054, 0],
+  [-0.33, 0.058, 0.002],
+  [0.12, 0.058, 0.002],
+  [0.25, 0.045, 0.012],
+  [0.38, 0.03, 0.025],
+  [0.5, 0.012, 0.035],
+];
+
+/** The twin's wing: low, under the cabin floor, its tips this far up. */
+export const TWIN_WING_Y = -0.04;
+export const TWIN_WING_RISE = 0.03;
+const TWIN_SPAN = 0.62;
+
+/** Its engines, out along the wing. */
+const TWIN_ENGINE_X = 0.18;
+
+/**
+ * Low-wing twin, a King Air more or less: engines in nacelles on the wing,
+ * well forward of it, and a T-tail.
+ */
+export function createTwinGeometry(detailed = false, { gear }: Detail = {}) {
+  const b = new ModelBuilder();
+  b.sides = detailed ? 16 : 8;
+  b.use(BODY).tube(detailed ? TWIN_DETAILED : TWIN);
+
+  if (detailed) {
+    windscreen(b, TWIN_DETAILED, -0.375, -0.345);
+    cabinWindows(b, TWIN_DETAILED, -0.25, 0.06, 0.05, 0.026, [8, 30]);
+    b.use(WING);
+  }
+
+  sweptWings(
+    b,
+    TWIN_WING_Y,
+    [-0.15, 0.04],
+    TWIN_SPAN,
+    [-0.08, 0.0],
+    detailed ? [0.016, 0.008] : [0.014, 0.014],
+    TWIN_WING_RISE
+  );
+
+  for (const x of [-TWIN_ENGINE_X, TWIN_ENGINE_X]) {
+    if (!detailed) {
+      b.use(BODY).tube(
+        [
+          [-0.29, 0.02, -0.014],
+          [-0.26, 0.032, -0.018],
+          [0.1, 0.02, -0.024],
+        ],
+        x
+      );
+
+      continue;
+    }
+
+    // Deeper than wide: the mains fold up into them.
+    b.use(NACELLE).tube(
+      [
+        [-0.29, 0.02, -0.014, 0.02],
+        [-0.28, 0.03, -0.016, 0.032],
+        [-0.24, 0.034, -0.02, 0.04],
+        [-0.05, 0.034, -0.024, 0.042],
+        [0.08, 0.022, -0.026, 0.026],
+        [0.14, 0.006, -0.026, 0.006],
+      ],
+      x
+    );
+    b.use(TAIL).tube(
+      [
+        [-0.315, 0.002, -0.012],
+        [-0.305, 0.012, -0.012],
+        [-0.29, 0.018, -0.013],
+      ],
+      x
+    );
+    // The intake's lip under the spinner, and an exhaust stack each side.
+    b.use(DARK).tube(
+      [
+        [-0.283, 0.012, -0.04, 0.006],
+        [-0.278, 0.012, -0.04, 0.006],
+      ],
+      x
+    );
+    b.sides = 6;
+
+    for (const side of [-1, 1]) {
+      b.cylinder(
+        [x + side * 0.028, -0.01, -0.21],
+        [x + side * 0.042, -0.01, -0.18],
+        0.006
+      );
+    }
+
+    b.sides = 16;
+  }
+
+  fin(b, 0.03, [0.3, 0.47], 0.19, [0.42, 0.5], 0.012);
+  b.use(TAIL);
+  wings(b, 0.215, [0.41, 0.49], 0.21, [0.45, 0.5], 0.008);
+
+  if (detailed && gear) {
+    b.sides = 10;
+    const ground = -RIDE_HEIGHT.twin;
+    leg(b, ground, [0, -0.045, -0.4], 0.014, 0.006, 0.003);
+
+    for (const x of [-TWIN_ENGINE_X, TWIN_ENGINE_X])
+      leg(b, ground, [x, -0.05, -0.02], 0.02, 0.008, 0.004);
   }
 
   return b.build();
@@ -686,6 +813,20 @@ export const ROTORS: Record<Shape, Rotor[]> = {
       inner: 0.008,
       radius: 0.078,
       width: 0.004,
+      rate: -17,
+    },
+  ],
+  twin: [
+    {
+      hubs: [
+        [-TWIN_ENGINE_X, -0.012, -0.3],
+        [TWIN_ENGINE_X, -0.012, -0.3],
+      ],
+      axis: "z",
+      blades: 4,
+      inner: 0.008,
+      radius: 0.088,
+      width: 0.0045,
       rate: -17,
     },
   ],

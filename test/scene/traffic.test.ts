@@ -181,3 +181,34 @@ describe("traffic sharing the road with buses", () => {
     expect(behind[0].v).toBeLessThan(0.5);
   });
 });
+
+describe("traffic when the scene's clock jumps", () => {
+  /** The small hours, the night after PEAK's morning. */
+  const NIGHT = new Date("2026-11-03T15:00:00Z");
+
+  it("fills the roads afresh for the new time, not settling slowly", () => {
+    const sim = new Traffic(street(), index, 2000);
+    sim.setConditions(null, null, PEAK);
+    const busy = sim.count;
+
+    sim.setConditions(null, null, NIGHT);
+    expect(sim.count).toBe(busy);
+
+    sim.refill();
+    sim.setConditions(null, null, NIGHT);
+    expect(busy).toBeGreaterThan(40);
+    expect(sim.count).toBeLessThan(busy / 10);
+  });
+});
+
+describe("traffic on a public holiday", () => {
+  it("is as quiet as a weekend's at the morning peak", () => {
+    const working = new Traffic(street(), index, 2000);
+    working.setConditions(null, null, PEAK);
+
+    const holiday = new Traffic(street(), index, 2000);
+    holiday.setConditions(null, null, PEAK, new Set(["2026-11-04"]));
+
+    expect(holiday.count).toBeLessThan(working.count / 2);
+  });
+});

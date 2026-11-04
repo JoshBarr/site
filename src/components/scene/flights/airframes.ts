@@ -3,7 +3,7 @@ import type { Aircraft } from "../../../lib/flights";
 // What to draw for an aircraft: a shape and how long it is, from its ICAO
 // type where we know it, else its ADS-B category.
 
-export type Shape = "jet" | "prop" | "light" | "helicopter";
+export type Shape = "jet" | "prop" | "twin" | "light" | "helicopter";
 
 export interface Airframe {
   shape: Shape;
@@ -38,11 +38,11 @@ const TYPES = new Map(
     AT72: ["prop", 27.2],
     AT75: ["prop", 27.2],
     AT76: ["prop", 27.2],
-    SF34: ["prop", 19.7],
-    B190: ["prop", 17.6],
-    JS32: ["prop", 14.4],
-    BE20: ["prop", 13.4],
-    B350: ["prop", 14.2],
+    SF34: ["twin", 19.7],
+    B190: ["twin", 17.6],
+    JS32: ["twin", 14.4],
+    BE20: ["twin", 13.4],
+    B350: ["twin", 14.2],
     PC12: ["prop", 14.4],
     C208: ["light", 11.5],
     P68: ["prop", 9.4],
@@ -58,13 +58,13 @@ const TYPES = new Map(
     PA28: ["light", 7.3],
     PA32: ["light", 8.4],
     BE36: ["light", 8.4],
-    PA31: ["prop", 9.9],
+    PA31: ["twin", 9.9],
     SR22: ["light", 7.9],
     DA40: ["light", 8],
     // Topdressers.
     CRES: ["light", 11.1],
     P750: ["light", 11.8],
-    DA42: ["prop", 8.6],
+    DA42: ["twin", 8.6],
     EC35: ["helicopter", 10.2],
     EC30: ["helicopter", 10.7],
     EC45: ["helicopter", 13],

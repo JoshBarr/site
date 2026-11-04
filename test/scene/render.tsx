@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { useFrame } from "@react-three/fiber";
+import { RootState, useFrame, useThree } from "@react-three/fiber";
 import ReactThreeTestRenderer from "@react-three/test-renderer";
 import { http, HttpResponse } from "msw/http";
 import { ImageLoader, Object3D, WebGPURenderer } from "three/webgpu";
@@ -104,6 +104,18 @@ function Drawn() {
   return null;
 }
 
+/** The scene's state, once it's mounted. */
+interface Probed {
+  state?: RootState;
+}
+
+/** Hands the scene's state out, for tests to reach its camera and controls. */
+function Probe({ into }: { into: Probed }) {
+  into.state = useThree();
+
+  return null;
+}
+
 /** Whether it's drawn: it and everything above it visible. */
 export function shown(object: Object3D) {
   for (let o: Object3D | null = object; o; o = o.parent) {
@@ -115,7 +127,8 @@ export function shown(object: Object3D) {
 
 /**
  * The whole scene at `time`, in fair weather, mounted without a Canvas. `drawn(name)` finds
- * what's in it; `until` runs frames while tiles and data arrive.
+ * what's in it; `until` runs frames while tiles and data arrive; `state` is
+ * the scene's, with its camera and controls.
  */
 export async function renderScene(time: Date, aircraft: Aircraft[] = []) {
   vi.stubGlobal("Worker", IdleWorker);
@@ -131,11 +144,13 @@ export async function renderScene(time: Date, aircraft: Aircraft[] = []) {
 
   serve(aircraft);
   const index = await loadManifest();
+  const probe: Probed = {};
 
   const renderer = await ReactThreeTestRenderer.create(
     <>
       <Scene index={index} conditions={FAIR} time={time} mobile={false} />
       <Drawn />
+      <Probe into={probe} />
     </>,
     { gl: createRenderer, camera: CAMERA }
   );
@@ -163,5 +178,11 @@ export async function renderScene(time: Date, aircraft: Aircraft[] = []) {
     vi.unstubAllGlobals();
   };
 
-  return { scene, drawn, until, unmount };
+  const state = () => {
+    if (!probe.state) throw new Error("the scene isn't mounted");
+
+    return probe.state.get();
+  };
+
+  return { scene, drawn, until, state, unmount };
 }

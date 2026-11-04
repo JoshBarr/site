@@ -660,15 +660,37 @@ export class Traffic {
   }
 
   /**
-   * New speeds, from NZTA or forced, at the scene's time of day. The first
-   * fills the roads; after that, traffic settles to them.
+   * Fills the roads afresh with the next conditions, rather than settling
+   * to them: for when the scene's clock jumps, and the roads should be as
+   * busy as they were then, not as they were a moment ago.
    */
-  setConditions(speeds: TrafficSpeeds | null, override: Override, date: Date) {
+  refill() {
+    this.filled = false;
+  }
+
+  /**
+   * New speeds, from NZTA or forced, at the scene's time of day, on a
+   * public holiday if it's one of `holidays`. The first fills the roads;
+   * after that, traffic settles to them.
+   */
+  setConditions(
+    speeds: TrafficSpeeds | null,
+    override: Override,
+    date: Date,
+    holidays: ReadonlySet<string> | null = null
+  ) {
     for (const flow of this.flows) {
       fillSpeeds(flow.road, flow.bins, speeds, override, flow.target);
 
       if (!this.filled) flow.speed.set(flow.target);
-      fillDensity(flow.bins, flow.target, date, flow.density, flow.eager);
+      fillDensity(
+        flow.bins,
+        flow.target,
+        date,
+        holidays,
+        flow.density,
+        flow.eager
+      );
     }
 
     // Where SH2 leaves SH1, as many turn off as SH2 should carry.

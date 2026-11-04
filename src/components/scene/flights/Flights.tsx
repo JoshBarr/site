@@ -54,11 +54,14 @@ import {
   createLightGeometry,
   createPropGeometry,
   createRotorGeometry,
+  createTwinGeometry,
   JET_WING_RISE,
   LIGHT_WING_Y,
   RIDE_HEIGHT,
   Rotor,
   ROTORS,
+  TWIN_WING_RISE,
+  TWIN_WING_Y,
 } from "./geometry";
 import { createModelMaterial, HIDDEN, isNear, NearModels } from "../models/lod";
 import {
@@ -82,7 +85,7 @@ import {
   useFollowSpots,
 } from "../follow/store";
 
-const SHAPES: Shape[] = ["jet", "prop", "light", "helicopter"];
+const SHAPES: Shape[] = ["jet", "prop", "twin", "light", "helicopter"];
 const MAX_PER_SHAPE = 64;
 
 /**
@@ -108,6 +111,8 @@ type Detailed =
   | "jetGear"
   | "prop"
   | "propGear"
+  | "twin"
+  | "twinGear"
   | "light"
   | "helicopter";
 
@@ -188,6 +193,7 @@ const FUTURE = 1e9;
 const CRUISE: Record<Shape, number> = {
   jet: 10_500,
   prop: 7000,
+  twin: 7000,
   light: 2500,
   helicopter: 1000,
 };
@@ -278,6 +284,14 @@ const LIGHTS: Record<Shape, LightSpec[]> = {
     JET_WING_RISE
   ),
   prop: lightsFor(0.55, 0.05, -0.06, [0, 0.215, 0.45], [0, 0.0, -0.35]),
+  twin: lightsFor(
+    0.62,
+    TWIN_WING_Y,
+    -0.04,
+    [0, 0.235, 0.46],
+    [0, -0.05, -0.4],
+    TWIN_WING_RISE
+  ),
   light: lightsFor(
     0.66,
     LIGHT_WING_Y + 0.01,
@@ -313,6 +327,7 @@ function createPlanes() {
   const far: Record<Shape, InstancedMesh> = {
     jet: simple("jet", createJetGeometry()),
     prop: simple("prop", createPropGeometry()),
+    twin: simple("twin", createTwinGeometry()),
     light: simple("light", createLightGeometry()),
     helicopter: simple("helicopter", createHelicopterGeometry()),
   };
@@ -325,6 +340,8 @@ function createPlanes() {
     jetGear: detailed(createJetGeometry(true, { gear: true })),
     prop: detailed(createPropGeometry(true)),
     propGear: detailed(createPropGeometry(true, { gear: true })),
+    twin: detailed(createTwinGeometry(true)),
+    twinGear: detailed(createTwinGeometry(true, { gear: true })),
     light: detailed(createLightGeometry(true)),
     helicopter: detailed(createHelicopterGeometry(true)),
   };
@@ -351,6 +368,7 @@ function createPlanes() {
   const rotors: Record<Shape, ReturnType<typeof spinning>[]> = {
     jet: ROTORS.jet.map(spinning),
     prop: ROTORS.prop.map(spinning),
+    twin: ROTORS.twin.map(spinning),
     light: ROTORS.light.map(spinning),
     helicopter: ROTORS.helicopter.map(spinning),
   };
@@ -392,7 +410,7 @@ function detailedFor(shape: Shape, at: Pose): Detailed {
 
   if (!gear) return shape;
 
-  return shape === "jet" ? "jetGear" : "propGear";
+  return `${shape}Gear`;
 }
 
 /** How an aircraft's rotors are turning. */
@@ -788,6 +806,7 @@ export function Flights({
     const counts: Record<Shape, number> = {
       jet: 0,
       prop: 0,
+      twin: 0,
       light: 0,
       helicopter: 0,
     };
