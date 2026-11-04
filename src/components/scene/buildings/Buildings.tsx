@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { REFLECTION_LAYER } from "../environment";
-import { addLoadingSource, track } from "../loading";
+import { addLoadingSource, hasFirstViewLoaded, track } from "../loading";
 import { castsNearShadow } from "../landmarks/nearShadow";
 import { setCityLights } from "../skyglow";
 import { TileIndex } from "../terrain/manifest";
@@ -20,8 +20,8 @@ export interface BuildingsQuality {
   /** Draw into the harbour's reflection too. */
   reflections: boolean;
   /**
-   * Load every tile up to this level from the start, wherever the camera
-   * is, so panning never finds the distant city missing.
+   * Load every tile up to this level once the first view is in, wherever
+   * the camera is, so panning never finds the distant city missing.
    */
   preloadLevel: number;
 }
@@ -138,7 +138,14 @@ function BuildingTiles({
     return { cache, material, lightsMaterial };
   }, [index, quality]);
 
-  useEffect(() => addLoadingSource(() => cache.loading), [cache]);
+  useEffect(
+    () =>
+      addLoadingSource(
+        () => cache.loading,
+        () => cache.queued
+      ),
+    [cache]
+  );
 
   useEffect(
     () => () => {
@@ -173,8 +180,11 @@ function BuildingTiles({
     options.verticalScale = verticalScale.value;
     selectTiles(index, cache, camera, options, selected.current);
 
-    for (const tile of preload) {
-      cache.request(tile, PRELOAD_PRIORITY + tile.level * 1e6);
+    // After the first view: on a cold cache it's hundreds of tiles.
+    if (hasFirstViewLoaded()) {
+      for (const tile of preload) {
+        cache.request(tile, PRELOAD_PRIORITY + tile.level * 1e6, true);
+      }
     }
 
     const next = new Set<TileObjects>();

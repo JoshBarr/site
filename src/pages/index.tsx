@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from "react";
 import Layout from "../components/layout";
 import SEO from "../components/seo";
-import { TypedIntro } from "../components/TypedIntro";
+import { TypedIntro, TypingTime } from "../components/TypedIntro";
+import { LoadingFill } from "../components/LoadingFill";
 import { GetStaticProps } from "next";
 import dynamic from "next/dynamic";
 import { SceneControls } from "../components/scene/controls/SceneControls";
@@ -23,6 +24,7 @@ const IndexPage: React.FC = () => {
   const [skipIntro] = useState(() => shownBefore);
   const [loaded, setLoaded] = useState(false);
   const [typed, setTyped] = useState(false);
+  const [typing, setTyping] = useState<TypingTime | null>(null);
   const [returned, setReturned] = useState(false);
   const [clouds, setClouds] = useState(true);
   const onLoaded = useCallback(() => setLoaded(true), []);
@@ -54,10 +56,13 @@ const IndexPage: React.FC = () => {
           hidden={!revealed}
           onSettled={onLoaded}
         />
+        {/* Back again, the scene fades straight up without it. */}
+        {!skipIntro && <LoadingFill hidden={revealed} typing={typing} />}
         <TypedIntro
           hidden={revealed || skipIntro}
           typed={skipIntro}
           onTyped={onTyped}
+          onTyping={setTyping}
         />
         {/* Once the scene's shown, not over the intro. */}
         {revealed && (

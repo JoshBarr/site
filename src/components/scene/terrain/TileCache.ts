@@ -6,6 +6,7 @@ import {
   RGFormat,
   UnsignedByteType,
 } from "three/webgpu";
+import { countLoaded } from "../loading";
 import { TileIndex, TileInfo, tileKey } from "./manifest";
 
 interface Pending {
@@ -57,6 +58,8 @@ export class TileCache {
   private frame = 0;
 
   private wanted = new Map<string, Pending>();
+  /** Asked for last frame, but not started. */
+  private waiting = 0;
   private inFlight = new Set<string>();
   private failed = new Set<string>();
   private maxInFlight: number;
@@ -199,11 +202,15 @@ export class TileCache {
     // Only start loads there's room for. When every layer is in use, a new
     // tile would be dropped on arrival and requested again: a reload loop.
     const room = this.evictableSlots() - this.inFlight.size;
+    let started = 0;
 
     for (const { tile } of queue.slice(0, Math.max(0, room))) {
       if (this.inFlight.size >= this.maxInFlight) break;
       this.load(tile);
+      started++;
     }
+
+    this.waiting = queue.length - started;
 
     this.frame++;
   }
@@ -227,6 +234,11 @@ export class TileCache {
     return this.inFlight.size;
   }
 
+  /** Tiles wanted but not yet started. */
+  get queued() {
+    return this.waiting;
+  }
+
   dispose() {
     for (const worker of this.workers) worker.terminate();
     this.texture.dispose();
@@ -246,6 +258,7 @@ export class TileCache {
     this.inFlight.add(key);
     this.callbacks.set(id, ({ heights, ground, error }) => {
       this.inFlight.delete(key);
+      countLoaded();
 
       if (error || !heights || !ground) {
         console.warn("[terrain]", error);

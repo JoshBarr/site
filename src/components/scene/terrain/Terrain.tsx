@@ -557,7 +557,14 @@ export function Terrain({
     return () => onHeightQuery?.(null);
   }, [cache, onHeightQuery]);
 
-  useEffect(() => addLoadingSource(() => cache.loading), [cache]);
+  useEffect(
+    () =>
+      addLoadingSource(
+        () => cache.loading,
+        () => cache.queued
+      ),
+    [cache]
+  );
 
   useEffect(
     () => () => {

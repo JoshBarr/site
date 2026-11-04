@@ -1,11 +1,24 @@
 import React, { useEffect, useRef, useState } from "react";
-import { loadingCount } from "./loading";
+import {
+  finishFirstView,
+  firstViewProgress,
+  loadedShare,
+  loadingCount,
+  setFirstViewProgress,
+  startFirstView,
+} from "./loading";
 
 /** How often to look at what's in flight, ms. */
 const POLL = 200;
 
 /** Nothing in flight for this long and the first view has arrived, ms. */
 const SETTLE = 1000;
+
+/**
+ * Progress holds here until the view settles: with nothing left to load,
+ * it's still waiting to be sure nothing more is wanted.
+ */
+const UNSETTLED_PROGRESS = 0.99;
 
 /**
  * Loads must run this long before the spinner shows, and stop for this long
@@ -24,7 +37,7 @@ export const panel: React.CSSProperties = {
   transition: "opacity 0.6s",
 };
 
-const Spinner: React.FC<{ size: number }> = ({ size }) => (
+export const Spinner: React.FC<{ size: number }> = ({ size }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden>
     <circle
       cx="12"
@@ -55,8 +68,9 @@ const Spinner: React.FC<{ size: number }> = ({ size }) => (
 );
 
 /**
- * A small spinner in the corner while tiles are on their way, and
- * `onSettled` once the first view has loaded. `started` is false until the
+ * A small spinner in the corner while tiles are on their way, the first
+ * view's progress (see firstViewProgress), and `onSettled` once it's
+ * loaded. `started` is false until the
  * terrain manifest is in and tiles can be asked for; `hidden` keeps the
  * spinner away while the scene is.
  */
@@ -74,11 +88,14 @@ export const SceneLoading: React.FC<{
   }, [started]);
 
   useEffect(() => {
+    startFirstView();
+
     // Only once tiles have been in flight is the first view on its way: the
     // renderer can still be starting up with nothing asked for yet.
     let streamed = false;
     let pending = true;
     let changedAt = performance.now();
+    let done = false;
 
     const id = setInterval(() => {
       const now = performance.now();
@@ -93,7 +110,22 @@ export const SceneLoading: React.FC<{
 
       const held = now - changedAt;
 
-      if (streamed && !pending && held >= SETTLE) setSettled(true);
+      if (streamed && !pending && held >= SETTLE) {
+        done = true;
+        setSettled(true);
+      }
+
+      // What's wanted grows as finer tiles are, so the share can fall back;
+      // the progress shown never does.
+      if (streamed && !done) {
+        setFirstViewProgress(
+          Math.max(
+            firstViewProgress(),
+            Math.min(loadedShare(), UNSETTLED_PROGRESS)
+          )
+        );
+      }
+
       setBusy((shown) =>
         pending ? shown || held >= SHOW : shown && held < HIDE
       );
@@ -103,7 +135,9 @@ export const SceneLoading: React.FC<{
   }, []);
 
   useEffect(() => {
-    if (settled) onSettled?.();
+    if (!settled) return;
+    finishFirstView();
+    onSettled?.();
   }, [settled, onSettled]);
 
   const shown = busy && !hidden;

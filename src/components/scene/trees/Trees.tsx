@@ -13,7 +13,7 @@ import {
   Vector4,
 } from "three/webgpu";
 import { castsNearShadow } from "../landmarks/nearShadow";
-import { addLoadingSource, track } from "../loading";
+import { addLoadingSource, countLoaded, track } from "../loading";
 import { TileIndex } from "../terrain/manifest";
 import { verticalScale } from "../terrain/Terrain";
 import { windVector } from "../weather";
@@ -165,13 +165,22 @@ function TreeTiles({
       resident: new Map<string, Resident>(),
       inFlight: new Set<string>(),
       failed: new Set<string>(),
+      /** Bands wanted last frame but not started. */
+      queued: 0,
       frame: 0,
       disposed: false,
     }),
     [index]
   );
 
-  useEffect(() => addLoadingSource(() => state.inFlight.size), [state]);
+  useEffect(
+    () =>
+      addLoadingSource(
+        () => state.inFlight.size,
+        () => state.queued
+      ),
+    [state]
+  );
 
   useEffect(
     () => () => {
@@ -245,10 +254,15 @@ function TreeTiles({
 
     wanted.sort((a, b) => a.priority - b.priority);
 
+    let started = 0;
+
     for (const { tile, band } of wanted) {
       if (inFlight.size >= MAX_IN_FLIGHT) break;
       load(tile, band);
+      started++;
     }
+
+    state.queued = wanted.length - started;
 
     // Over budget: drop the tiles unused longest, whole.
     if (loadedTrees > quality.maxTrees) {
@@ -323,6 +337,7 @@ function TreeTiles({
       failed.add(tile.key);
     } finally {
       inFlight.delete(tile.key);
+      countLoaded();
     }
   }
 

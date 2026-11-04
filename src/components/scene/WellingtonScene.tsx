@@ -1132,6 +1132,26 @@ export function Scene({
   );
 }
 
+/**
+ * Frames a second while the scene's hidden, still loading. Enough to stream
+ * in the view and build its shaders, which happen as frames are drawn,
+ * without drawing sixty frames a second nobody sees.
+ */
+const HIDDEN_FPS = 10;
+
+/** Draws a frame `fps` times a second, for a Canvas on demand. */
+function Ticker({ fps }: { fps: number }) {
+  const invalidate = useThree((state) => state.invalidate);
+
+  useEffect(() => {
+    const id = setInterval(() => invalidate(), 1000 / fps);
+
+    return () => clearInterval(id);
+  }, [invalidate, fps]);
+
+  return null;
+}
+
 /** The Canvas's camera; the controls move its near plane with height. */
 export const CAMERA = { fov: DEFAULT_FOV, near: 5, far: 80000 };
 
@@ -1171,8 +1191,8 @@ export const WellingtonScene: React.FC<{
           pointerEvents: hidden ? "none" : undefined,
           transition: "opacity 1.6s ease",
         }}
-        // Scrolled past, the scene stops drawing.
-        frameloop={inView ? "always" : "never"}
+        // Scrolled past, the scene stops drawing; hidden, it barely does.
+        frameloop={!inView ? "never" : hidden ? "demand" : "always"}
         shadows="percentage"
         // With 4× MSAA in the scene pass, 2× buys little over 1.5× at
         // nearly twice the fill.
@@ -1205,6 +1225,7 @@ export const WellingtonScene: React.FC<{
           />
         )}
         {stats && <Stats />}
+        {hidden && inView && <Ticker fps={HIDDEN_FPS} />}
       </Canvas>
       <SceneLoading
         started={index !== null}

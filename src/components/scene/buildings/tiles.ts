@@ -16,6 +16,7 @@ import {
   Vector3,
 } from "three/webgpu";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
+import { countLoaded } from "../loading";
 import { createLights } from "./lights";
 import { BuildingIndex, BuildingsManifest, BuildingTile } from "./manifest";
 
@@ -163,8 +164,14 @@ export class BuildingCache {
 
   private resident = new Map<string, Resident>();
   private residentTriangles = 0;
-  private wanted = new Map<string, { tile: BuildingTile; priority: number }>();
-  private inFlight = new Set<string>();
+  private wanted = new Map<
+    string,
+    { tile: BuildingTile; priority: number; background: boolean }
+  >();
+  /** Keys on their way, and whether each is a background load. */
+  private inFlight = new Map<string, boolean>();
+  /** For the view, asked for last frame but not started. */
+  private waiting = 0;
   private failed = new Set<string>();
   private frame = 0;
   private disposed = false;
@@ -193,9 +200,20 @@ export class BuildingCache {
     this.group.matrixAutoUpdate = false;
   }
 
-  /** Tiles on their way. */
+  /** Tiles on their way for the view, not in the background. */
   get loading() {
-    return this.inFlight.size;
+    let count = 0;
+
+    for (const background of this.inFlight.values()) {
+      if (!background) count++;
+    }
+
+    return count;
+  }
+
+  /** Tiles the view wants but not yet started. */
+  get queued() {
+    return this.waiting;
   }
 
   /** True when the tile can be drawn: loaded, empty, or given up on. */
@@ -207,19 +225,36 @@ export class BuildingCache {
     );
   }
 
-  /** Lower priority loads first. */
-  request(tile: BuildingTile, priority: number) {
+  /**
+   * Lower priority loads first. A `background` load is for later, out of
+   * view, so isn't counted as `loading`.
+   */
+  request(tile: BuildingTile, priority: number, background = false) {
     // Loaded but waiting on its siblings to be drawn: don't evict it, or
     // a view over budget would never finish loading.
     const entry = this.resident.get(tile.key);
 
     if (entry) entry.lastUsed = this.frame;
 
-    if (this.ready(tile) || this.inFlight.has(tile.key)) return;
+    if (this.ready(tile)) return;
+
+    // Loading in the background, and now the view's waiting on it too.
+    if (this.inFlight.has(tile.key)) {
+      if (!background) this.inFlight.set(tile.key, false);
+
+      return;
+    }
+
     const pending = this.wanted.get(tile.key);
 
     if (!pending || priority < pending.priority) {
-      this.wanted.set(tile.key, { tile, priority });
+      this.wanted.set(tile.key, {
+        tile,
+        priority,
+        background: background && (pending?.background ?? true),
+      });
+    } else if (!background) {
+      pending.background = false;
     }
   }
 
@@ -238,9 +273,11 @@ export class BuildingCache {
       (a, b) => a.priority - b.priority
     );
 
-    for (const { tile } of queue) {
-      if (this.inFlight.size >= this.maxInFlight) break;
-      this.load(tile);
+    this.waiting = 0;
+
+    for (const { tile, background } of queue) {
+      if (this.inFlight.size < this.maxInFlight) this.load(tile, background);
+      else if (!background) this.waiting++;
     }
 
     this.wanted.clear();
@@ -248,8 +285,8 @@ export class BuildingCache {
     this.frame++;
   }
 
-  private async load(tile: BuildingTile) {
-    this.inFlight.add(tile.key);
+  private async load(tile: BuildingTile, background: boolean) {
+    this.inFlight.set(tile.key, background);
 
     try {
       const response = await fetch(this.index.url(tile));
@@ -310,6 +347,7 @@ export class BuildingCache {
       console.warn(`buildings ${tile.key}: ${e}`);
       this.failed.add(tile.key);
     } finally {
+      if (!this.inFlight.get(tile.key)) countLoaded();
       this.inFlight.delete(tile.key);
     }
   }
