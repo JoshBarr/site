@@ -1,0 +1,689 @@
+/* The scene's controls: a toolbar of icon buttons at the top right, each
+   opening its panel in one popover that moves and resizes between them.
+   Dark glass after DialKit (dialkit.dev), translucent over the map. */
+
+.Theme {
+  --glass: rgba(30, 30, 32, 0.74);
+  --glass-solid: #262628;
+  --blur: blur(20px) saturate(170%);
+  --surface: rgba(255, 255, 255, 0.06);
+  --surface-hover: rgba(255, 255, 255, 0.1);
+  --surface-active: rgba(255, 255, 255, 0.16);
+  --border: rgba(255, 255, 255, 0.1);
+  --divider: rgba(255, 255, 255, 0.07);
+  --ink: rgba(255, 255, 255, 0.95);
+  --label: rgba(255, 255, 255, 0.7);
+  --muted: rgba(255, 255, 255, 0.45);
+  --focus: rgba(255, 255, 255, 0.6);
+  --shadow:
+    0 8px 32px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow-small:
+    0 4px 16px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration: 320ms;
+  --row: 36px;
+  --radius: 8px;
+
+  color: var(--ink);
+  font-family: system-ui, -apple-system, "SF Pro Text", sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: -0.005em;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Glass */
+
+.Glass {
+  background: var(--glass);
+  border: 1px solid var(--border);
+  backdrop-filter: var(--blur);
+  -webkit-backdrop-filter: var(--blur);
+}
+
+/* The bar at the top right */
+
+.Bar {
+  position: absolute;
+  top: max(16px, env(safe-area-inset-top));
+  right: max(16px, env(safe-area-inset-right));
+  display: flex;
+  /* Short of room, the pills go under the toolbar. */
+  flex-wrap: wrap-reverse;
+  justify-content: flex-end;
+  gap: 8px;
+  align-items: center;
+  max-width: calc(100vw - 32px);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.Toolbar {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 14px;
+  box-shadow: var(--shadow-small);
+}
+
+.ToolButton {
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--label);
+  cursor: pointer;
+  transition:
+    background-color 150ms,
+    color 150ms;
+
+  @media (hover: hover) {
+    &:hover {
+      background: var(--surface-hover);
+      color: var(--ink);
+    }
+  }
+
+  &:active {
+    background: var(--surface-active);
+  }
+
+  &[data-popup-open],
+  &[aria-expanded="true"] {
+    background: var(--surface-active);
+    color: var(--ink);
+  }
+}
+
+/* What's followed, or the time replayed, and the way out. */
+.Following {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 42px;
+  box-sizing: border-box;
+  padding: 0 3px 0 12px;
+  border-radius: 14px;
+  box-shadow: var(--shadow-small);
+  animation: arrive var(--duration) var(--ease);
+}
+
+.FollowingLabel {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  @media (max-width: 480px) {
+    display: none;
+  }
+}
+
+/* A tool button with words. */
+.Labelled {
+  width: auto;
+  padding: 0 10px 0 7px;
+  gap: 4px;
+  display: flex;
+  align-items: center;
+  color: var(--ink);
+  font: inherit;
+}
+
+.Muted {
+  display: grid;
+  color: var(--muted);
+}
+
+.Time {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.LiveDot {
+  width: 7px;
+  height: 7px;
+  margin: 0 2px;
+  border-radius: 50%;
+  background: #ff5a4f;
+}
+
+/* Words for a wide screen, or a phone. */
+.Narrow {
+  display: none;
+}
+
+@media (max-width: 480px) {
+  .Wide {
+    display: none;
+  }
+
+  .Narrow {
+    display: inline;
+  }
+}
+
+@keyframes arrive {
+  from {
+    opacity: 0;
+    transform: translateX(8px) scale(0.96);
+  }
+}
+
+/* The popover */
+
+.Positioner {
+  width: var(--positioner-width);
+  height: var(--positioner-height);
+  max-width: var(--available-width);
+  transition-property: top, left, right, bottom, transform;
+  transition-timing-function: var(--ease);
+  transition-duration: var(--duration);
+
+  &[data-instant] {
+    transition: none;
+  }
+}
+
+.Popup {
+  position: relative;
+  box-sizing: border-box;
+  width: var(--popup-width, auto);
+  height: var(--popup-height, auto);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  outline: none;
+  transform-origin: var(--transform-origin);
+  transition-property: width, height, opacity, transform;
+  transition-timing-function: var(--ease);
+  transition-duration: var(--duration);
+
+  &[data-starting-style],
+  &[data-ending-style] {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+
+  &[data-ending-style] {
+    transition-duration: 180ms;
+  }
+
+  &[data-instant] {
+    transition: none;
+  }
+}
+
+.Viewport {
+  position: relative;
+  overflow: clip;
+  width: 100%;
+  height: 100%;
+
+  & [data-previous],
+  & [data-current] {
+    transform: translateX(0);
+    opacity: 1;
+    transition:
+      transform var(--duration) var(--ease),
+      opacity calc(var(--duration) / 2) var(--ease);
+  }
+
+  &[data-activation-direction~="right"] [data-previous][data-ending-style] {
+    transform: translateX(-30%);
+    opacity: 0;
+  }
+
+  &[data-activation-direction~="right"] [data-current][data-starting-style] {
+    transform: translateX(30%);
+    opacity: 0;
+  }
+
+  &[data-activation-direction~="left"] [data-previous][data-ending-style] {
+    transform: translateX(30%);
+    opacity: 0;
+  }
+
+  &[data-activation-direction~="left"] [data-current][data-starting-style] {
+    transform: translateX(-30%);
+    opacity: 0;
+  }
+}
+
+/* A panel */
+
+.Panel {
+  box-sizing: border-box;
+  width: min(280px, calc(100vw - 32px));
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.Header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0 8px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.Title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.Hint {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.Section {
+  margin: 6px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* Rows: a label at the left, a value or control at the right. Buttons
+   are rows too, and the classes after .Button are each used with both. */
+
+.Row {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--row);
+  margin: 0;
+  padding: 0 12px;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--label);
+  font: inherit;
+  text-align: left;
+}
+
+.RowLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.Value {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.Button {
+  cursor: pointer;
+  transition:
+    background-color 150ms,
+    color 150ms;
+
+  @media (hover: hover) {
+    &:hover:not(:disabled) {
+      background: var(--surface-hover);
+      color: var(--ink);
+    }
+  }
+
+  &:active:not(:disabled) {
+    background: var(--surface-active);
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.4;
+  }
+}
+
+.Centered {
+  justify-content: center;
+  gap: 6px;
+  color: var(--ink);
+}
+
+/* A kind of vehicle to follow, its icon in its trails' colour. */
+.Vehicle {
+  padding-left: 9px;
+
+  & svg {
+    color: var(--tint);
+    flex: none;
+  }
+
+  & .Value {
+    color: var(--muted);
+  }
+
+  &[aria-pressed="true"] {
+    background: var(--surface-active);
+    color: var(--ink);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tint) 45%, transparent);
+  }
+
+  &[aria-pressed="true"] .Value {
+    color: var(--label);
+  }
+}
+
+/* Who's followed now, and Next. */
+.Now {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 8px 6px 8px 12px;
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.NowText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+
+  & span:first-child {
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  & span:last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.Small {
+  flex: none;
+  gap: 4px;
+  min-height: 30px;
+  padding: 0 10px 0 7px;
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+
+/* Select */
+
+.Trigger {
+  padding-right: 6px;
+  width: 100%;
+
+  & .Value {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: right;
+  }
+
+  &[data-placeholder] .Value {
+    color: var(--muted);
+  }
+
+  &[data-popup-open] {
+    background: var(--surface-hover);
+  }
+}
+
+.Chevron {
+  display: grid;
+  color: var(--muted);
+  transition: transform var(--duration) var(--ease);
+
+  [data-popup-open] > & {
+    transform: rotate(180deg);
+  }
+}
+
+.SelectPositioner {
+  z-index: 10;
+  outline: none;
+}
+
+.SelectPopup {
+  box-sizing: border-box;
+  min-width: var(--anchor-width);
+  max-height: min(var(--available-height), 420px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--glass-solid);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  outline: none;
+  scrollbar-width: none;
+  transform-origin: var(--transform-origin);
+  transition:
+    opacity 160ms var(--ease),
+    transform 220ms var(--ease);
+
+  &[data-starting-style],
+  &[data-ending-style] {
+    opacity: 0;
+    transform: scale(0.97) translateY(-4px);
+  }
+}
+
+.GroupLabel {
+  padding: 8px 10px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: default;
+}
+
+.Item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 8px 0 10px;
+  border-radius: 6px;
+  color: var(--label);
+  cursor: pointer;
+  outline: none;
+  user-select: none;
+
+  &[data-highlighted] {
+    background: var(--surface-hover);
+    color: var(--ink);
+  }
+
+  &[data-selected] {
+    color: var(--ink);
+  }
+}
+
+.ItemText {
+  flex: 1;
+}
+
+.ItemCheck {
+  display: grid;
+  color: var(--ink);
+}
+
+/* Switch */
+
+.Switch {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: 36px;
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.14);
+  cursor: pointer;
+  transition: background-color 200ms var(--ease);
+
+  &[data-checked] {
+    background: #4c9dff;
+  }
+}
+
+.Thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  transition: transform 260ms var(--ease);
+
+  &[data-checked] {
+    transform: translateX(16px);
+  }
+}
+
+/* A row that toggles as a whole: the label is part of the switch. */
+.SwitchRow {
+  cursor: pointer;
+
+  & svg {
+    flex: none;
+    color: var(--muted);
+  }
+}
+
+/* Segmented */
+
+.Segments {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.Segment {
+  margin: 0;
+  padding: 4px 10px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    background-color 150ms,
+    color 150ms;
+
+  @media (hover: hover) {
+    &:hover {
+      color: var(--ink);
+    }
+  }
+
+  &[data-pressed] {
+    background: var(--surface-active);
+    color: var(--ink);
+  }
+}
+
+/* Tooltip */
+
+.TooltipPopup {
+  padding: 5px 8px;
+  border-radius: 7px;
+  background: var(--glass-solid);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  color: var(--ink);
+  font-size: 12px;
+  transform-origin: var(--transform-origin);
+  transition:
+    opacity 140ms,
+    transform 140ms var(--ease);
+
+  &[data-starting-style],
+  &[data-ending-style] {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+
+  &[data-instant] {
+    transition: none;
+  }
+}
+
+.Kbd {
+  margin-left: 6px;
+  color: var(--muted);
+}
+
+/* Focus */
+
+.ToolButton,
+.Row,
+.Switch,
+.Segment {
+  &:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: -2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .Positioner,
+  .Popup,
+  .Viewport [data-previous],
+  .Viewport [data-current],
+  .SelectPopup,
+  .Thumb,
+  .Chevron {
+    transition: none;
+  }
+
+  .Following {
+    animation: none;
+  }
+}
+
+/* The colours of the vehicles' trails. */
+.Theme [data-tint="bus"] {
+  --tint: #73ff8c;
+}
+
+.Theme [data-tint="train"] {
+  --tint: #e69eff;
+}
+
+.Theme [data-tint="ship"] {
+  --tint: #59b3ff;
+}
+
+.Theme [data-tint="plane"] {
+  --tint: #ffcc1a;
+}
+
+.Tinted {
+  display: grid;
+  color: var(--tint);
+}

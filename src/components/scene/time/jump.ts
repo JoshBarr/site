@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { REPLAY } from "../../../lib/replay";
 import { setSceneTime } from "../clock";
 
 // Jumping the scene to a moment: each jump has every layer read its window
-// from the table, uncached, so they're kept a few seconds apart.
+// from the table, uncached, so they're kept a few seconds apart. One for the
+// page, so the drawer and the controls' Back to live share the wait.
 
 /**
  * Jumps are at least this far apart, ms. A pick sooner waits for it, and
@@ -42,35 +43,52 @@ function go(time: number | null) {
   }
 }
 
-/**
- * `jump(time)` sets the scene to `time` (epoch ms), or live with null, as
- * soon as it may; `waiting` is the time it's waiting to jump to, if any.
- */
-export function useJump() {
-  const last = useRef(0);
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const [waiting, setWaiting] = useState<number | null>(null);
+let last = 0;
+let timer: ReturnType<typeof setTimeout> | undefined;
 
-  const jump = useCallback((time: number | null) => {
-    clearTimeout(timer.current);
+/** The time it's waiting to jump to, if any. */
+let waiting: number | null = null;
+const listeners = new Set<() => void>();
 
-    const wait = last.current + GAP - Date.now();
+function setWaiting(time: number | null) {
+  waiting = time;
 
-    const now = () => {
-      last.current = Date.now();
-      setWaiting(null);
-      go(time);
-    };
-
-    if (wait <= 0) {
-      now();
-    } else {
-      setWaiting(time ?? Date.now());
-      timer.current = setTimeout(now, wait);
-    }
-  }, []);
-
-  useEffect(() => () => clearTimeout(timer.current), []);
-
-  return { jump, waiting };
+  for (const listener of listeners) listener();
 }
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+
+  return () => listeners.delete(listener);
+}
+
+/**
+ * Sets the scene to `time` (epoch ms) as soon as it may, or straight back
+ * to live with null: live layers don't read the table.
+ */
+export function jump(time: number | null) {
+  clearTimeout(timer);
+
+  const now = () => {
+    if (time !== null) last = Date.now();
+    setWaiting(null);
+    go(time);
+  };
+
+  const wait = last + GAP - Date.now();
+
+  if (time === null || wait <= 0) {
+    now();
+  } else {
+    setWaiting(time);
+    timer = setTimeout(now, wait);
+  }
+}
+
+/** The time a jump's waiting to go to, if any. */
+export const useWaiting = () =>
+  useSyncExternalStore(
+    subscribe,
+    () => waiting,
+    () => null
+  );

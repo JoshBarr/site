@@ -18,7 +18,11 @@ import {
   type TimelineDay,
 } from "../../../lib/timeline";
 import { sceneNow, useSeek } from "../clock";
-import { MARGIN, useJump } from "./jump";
+import { Toggle } from "@base-ui/react/toggle";
+import { ToggleGroup } from "@base-ui/react/toggle-group";
+import { Icon } from "../controls/icons";
+import ui from "../controls/SceneControls.module.css";
+import { jump, MARGIN, useWaiting } from "./jump";
 import {
   areaPath,
   type Combine,
@@ -129,24 +133,29 @@ const ROWS: Row[] = [
 
 const combineFor = (kind: Kind): Combine => (kind === "rain" ? "max" : "mean");
 
-const HEADER = 38;
+/** Above the ruler, inside the drawer's top edge. */
+const PAD = 8;
 
-/** Above the rows, for quakes. */
+/**
+ * Top to bottom, as a video editor's timeline: the ruler (days, then
+ * hours), quakes, then the rows.
+ */
+const AXIS = 30;
 const QUAKES = 16;
+const ROWS_TOP = AXIS + QUAKES;
 const ROW = 20;
 
 /** Each row's data band, inside it. */
 const BAND_TOP = 3;
 const BAND = ROW - 5;
-const ROWS_BOTTOM = QUAKES + ROWS.length * ROW;
-const AXIS = 30;
-const PLOT = ROWS_BOTTOM + AXIS;
+const ROWS_BOTTOM = ROWS_TOP + ROWS.length * ROW;
+const PLOT = ROWS_BOTTOM + 8;
 
-/** The drawer's height, px: what's above it moves up by this when it opens. */
-export const PANEL_HEIGHT = HEADER + PLOT + 6;
+/** The drawer's height, px. */
+const PANEL_HEIGHT = PAD + PLOT + 6;
 
-/** The tab it's opened by, px. */
-export const TAB_HEIGHT = 30;
+/** On a phone, the zoom's row above the ruler, px: too narrow to float it. */
+const PICKER_ROW = 34;
 
 const LABELS = 64;
 const VALUES = 76;
@@ -154,8 +163,7 @@ const VALUES = 76;
 const ZOOMS = [
   { days: 1, label: "Day", short: "1d" },
   { days: 3, label: "3 days", short: "3d" },
-  { days: 7, label: "Week", short: "7d" },
-  { days: 30, label: "Month", short: "30d" },
+  { days: 7, label: "7 days", short: "7d" },
 ];
 
 /** A phone: no values column, and shorter words. */
@@ -217,16 +225,6 @@ const moment = new Intl.DateTimeFormat("en-NZ", {
   month: "short",
   hour: "numeric",
   minute: "2-digit",
-});
-
-const shown = new Intl.DateTimeFormat("en-NZ", {
-  timeZone: ZONE,
-  weekday: "short",
-  day: "numeric",
-  month: "short",
-  hour: "numeric",
-  minute: "2-digit",
-  second: "2-digit",
 });
 
 /** "5pm", or "noon". */
@@ -296,7 +294,11 @@ function scalesOf(days: TimelineDay[]) {
 const yIn =
   (i: number, { low, high }: Scale) =>
   (value: number) =>
-    QUAKES + i * ROW + BAND_TOP + BAND - ((value - low) / (high - low)) * BAND;
+    ROWS_TOP +
+    i * ROW +
+    BAND_TOP +
+    BAND -
+    ((value - low) / (high - low)) * BAND;
 
 /** Text over lines stays legible: a halo of the panel around it. */
 const label: React.SVGProps<SVGTextElement> = {
@@ -363,9 +365,9 @@ const DayMarks = memo(function DayMarks({
       {sun.rise !== null && sun.set !== null && (
         <rect
           x={x(sun.rise)}
-          y={QUAKES}
+          y={ROWS_TOP}
           width={x(sun.set) - x(sun.rise)}
-          height={ROWS_BOTTOM - QUAKES}
+          height={ROWS_BOTTOM - ROWS_TOP}
           fill="rgba(255, 255, 255, 0.045)"
         />
       )}
@@ -375,18 +377,27 @@ const DayMarks = memo(function DayMarks({
           key={time}
           x1={x(time)}
           x2={x(time)}
-          y1={QUAKES}
-          y2={ROWS_BOTTOM + 3}
+          y1={AXIS - 4}
+          y2={ROWS_BOTTOM}
           stroke="rgba(255, 255, 255, 0.1)"
           strokeDasharray="2 3"
         />
       ))}
 
+      {/* The ruler's foot. */}
+      <line
+        x1={0}
+        x2={width}
+        y1={AXIS - 0.5}
+        y2={AXIS - 0.5}
+        stroke="rgba(255, 255, 255, 0.08)"
+      />
+
       <line
         x1={0.5}
         x2={0.5}
-        y1={QUAKES - 4}
-        y2={PLOT - 2}
+        y1={0}
+        y2={ROWS_BOTTOM}
         stroke="rgba(255, 255, 255, 0.25)"
       />
 
@@ -398,7 +409,7 @@ const DayMarks = memo(function DayMarks({
 
           const found = points(data, metric, k, combineFor(kind));
           const y = yIn(i, scale);
-          const base = QUAKES + i * ROW + BAND_TOP + BAND;
+          const base = ROWS_TOP + i * ROW + BAND_TOP + BAND;
 
           if (kind === "rain") {
             const cloud = points(data, "cloud", k, "mean");
@@ -526,7 +537,7 @@ const DayMarks = memo(function DayMarks({
         <circle
           key={quake.id}
           cx={x(quake.time)}
-          cy={QUAKES / 2}
+          cy={AXIS + QUAKES / 2}
           r={Math.min(6, Math.max(1.5, quake.magnitude - 0.5))}
           fill={QUAKE}
           fillOpacity={0.75}
@@ -548,7 +559,7 @@ const DayMarks = memo(function DayMarks({
           <text
             key={name}
             x={x(Number(time)) + 3}
-            y={QUAKES - 4}
+            y={ROWS_TOP - 4}
             {...label}
             fill={FAINT}
           >
@@ -560,7 +571,7 @@ const DayMarks = memo(function DayMarks({
         <text
           key={time}
           x={x(time)}
-          y={ROWS_BOTTOM + 12}
+          y={AXIS - 8}
           textAnchor="middle"
           {...label}
           fill={FAINT}
@@ -570,8 +581,8 @@ const DayMarks = memo(function DayMarks({
       ))}
 
       <text
-        x={4}
-        y={ROWS_BOTTOM + 25}
+        x={5}
+        y={11}
         {...label}
         fontSize={10.5}
         fill={today ? INK : MUTED}
@@ -583,36 +594,6 @@ const DayMarks = memo(function DayMarks({
   );
 });
 
-const control: React.CSSProperties = {
-  padding: "3px 8px",
-  border: "1px solid rgba(255, 255, 255, 0.16)",
-  borderRadius: 4,
-  background: "transparent",
-  color: "inherit",
-  font: "inherit",
-  cursor: "pointer",
-};
-
-const ClockIcon: React.FC = () => (
-  <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden>
-    <path
-      d="M2.6 5.2A6 6 0 1 1 2 8"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.4"
-      strokeLinecap="round"
-    />
-    <path d="M1.2 2.6 2.4 5.8 5.5 4.6" fill="currentColor" />
-    <path
-      d="M8 4.6V8l2.4 1.6"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.4"
-      strokeLinecap="round"
-    />
-  </svg>
-);
-
 /**
  * The drawer, opened by its tab: `open` and `onOpenChange` are the page's,
  * so it can move what's above out of the way.
@@ -622,7 +603,7 @@ export const TimeTravel: React.FC<{
   onOpenChange: (open: boolean) => void;
 }> = ({ open, onOpenChange }) => {
   const { replaying } = useSeek();
-  const { jump, waiting } = useJump();
+  const waiting = useWaiting();
   const [now, setNow] = useState<number | null>(null);
   const [zoom, setZoom] = useState(3);
   const [hover, setHover] = useState<number | null>(null);
@@ -855,13 +836,36 @@ export const TimeTravel: React.FC<{
       style={{
         position: "absolute",
         left: xOf(time),
-        top: QUAKES - 4,
-        height: ROWS_BOTTOM - QUAKES + 8,
+        top: AXIS - 4,
+        height: ROWS_BOTTOM - AXIS + 4,
         width: 0,
         pointerEvents: "none",
         ...style,
       }}
     />
+  );
+
+  const height = PANEL_HEIGHT + (narrow ? PICKER_ROW : 0);
+
+  // Over the ruler's right end; on a phone, a row of its own above it.
+  const picker = (
+    <ToggleGroup
+      aria-label="Zoom"
+      className={`${ui.Theme} ${ui.Glass} ${ui.Segments}`}
+      style={{
+        ...(!narrow && { position: "absolute", top: -3, right: 12, zIndex: 1 }),
+        background: "var(--glass-solid)",
+      }}
+      value={[String(zoom)]}
+      // Pressing the pressed one empties the group: keep it as it is.
+      onValueChange={([days]) => days && zoomTo(Number(days))}
+    >
+      {ZOOMS.map(({ days: span, label: name, short }) => (
+        <Toggle key={span} value={String(span)} className={ui.Segment}>
+          {narrow ? short : name}
+        </Toggle>
+      ))}
+    </ToggleGroup>
   );
 
   return (
@@ -871,44 +875,28 @@ export const TimeTravel: React.FC<{
         left: 0,
         right: 0,
         bottom: 0,
-        height: PANEL_HEIGHT,
-        transform: open ? "translateY(0)" : `translateY(${PANEL_HEIGHT}px)`,
+        height,
+        transform: open ? "translateY(0)" : `translateY(${height}px)`,
         transition: "transform 380ms cubic-bezier(0.2, 0.8, 0.2, 1)",
         color: INK,
         font: "12px system-ui, sans-serif",
         userSelect: "none",
       }}
     >
-      <button
-        type="button"
-        onClick={() => onOpenChange(!open)}
-        aria-expanded={open}
-        style={{
-          position: "absolute",
-          right: 16,
-          bottom: "100%",
-          height: TAB_HEIGHT,
-          display: "flex",
-          alignItems: "center",
-          gap: 7,
-          padding: "0 12px",
-          border: "none",
-          borderRadius: "7px 7px 0 0",
-          background: SURFACE,
-          backdropFilter: "blur(10px)",
-          color: INK,
-          font: "12.5px system-ui, sans-serif",
-          cursor: "pointer",
-        }}
+      <div
+        className={`${ui.Theme} ${ui.Glass} ${ui.Toolbar}`}
+        style={{ position: "absolute", right: 16, bottom: "calc(100% + 12px)" }}
       >
-        <ClockIcon />
-        <span>Time travel</span>
-        {replaying && now !== null && (
-          <span style={{ color: MUTED, fontVariantNumeric: "tabular-nums" }}>
-            · {moment.format(now)}
-          </span>
-        )}
-      </button>
+        <button
+          type="button"
+          onClick={() => onOpenChange(!open)}
+          aria-expanded={open}
+          className={`${ui.ToolButton} ${ui.Labelled}`}
+        >
+          <Icon name={open ? "close" : "history"} size={18} />
+          Time travel
+        </button>
+      </div>
 
       <div
         inert={!open}
@@ -919,86 +907,29 @@ export const TimeTravel: React.FC<{
           borderTop: "1px solid rgba(255, 255, 255, 0.08)",
         }}
       >
-        <div
-          style={{
-            height: HEADER,
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            padding: "0 12px 0 16px",
-          }}
-        >
-          {replaying && now !== null ? (
-            <>
-              <span style={{ fontVariantNumeric: "tabular-nums" }}>
-                {(narrow ? moment : shown).format(now)}
-              </span>
-              <button type="button" onClick={() => jump(null)} style={control}>
-                {narrow ? "Live" : "Back to live"}
-              </button>
-            </>
-          ) : (
-            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span
-                style={{
-                  width: 7,
-                  height: 7,
-                  borderRadius: "50%",
-                  background: "#ff5a4f",
-                }}
-              />
-              Live
-            </span>
-          )}
-          <span
+        {narrow && (
+          <div
             style={{
-              display: narrow && waiting === null ? "none" : "block",
-              minWidth: 0,
-              color: FAINT,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
+              height: PICKER_ROW,
+              display: "flex",
+              justifyContent: "flex-end",
+              alignItems: "flex-end",
+              padding: "0 12px",
             }}
           >
-            {waiting !== null
-              ? `Going to ${moment.format(waiting)}…`
-              : "Click anywhere in the last 30 days to go there"}
-          </span>
-          <span style={{ flex: 1 }} />
-          <div
-            role="group"
-            aria-label="Zoom"
-            style={{ display: "flex", gap: 2 }}
-          >
-            {ZOOMS.map(({ days: span, label: name, short }) => (
-              <button
-                key={span}
-                type="button"
-                aria-pressed={zoom === span}
-                onClick={() => zoomTo(span)}
-                style={{
-                  ...control,
-                  border: "none",
-                  color: zoom === span ? INK : MUTED,
-                  background:
-                    zoom === span ? "rgba(255, 255, 255, 0.12)" : "transparent",
-                }}
-              >
-                {narrow ? short : name}
-              </button>
-            ))}
+            {picker}
           </div>
-          <button
-            type="button"
-            onClick={() => onOpenChange(false)}
-            aria-label="Close time travel"
-            style={{ ...control, border: "none", fontSize: 14, lineHeight: 1 }}
-          >
-            ✕
-          </button>
-        </div>
+        )}
+        <div
+          style={{
+            position: "relative",
+            display: "flex",
+            height: PLOT,
+            marginTop: PAD,
+          }}
+        >
+          {!narrow && picker}
 
-        <div style={{ display: "flex", height: PLOT }}>
           <div
             style={{
               width: narrow ? LABELS - 12 : LABELS,
@@ -1006,10 +937,34 @@ export const TimeTravel: React.FC<{
               position: "relative",
             }}
           >
+            {/* The ruler's corner. Replaying, the controls' pill says when. */}
+            {!replaying && (
+              <span
+                style={{
+                  position: "absolute",
+                  top: 4,
+                  left: narrow ? 8 : 16,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 5,
+                  fontSize: 11.5,
+                }}
+              >
+                <span
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                    background: "#ff5a4f",
+                  }}
+                />
+                Live
+              </span>
+            )}
             <span
               style={{
                 position: "absolute",
-                top: 1,
+                top: AXIS + 1,
                 left: narrow ? 8 : 16,
                 fontSize: 10,
                 color: FAINT,
@@ -1023,7 +978,7 @@ export const TimeTravel: React.FC<{
                 title={title}
                 style={{
                   position: "absolute",
-                  top: QUAKES + i * ROW,
+                  top: ROWS_TOP + i * ROW,
                   left: narrow ? 8 : 16,
                   height: ROW,
                   display: "flex",
@@ -1105,9 +1060,9 @@ export const TimeTravel: React.FC<{
                 style={{
                   position: "absolute",
                   left: 0,
-                  top: 0,
+                  top: AXIS,
                   width: Math.max(0, xOf(earliest)),
-                  height: ROWS_BOTTOM,
+                  height: ROWS_BOTTOM - AXIS,
                   background:
                     "repeating-linear-gradient(135deg, rgba(0,0,0,0.35) 0 3px, transparent 3px 7px)",
                   pointerEvents: "none",
@@ -1130,7 +1085,7 @@ export const TimeTravel: React.FC<{
                 style={{
                   position: "absolute",
                   left: xOf(playhead) - 4,
-                  top: QUAKES - 9,
+                  top: AXIS - 9,
                   width: 0,
                   height: 0,
                   borderLeft: "4.5px solid transparent",
@@ -1139,6 +1094,30 @@ export const TimeTravel: React.FC<{
                   pointerEvents: "none",
                 }}
               />
+
+              {waiting !== null && hover === null && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: 4,
+                    left: Math.min(
+                      Math.max(xOf(waiting), view.left + 80),
+                      view.left + view.width - 80
+                    ),
+                    transform: "translateX(-50%)",
+                    padding: "2px 6px",
+                    borderRadius: 3,
+                    background: "#262626",
+                    color: MUTED,
+                    fontSize: 11,
+                    whiteSpace: "nowrap",
+                    fontVariantNumeric: "tabular-nums",
+                    pointerEvents: "none",
+                  }}
+                >
+                  Going to {moment.format(waiting)}…
+                </div>
+              )}
 
               {hover !== null && (
                 <>
@@ -1150,7 +1129,8 @@ export const TimeTravel: React.FC<{
                   <div
                     style={{
                       position: "absolute",
-                      top: ROWS_BOTTOM + 2,
+                      // Over the ruler, as an editor shows the time.
+                      top: 4,
                       left: Math.min(
                         Math.max(xOf(hover), view.left + 62),
                         view.left + view.width - 62
@@ -1193,7 +1173,7 @@ export const TimeTravel: React.FC<{
                   key={metric}
                   style={{
                     position: "absolute",
-                    top: QUAKES + i * ROW,
+                    top: ROWS_TOP + i * ROW,
                     left: 8,
                     height: ROW,
                     display: "flex",

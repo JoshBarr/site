@@ -1382,6 +1382,18 @@ h1 {
   height: 100vh;
 }
 
+/* The scene's controls, under the floating header. */
+.hero__scene .hero__controls {
+  top: 66px;
+}
+
+/* The header's taller below the site's 700px breakpoint. */
+@media only screen and (max-width: 699px) {
+  .hero__scene .hero__controls {
+    top: 73px;
+  }
+}
+
 .hero__intro {
   position: absolute;
   inset: 0;

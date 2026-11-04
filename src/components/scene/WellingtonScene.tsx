@@ -429,7 +429,8 @@ function Controls({
     };
 
     const keys = (e: KeyboardEvent) => {
-      if (e.key === "Escape") stopFollowing();
+      // Not when it shut a panel or a menu (Base UI prevents the default).
+      if (e.key === "Escape" && !e.defaultPrevented) stopFollowing();
 
       // Walking, unless typing, or the page is scrolled off the scene.
       if (

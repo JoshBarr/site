@@ -3,7 +3,7 @@ import { PerspectiveCamera, Vector3 } from "three/webgpu";
 
 // Following a vehicle with the camera. The layers that draw vehicles list
 // the ones that can be followed and, each frame, publish where the followed
-// one is; the camera rig frames it, and the panel picks which.
+// one is; the camera rig frames it, and the controls pick which.
 
 export type Category = "bus" | "train" | "ship" | "plane";
 

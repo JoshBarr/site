@@ -6,6 +6,7 @@
   "author": "Josh Barr <josh@joshbarr.com>",
   "dependencies": {
     "@aws-sdk/client-dynamodb": "3.1161.0",
+    "@base-ui/react": "1.9.0",
     "@react-spring/web": "10.0.2",
     "@react-three/drei": "10.7.9",
     "@react-three/fiber": "9.8.2",
