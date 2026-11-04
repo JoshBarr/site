@@ -47,6 +47,8 @@ import {
 import { SunPosition, sunDirection, sunPosition } from "./sun";
 import * as environment from "./environment";
 import { Ocean, OCEAN_DESKTOP, OCEAN_MOBILE } from "./ocean/Ocean";
+import { useTide } from "./ocean/tide";
+import { Quakes } from "./quakes/Quakes";
 import { OceanConditions, significantHeight } from "./ocean/spectrum";
 import { Clouds } from "./clouds/Clouds";
 import { CLOUDS_DESKTOP, CLOUDS_MOBILE } from "./clouds/cloudNode";
@@ -61,6 +63,7 @@ import { Trees, TREES_DESKTOP, TREES_MOBILE } from "./trees/Trees";
 import { Vessels } from "./vessels/Vessels";
 import { Flights } from "./flights/Flights";
 import { Railway } from "./trains/Railway";
+import { CableCar } from "./cablecar/CableCar";
 import { Buses } from "./buses/Buses";
 import { Traffic } from "./traffic/Traffic";
 import { AirfieldLights } from "./airport/AirfieldLights";
@@ -944,6 +947,8 @@ export function Scene({
     environment.skylight.value = skylight;
   }, [skylight]);
 
+  useTide();
+
   const setHeightQuery = useCallback((query: HeightQuery | null) => {
     heightAt.current = query;
   }, []);
@@ -983,6 +988,7 @@ export function Scene({
           />
         </Suspense>
       )}
+      {!switchedOff("quakes") && <Quakes index={index} />}
       {!switchedOff("landmarks") && (
         <Landmarks
           index={index}
@@ -1013,6 +1019,7 @@ export function Scene({
         <Vessels index={index} sea={sea} lights={lights} />
       )}
       {!switchedOff("railway") && <Railway index={index} lights={lights} />}
+      {!switchedOff("cablecar") && <CableCar index={index} lights={lights} />}
       {!switchedOff("traffic") && (
         <Traffic index={index} lights={lights} time={time} />
       )}

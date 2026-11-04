@@ -15,5 +15,11 @@
     "isolatedModules": true,
     "target": "es2022"
   },
-  "include": ["*.ts", "*.mts", "poller/**/*.ts", "test/**/*.ts"]
+  "include": [
+    "*.ts",
+    "*.mts",
+    "poller/**/*.ts",
+    "timetables/**/*.ts",
+    "test/**/*.ts"
+  ]
 }

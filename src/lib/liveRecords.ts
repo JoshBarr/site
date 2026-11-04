@@ -1,10 +1,13 @@
 import { gunzipSync, gzipSync } from "node:zlib";
 import { z } from "zod";
 import type { Bus } from "./buses";
+import type { CableCarTrip, Timetable } from "./cablecar";
 import type { Fix, RouteEnd } from "./flights";
 import type { Sighting } from "./flightStore";
+import type { Quake } from "./quakes";
 import { point, trailPoint } from "./schemas";
 import type { TrafficSpeeds } from "./traffic";
+import type { Tide } from "./tide";
 import type { Train } from "./trains";
 import type { Vessel } from "./vessels";
 import type { Conditions } from "./weather";
@@ -225,11 +228,36 @@ export const conditions = z.object({
   windAloft: wind,
 }) satisfies z.ZodType<Conditions>;
 
+export const quake = z.object({
+  id: z.string(),
+  time: z.number(),
+  position: point,
+  depth: z.number(),
+  magnitude: z.number(),
+  locality: z.string(),
+  quality: z.string(),
+}) satisfies z.ZodType<Quake>;
+
+export const seaLevel = z.object({
+  time: z.number(),
+  level: z.number(),
+  rate: z.number(),
+}) satisfies z.ZodType<Tide>;
+
 /** NZTA's speeds. */
 export const traffic = log("traffic", speeds);
 
 /** MetService's conditions for the hour. */
 export const weather = log("weather", conditions);
+
+/**
+ * The quakes GeoNet's heard of lately that are on the map or were felt in
+ * Wellington, as it last had them: written when that changes.
+ */
+export const quakes = log("quakes", z.object({ quakes: z.array(quake) }));
+
+/** The harbour's height above mean sea level, every five minutes. */
+export const tide = log("tide", seaLevel);
 
 /** Every airport on a callsign's route, or null if adsb.im doesn't know it. */
 export const routes = collection("routes", 1, {
@@ -261,4 +289,32 @@ export const headings = collection("headings", 1, {
   }),
   data: z.object({ heading: z.number() }),
   ttl: 7 * DAY,
+});
+
+/** A GTFS day, YYYYMMDD. */
+const day = z.string().regex(/^\d{8}$/);
+
+const cableCarTrip = z.object({
+  service: z.string(),
+  direction: z.number(),
+  stops: z.array(z.tuple([z.string(), z.number()])).min(2),
+}) satisfies z.ZodType<CableCarTrip>;
+
+const timetable = z.object({
+  etag: z.string(),
+  start: day,
+  end: day,
+  services: z.record(z.string(), z.array(day)),
+  trips: z.array(cableCarTrip),
+}) satisfies z.ZodType<Timetable>;
+
+/**
+ * The cable car's timetable, from Metlink's GTFS feed: one item, written
+ * over when the feed has a new one. That's every few weeks, so it's kept a
+ * year from each write, however long the feed stays the same.
+ */
+export const cableCar = collection("cablecar", 1, {
+  sk: key("timetable"),
+  data: timetable,
+  ttl: 365 * DAY,
 });

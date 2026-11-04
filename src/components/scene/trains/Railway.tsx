@@ -22,10 +22,11 @@ const cameraPosition = new Vector3();
 
 /**
  * The track along every line on the map, out of the tunnels, and
- * Wellington station's platforms. Each chunk is built when the camera
- * first comes near it, the nearest first, one a frame.
+ * Wellington station's platforms (or the cable car's line). Each chunk is
+ * built when the camera first comes near it, the nearest first, one a
+ * frame.
  */
-function Tracks({ network }: { network: RailNetwork }) {
+export function Tracks({ network }: { network: RailNetwork }) {
   const camera = useThree((state) => state.camera);
 
   const { group, material, chunks } = useMemo(

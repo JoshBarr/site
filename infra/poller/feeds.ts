@@ -9,8 +9,10 @@ import {
   headings,
   type LiveData,
   type LiveRecord,
+  quakes,
   routePrefix,
   routes,
+  tide,
   toRecord,
   traffic,
   trains,
@@ -19,6 +21,8 @@ import {
 } from "../../src/lib/liveRecords";
 import { fetchBuses, fetchTrains } from "../../src/lib/metlink";
 import { fetchTraffic } from "../../src/lib/nzta";
+import { fetchQuakes } from "../../src/lib/quakes";
+import { fetchMeanLevel, fetchTide } from "../../src/lib/tide";
 import { onMap, TRAIL } from "../../src/lib/trains";
 import { pollHarbour, reportedHeading } from "../../src/lib/vesselStore";
 import {
@@ -42,7 +46,9 @@ type LogCollection =
   | typeof flights
   | typeof vessels
   | typeof traffic
-  | typeof weather;
+  | typeof weather
+  | typeof quakes
+  | typeof tide;
 
 interface Spec<L extends LogCollection> {
   log: L;
@@ -375,6 +381,45 @@ const vesselsFeed = Effect.gen(function* () {
 /** How often MetService is asked, ms: its conditions are for the hour. */
 const WEATHER_EVERY = 30 * 60_000;
 
+/** How often the tide gauge is asked, ms: the tide's carried on between. */
+const TIDE_EVERY = 5 * 60_000;
+
+/** How long the gauge's 30-day mean is trusted, ms. */
+const MEAN_AGAIN = 24 * 3600_000;
+
+const tideFeed = Effect.gen(function* () {
+  // The gauge's mean, and when it was fetched: once a day is plenty.
+  const mean = yield* Ref.make<{ level: number; fetched: number } | null>(null);
+
+  return yield* feed({
+    log: tide,
+    every: 60_000,
+    offset: 25_000,
+    window: 0,
+    poll: (previous) =>
+      Effect.gen(function* () {
+        const now = yield* Clock.currentTimeMillis;
+
+        if (previous && now - previous.sk < TIDE_EVERY) return null;
+
+        let known = yield* Ref.get(mean);
+
+        if (!known || now - known.fetched >= MEAN_AGAIN) {
+          known = {
+            level: yield* Effect.tryPromise(fetchMeanLevel),
+            fetched: now,
+          };
+
+          yield* Ref.set(mean, known);
+        }
+
+        const { level } = known;
+
+        return yield* Effect.tryPromise(() => fetchTide(level));
+      }),
+  });
+});
+
 /** Every feed, made once per container, and what they know of routes. */
 export const makeFeeds = Effect.gen(function* () {
   const routeMemory: Routes = { known: new Map(), due: new Map() };
@@ -458,6 +503,25 @@ export const makeFeeds = Effect.gen(function* () {
           return yield* Effect.tryPromise(getConditions);
         }),
     }),
+
+    // Written when GeoNet's list changes: a new quake, or one revised.
+    quakes: feed({
+      log: quakes,
+      every: 60_000,
+      offset: 30_000,
+      window: 0,
+      poll: (previous) =>
+        Effect.tryPromise(fetchQuakes).pipe(
+          Effect.map((fetched) =>
+            previous &&
+            JSON.stringify(previous.data.quakes) === JSON.stringify(fetched)
+              ? null
+              : { quakes: fetched }
+          )
+        ),
+    }),
+
+    tide: tideFeed,
   });
 
   return { logs, routes: routeMemory.known };

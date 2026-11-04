@@ -38,12 +38,14 @@ import {
   cloudShadow,
   nearShadow,
   REFLECTION_LAYER,
+  seaLevel,
   skylight,
   sunDirection,
   sunIntensity,
   sunShadow,
 } from "../environment";
 import { OceanSimulation } from "./OceanSimulation";
+import { quakeGlow } from "../quakes/glow";
 import {
   createCascades,
   DEFAULT_CONDITIONS,
@@ -175,7 +177,7 @@ function createMaterial(
   });
 
   const material = new MeshBasicNodeMaterial({ transparent: true });
-  material.positionNode = vec3(world.x, 0, world.y).add(
+  material.positionNode = vec3(world.x, seaLevel, world.y).add(
     displacement.mul(shoaling)
   );
 
@@ -205,9 +207,9 @@ function createMaterial(
 
   const reflected = reflect(view.negate(), normal);
 
-  // The sea sits at y = 0, so a planar mirror is exact for the calm surface;
-  // wave slopes then break it up. It renders a cheap terrain stand-in (see
-  // REFLECTION_LAYER).
+  // The sea sits level at the tide's height, which the mirror follows, so a
+  // planar mirror is exact for the calm surface; wave slopes then break it
+  // up. It renders a cheap terrain stand-in (see REFLECTION_LAYER).
   const mirror = reflector({
     resolutionScale: quality.reflectionScale,
     samples: quality.reflectionSamples,
@@ -277,7 +279,9 @@ function createMaterial(
   // Held back a little: a full-strength mirror reads as glass, not sea.
   const reflection = sky.mul(mix(0.85, 1, lit));
   const color = mix(scatter, reflection, fresnel.mul(0.5)).add(glint);
-  material.colorNode = mix(color, vec3(irradiance.mul(0.5)), foam);
+  material.colorNode = mix(color, vec3(irradiance.mul(0.5)), foam).add(
+    quakeGlow(surface)
+  );
   // See the sea floor through the shallows.
   // Slightly clear: the floor shows through the first few metres.
   material.opacityNode = max(float(1).sub(exp(thickness.mul(-0.25))), foam);
@@ -350,6 +354,7 @@ export function Ocean({
 
   useFrame((state) => {
     simulation?.update(renderer, state.clock.elapsedTime);
+    mirror.target.position.y = seaLevel.value;
   });
 
   return (

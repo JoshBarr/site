@@ -1,12 +1,16 @@
 import { foldBuses } from "./busStore";
 import type { Bus } from "./buses";
+import type { Timetable } from "./cablecar";
 import type { Aircraft, RouteEnd } from "./flights";
 import { foldFlights } from "./flightStore";
 import {
   buses,
+  cableCar,
   flights,
+  quakes,
   routePrefix,
   routes,
+  tide,
   traffic,
   trains,
   vessels,
@@ -14,6 +18,8 @@ import {
 } from "./liveRecords";
 import { canRead, readNewest, readSince } from "./liveTable";
 import { loadPositions, type Positions } from "./positions";
+import type { Quake } from "./quakes";
+import type { Tide } from "./tide";
 import type { TrafficResponse } from "./traffic";
 import { type Train, TRAIL } from "./trains";
 import { foldTrains } from "./trainStore";
@@ -207,5 +213,58 @@ export const loadWeather = (at?: number): Promise<Conditions | null> =>
     "weather",
     async () => (await readNewest(weather, "", at))?.data ?? null,
     (positions) => positions.weather,
+    at
+  );
+
+/**
+ * The cable car's timetable, as last read from Metlink's feed (without its
+ * ETag); null if it hasn't been yet. Only in the table: it's not live, so
+ * there's no fallback, and a replay runs to it too.
+ */
+export async function loadTimetable(): Promise<Omit<Timetable, "etag"> | null> {
+  if (!canRead()) throw new Error("no table to read the timetable from");
+
+  const stored = await readNewest(cableCar);
+
+  if (!stored) return null;
+
+  const { etag: _etag, ...timetable } = stored.data;
+
+  return timetable;
+}
+
+/**
+ * GeoNet reports a quake a few minutes after it strikes, and its
+ * automatic solution's revised for a while after, ms.
+ */
+export const QUAKES_REPORTED = 20 * 60_000;
+
+/**
+ * The quakes GeoNet had heard of at `at` (or now) that were on the map or
+ * felt in Wellington, oldest first. Replaying, as it had them a little
+ * after (QUAKES_REPORTED), so those about to strike are there to play as
+ * they do.
+ */
+export const loadQuakes = (at?: number): Promise<Quake[]> =>
+  fromTable(
+    "quakes",
+    async () => {
+      const until =
+        at === undefined
+          ? undefined
+          : Math.min(at + QUAKES_REPORTED, Date.now());
+
+      return (await readNewest(quakes, "", until))?.data.quakes ?? [];
+    },
+    (positions) => positions.quakes,
+    at
+  );
+
+/** The harbour's newest height at `at` (or now); null if there's none. */
+export const loadTide = (at?: number): Promise<Tide | null> =>
+  fromTable(
+    "tide",
+    async () => (await readNewest(tide, "", at))?.data ?? null,
+    (positions) => positions.tide,
     at
   );

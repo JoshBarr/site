@@ -48,16 +48,20 @@ const SCENE_CREDITS = (
     <a className="theme-link" href="https://www.aishub.net">
       AISHub
     </a>
-    , train and bus positions and bus routes from{" "}
+    , train and bus positions, bus routes and the cable car's timetable from{" "}
     <a className="theme-link" href="https://opendata.metlink.org.nz">
       Metlink
     </a>
-    , and traffic speeds and counts from{" "}
+    , traffic speeds and counts from{" "}
     <a
       className="theme-link"
       href="https://www.nzta.govt.nz/traffic-and-travel-information/use-our-data/"
     >
       NZTA
+    </a>
+    , and earthquakes and the tide from{" "}
+    <a className="theme-link" href="https://www.geonet.org.nz">
+      GeoNet
     </a>
     , {CC_BY}.
   </>

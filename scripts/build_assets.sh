@@ -19,6 +19,7 @@
 #   port       src/components/scene/port/terminal.ts
 #   traffic    public/roads/roads.json (OSM + NZTA)
 #   trains     public/rail/network.json
+#   cablecar   public/rail/cablecar.json: the cable car's track (OSM)
 #
 # Everything after landcover reads ground heights from public/terrain.
 # Downloads are cached in .cache/, so a rerun is mostly local. The terrain
@@ -30,7 +31,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-ALL=(terrain trees landcover footprints buildings heroes airport buses landmarks port traffic trains)
+ALL=(terrain trees landcover footprints buildings heroes airport buses landmarks port traffic trains cablecar)
 VENV=.venv-terrain
 PY="$VENV/bin/python"
 
@@ -80,6 +81,7 @@ wants landmarks && run landmarks node scripts/landmarks/build_sites.mjs
 wants port && run port node scripts/port/build_port.mjs
 wants traffic && run traffic node scripts/traffic/build_roads.mjs
 wants trains && run trains node scripts/trains/build_rail.mjs
+wants cablecar && run cablecar node scripts/trains/build_cablecar.mjs
 
 echo
 echo "built: ${STEPS[*]}"

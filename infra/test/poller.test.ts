@@ -10,6 +10,8 @@ import {
   flights,
   headings,
   routes,
+  quakes,
+  tide,
   traffic,
   trains,
   vessels,
@@ -785,6 +787,163 @@ describe("the poller", () => {
       expect(asked).toBe(0);
     });
   });
+
+  describe("quakes", () => {
+    const GEONET = "https://api.geonet.org.nz/quake";
+
+    /** A GeoNet quake, `seconds` ago. */
+    const reported = (
+      id: string,
+      [lon, lat]: [number, number],
+      magnitude: number,
+      seconds: number,
+      quality = "automatic"
+    ) => ({
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [lon, lat] },
+      properties: {
+        publicID: id,
+        time: new Date(ago(seconds)).toISOString(),
+        depth: 20.123,
+        magnitude,
+        mmi: -1,
+        locality: "somewhere",
+        quality,
+      },
+    });
+
+    let features: ReturnType<typeof reported>[];
+
+    beforeEach(() => {
+      features = [];
+
+      server.use(
+        http.get(GEONET, ({ request }) => {
+          expect(new URL(request.url).searchParams.get("MMI")).toBe("-1");
+
+          return HttpResponse.json({ type: "FeatureCollection", features });
+        })
+      );
+    });
+
+    it("logs those on the map, and those further off felt here", async () => {
+      features = [
+        // Off Paraparaumu, small.
+        reported("near", [174.95, -40.9], 1.9, 60),
+        // Kaikōura, big enough to feel here.
+        reported("kaikoura", [173.02, -42.69], 7.8, 600),
+        // Te Araroa: neither.
+        reported("far", [177.86, -36.81], 4.5, 30),
+        reported("gone", [174.8, -41.3], 3, 30, "deleted"),
+      ];
+
+      await run((await coldFeed("quakes")).poll);
+
+      const [{ data }] = table.records(quakes);
+
+      expect(data.quakes.map(({ id }) => id)).toEqual(["kaikoura", "near"]);
+
+      expect(data.quakes[1]).toEqual({
+        id: "near",
+        time: ago(60),
+        position: at({ lat: -40.9, lon: 174.95 }).map(Math.round),
+        depth: 20.1,
+        magnitude: 1.9,
+        locality: "somewhere",
+        quality: "automatic",
+      });
+    });
+
+    it("writes only when GeoNet's list changes", async () => {
+      features = [reported("near", [174.95, -40.9], 1.9, 60)];
+      const feed = await coldFeed("quakes");
+
+      await run(feed.poll);
+      await run(feed.poll);
+      expect(table.records(quakes)).toHaveLength(1);
+
+      // Reviewed.
+      features = [reported("near", [174.95, -40.9], 2.1, 60, "best")];
+      freezeTime(NOW + 60_000);
+      await run(feed.poll);
+      expect(table.records(quakes)).toHaveLength(2);
+    });
+  });
+
+  describe("tide", () => {
+    const SERIES =
+      "https://tilde.geonet.org.nz/v4/data/coastal/WLGT/water-height/40/15s/nil/latest/:period";
+
+    let asked: string[];
+    let quiet: boolean;
+
+    /** Tilde's minutes: rising 0.6 m an hour, 2.9 m on the gauge now. */
+    const minutes = () =>
+      Array.from({ length: 30 }, (_, i) => ({
+        val: 2.9 - (0.6 * (29 - i)) / 60,
+        err: 0,
+        qc: "",
+        ts: new Date(ago((29 - i) * 60)).toISOString().replace(".000", ""),
+      }));
+
+    beforeEach(() => {
+      asked = [];
+      quiet = false;
+
+      server.use(
+        http.get(SERIES, ({ params, request }) => {
+          const { searchParams } = new URL(request.url);
+          asked.push(
+            `${params.period} ${searchParams.get("aggregationPeriod")}`
+          );
+          expect(searchParams.get("aggregationFunction")).toBe("mean");
+
+          const data =
+            params.period === "30d"
+              ? [2.5, 2.7].map((val, i) => ({
+                  val,
+                  err: 0,
+                  qc: "",
+                  ts: `2026-10-0${i + 1}T00:00:00Z`,
+                }))
+              : quiet
+                ? []
+                : minutes();
+
+          return HttpResponse.json([{ data, series: {} }]);
+        })
+      );
+    });
+
+    it("logs the harbour's height above its 30-day mean every five minutes", async () => {
+      const feed = await coldFeed("tide");
+
+      await run(feed.poll);
+
+      expect(table.records(tide)[0].data).toEqual({
+        time: Date.parse(new Date(NOW).toISOString().slice(0, 19) + "Z"),
+        level: 0.3,
+        rate: 0.6,
+      });
+
+      freezeTime(NOW + 4 * 60_000);
+      await run(feed.poll);
+      freezeTime(NOW + 5 * 60_000);
+      await run(feed.poll);
+
+      expect(table.records(tide)).toHaveLength(2);
+      // The mean once, until it's a day old.
+      expect(asked).toEqual(["30d 1d", "30m 1m", "30m 1m"]);
+    });
+
+    it("logs nothing when the gauge has gone quiet", async () => {
+      quiet = true;
+
+      await run((await coldFeed("tide")).poll);
+
+      expect(table.records(tide)).toHaveLength(0);
+    });
+  });
 });
 
 describe("publishing the positions", () => {
@@ -838,6 +997,8 @@ describe("publishing the positions", () => {
       vessels: [],
       traffic: null,
       weather: null,
+      quakes: [],
+      tide: null,
     });
   });
 

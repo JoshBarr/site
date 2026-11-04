@@ -6,6 +6,8 @@ import type { Train } from "../../src/lib/trains";
 import type { Vessel } from "../../src/lib/vessels";
 import * as buses from "../../src/pages/api/buses";
 import * as flights from "../../src/pages/api/flights";
+import * as quakes from "../../src/pages/api/quakes";
+import * as tide from "../../src/pages/api/tide";
 import * as traffic from "../../src/pages/api/traffic";
 import * as trains from "../../src/pages/api/trains";
 import * as vessels from "../../src/pages/api/vessels";
@@ -204,6 +206,37 @@ describe("the live API routes", () => {
     expect(await response.json()).toEqual(conditions);
   });
 
+  it("serve the quakes", async () => {
+    const quake = {
+      id: "2026p829637",
+      time: ago(600),
+      position: [1760000, 5440000] satisfies [number, number],
+      depth: 20.1,
+      magnitude: 3.2,
+      locality: "20 km east of Paraparaumu",
+      quality: "best",
+    };
+
+    published({ quakes: [quake] });
+
+    const response = await call(quakes);
+
+    expect(await response.json()).toEqual({ time: NOW, quakes: [quake] });
+  });
+
+  it("serve the tide", async () => {
+    const level = { time: ago(240), level: 0.31, rate: -0.12 };
+    published({ tide: level });
+
+    const response = await call(tide);
+
+    expect(response.headers.get("cache-control")).toBe(
+      "public, s-maxage=60, stale-while-revalidate=300"
+    );
+
+    expect(await response.json()).toEqual(level);
+  });
+
   describe("are unavailable, briefly cached", () => {
     beforeEach(() => {
       vi.spyOn(console, "error").mockImplementation(() => {});
@@ -247,6 +280,28 @@ describe("the live API routes", () => {
       const response = await call(traffic);
 
       expect(response.status).toBe(502);
+    });
+
+    it("as the tide, from positions published before it was polled", async () => {
+      positionsAnswer(() =>
+        HttpResponse.json({
+          v: 1,
+          time: NOW,
+          trains: [],
+          buses: [],
+          aircraft: [],
+          vessels: [],
+          traffic: null,
+          weather: null,
+        })
+      );
+
+      expect(await (await call(quakes)).json()).toEqual({
+        time: NOW,
+        quakes: [],
+      });
+
+      expect((await call(tide)).status).toBe(502);
     });
 
     it("when MetService hasn't, for a minute", async () => {

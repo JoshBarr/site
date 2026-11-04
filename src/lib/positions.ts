@@ -5,7 +5,9 @@ import {
   busFix,
   conditions,
   fix,
+  quake,
   routeEnd,
+  seaLevel,
   speeds,
   trainFix,
   vessel,
@@ -38,6 +40,10 @@ export const positions = z.object({
   traffic: speeds.extend({ fetched: z.number() }).nullable(),
   /** Null until MetService has. */
   weather: conditions.nullable(),
+  /** Missing from those published before quakes were polled. */
+  quakes: z.array(quake).default([]),
+  /** Null until the tide gauge has been heard from. */
+  tide: seaLevel.nullable().default(null),
 });
 
 export type Positions = z.infer<typeof positions>;

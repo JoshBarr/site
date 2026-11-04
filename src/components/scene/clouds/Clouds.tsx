@@ -6,6 +6,7 @@ import { gaussianBlur } from "three/addons/tsl/display/GaussianBlurNode.js";
 import { cloudShadowMap, overcast, overcastFor } from "../environment";
 import { nightGlow, setNightGlow } from "../glow";
 import { depthOfField } from "../lens";
+import { quakeWarp } from "../quakes/glow";
 import { switchedOff } from "../stats";
 import { Conditions, lowCloudBase, windVector } from "../weather";
 import { CloudQuality, createCloudNode } from "./cloudNode";
@@ -135,7 +136,9 @@ export function Clouds({
     const depth = scenePass.getTextureNode("depth");
     const output = scenePass.getTextureNode("output");
     const glow = nightGlow(output, dark);
-    const color = glow ? output.add(glow) : output;
+    // Bent where a quake's wave is passing.
+    const seen = output.sample(quakeWarp(depth, camera));
+    const color = glow ? seen.add(glow) : seen;
 
     if (!noiseReady || switchedOff("clouds")) {
       pipeline.outputNode = depthOfField(color, depth);

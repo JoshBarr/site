@@ -5,12 +5,12 @@ import { verticalScale } from "../terrain/Terrain";
 // scripts/trains/build_rail.mjs): where trains can be put and how they get
 // from one fix to the next.
 
-const RAIL_URL = process.env.NEXT_PUBLIC_RAIL_URL ?? "/rail";
+export const RAIL_URL = process.env.NEXT_PUBLIC_RAIL_URL ?? "/rail";
 
 /** Railhead above the track bed (the smoothed ground), m. */
 export const RAIL_TOP = 0.65;
 
-interface NetworkFile {
+export interface NetworkFile {
   flags: { tunnel: number; bridge: number; model: number };
   nodes: number[];
   ways: number[][];

@@ -58,6 +58,7 @@ import { useShore } from "./shore";
 import { createShipModel, Kind, Lights, Point } from "./models";
 import { createModelMaterial, HIDDEN, isNear } from "../models/lod";
 import { castsNearShadow } from "../landmarks/nearShadow";
+import { seaLevel } from "../environment";
 import {
   Candidate,
   followed,
@@ -853,6 +854,8 @@ export function Vessels({
     if (!shore) return;
     const { hulls, parts, wakes } = meshes;
     const now = sceneNow();
+    // Everything afloat rides the tide.
+    const sea = seaLevel.value;
     const decay = Math.exp(-delta / SETTLE);
     let partCount = 0;
     let wakeCount = 0;
@@ -1007,7 +1010,11 @@ export function Vessels({
       yaw.setFromAxisAngle(UP, -h);
       tilt.setFromEuler(euler.set(pitch, 0, roll));
       rotation.multiplyQuaternions(yaw, tilt);
-      ship.compose(position.set(cx, heave, cz), rotation, scale.set(1, 1, 1));
+      ship.compose(
+        position.set(cx, sea + heave, cz),
+        rotation,
+        scale.set(1, 1, 1)
+      );
 
       const model = isNear(length, camera.position.distanceTo(position))
         ? detailed.get(vessel, hull, budget)
@@ -1022,12 +1029,12 @@ export function Vessels({
 
       matrix.multiplyMatrices(ship, local.makeScale(beam, freeboard, length));
       hulls.setMatrixAt(i, model ? HIDDEN : matrix);
-      spots.add(String(vessel.mmsi), cx, heave + freeboard, cz, length);
+      spots.add(String(vessel.mmsi), cx, sea + heave + freeboard, cz, length);
 
       if (String(vessel.mmsi) === watched) {
         publish({
           x: cx,
-          y: heave + freeboard,
+          y: sea + heave + freeboard,
           z: cz,
           heading: h,
           length,
@@ -1085,7 +1092,7 @@ export function Vessels({
         matrix.compose(
           position.set(
             cx - forward[0] * (length / 2),
-            0.3,
+            sea + 0.3,
             cz - forward[1] * (length / 2)
           ),
           yaw,
@@ -1112,6 +1119,7 @@ export function Vessels({
     light.needsUpdate = tint.needsUpdate = true;
     trails.heads.segments.needsUpdate = true;
     trails.heads.lines.geometry.instanceCount = ships.length;
+    trails.past.lines.position.y = trails.heads.lines.position.y = sea;
   });
 
   return (

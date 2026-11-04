@@ -6,10 +6,12 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { Live, Positions } from "./live";
 import Poller from "./poller/index";
+import Timetables from "./timetables/index";
 
 // The scene's live layers on AWS (see ../plans/infra.md): a Lambda polls the
 // feeds every minute into DynamoDB and publishes what the site serves to S3,
-// behind CloudFront; the site's functions read the table as a role Vercel's
+// behind CloudFront, and another keeps the cable car's timetable there,
+// daily; the site's functions read the table as a role Vercel's
 // OIDC tokens can assume. Deployed with `npm run deploy`
 // from here, to the region of the Alchemy profile (ap-southeast-2).
 
@@ -19,6 +21,7 @@ export default Alchemy.Stack(
   Effect.gen(function* () {
     // The poller declares the table, its own access to it and its schedule.
     yield* Poller;
+    yield* Timetables;
     const table = yield* Live;
     const vercelRoleArn = yield* vercelReader(table);
     const positionsUrl = yield* positionsCdn(yield* Positions);

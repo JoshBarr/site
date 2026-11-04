@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Fix, RouteEnd } from "../../src/lib/flights";
 import {
   flights,
+  quakes,
   routes,
   sortTime,
+  tide,
   traffic,
   trains,
   vessels,
@@ -11,6 +13,8 @@ import {
 } from "../../src/lib/liveRecords";
 import type { Vessel } from "../../src/lib/vessels";
 import * as flightsRoute from "../../src/pages/api/flights";
+import * as quakesRoute from "../../src/pages/api/quakes";
+import * as tideRoute from "../../src/pages/api/tide";
 import * as trafficRoute from "../../src/pages/api/traffic";
 import * as trainsRoute from "../../src/pages/api/trains";
 import * as vesselsRoute from "../../src/pages/api/vessels";
@@ -305,6 +309,56 @@ describe("the live API routes, from the table", () => {
       const weatherResponse = await call(weatherRoute, `/?at=${AT}`);
 
       expect(await weatherResponse.json()).toEqual(conditions(0.9));
+    });
+
+    it("serve the tide of then", async () => {
+      table.seed(tide, ago(before(120)), {
+        time: ago(before(300)),
+        level: -0.41,
+        rate: 0.2,
+      });
+      table.seed(tide, ago(60), { time: ago(240), level: 0.5, rate: -0.1 });
+
+      const response = await call(tideRoute, `/?at=${AT}`);
+
+      expect(await response.json()).toEqual({
+        time: ago(before(300)),
+        level: -0.41,
+        rate: 0.2,
+      });
+    });
+
+    it("serve the quakes reported soon after, to play as they strike", async () => {
+      const quake = (id: string, seconds: number) => ({
+        id,
+        time: ago(seconds),
+        position: [1760000, 5440000] satisfies Point,
+        depth: 20,
+        magnitude: 3.2,
+        locality: "20 km east of Paraparaumu",
+        quality: "automatic",
+      });
+
+      // Struck a minute after, reported four minutes after that.
+      table.seed(quakes, ago(before(-300)), {
+        quakes: [quake("then", before(-60))],
+      });
+      // Too long after.
+      table.seed(quakes, ago(before(-30 * 60)), {
+        quakes: [quake("then", before(-60)), quake("later", before(-1700))],
+      });
+
+      const response = await call(quakesRoute, `/?at=${AT}`);
+
+      expect(await response.json()).toEqual({
+        time: AT,
+        quakes: [quake("then", before(-60))],
+      });
+
+      // Settled once those twenty minutes are.
+      expect(response.headers.get("cache-control")).toBe(
+        "public, s-maxage=86400"
+      );
     });
 
     it("cache the last few minutes as briefly as now", async () => {

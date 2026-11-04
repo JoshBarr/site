@@ -64,6 +64,8 @@ export const publisher = ({ logs, routes }: Feeds) =>
         vessels: logs.vessels.polls,
         traffic: logs.traffic.polls,
         weather: logs.weather.polls,
+        quakes: logs.quakes.polls,
+        tide: logs.tide.polls,
       });
 
       const now = yield* Clock.currentTimeMillis;
@@ -78,6 +80,8 @@ export const publisher = ({ logs, routes }: Feeds) =>
         vessels: foldVessels(polls.vessels, now),
         traffic: traffic ? { fetched: traffic.sk, ...traffic.data } : null,
         weather: polls.weather.at(-1)?.data ?? null,
+        quakes: polls.quakes.at(-1)?.data.quakes ?? [],
+        tide: polls.tide.at(-1)?.data ?? null,
       });
 
       const data = gzipSync(JSON.stringify(body));

@@ -14,6 +14,13 @@ export const skyHorizon = uniform(new Color("#3a3a3a"));
 export const skyZenith = uniform(new Color("#0a0a0a"));
 
 /**
+ * The sea's height, metres above mean sea level (the terrain's zero): the
+ * tide, which ./ocean/tide.ts keeps current. The water, and whatever floats
+ * on it, sit at this.
+ */
+export const seaLevel = uniform(0);
+
+/**
  * 0..1: how close to a full grey lid the sky is. Closes the low cloud into a
  * deck and dims the sun.
  */

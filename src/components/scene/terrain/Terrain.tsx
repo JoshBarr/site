@@ -49,6 +49,7 @@ import {
   shadeSurface,
 } from "./surface";
 import { createAirfieldMaps, disposeAirfieldMaps } from "../airport/surface";
+import { quakeGlow } from "../quakes/glow";
 
 export interface TerrainQuality {
   /** Quads per patch side. */
@@ -285,7 +286,7 @@ function createMaterial(
   // Skirts drop a little below the patch to hide cracks.
   const skirt = positionGeometry.y.mul(size).mul(0.05);
 
-  const material: NodeMaterial = smooth
+  const material: MeshStandardNodeMaterial | MeshLambertNodeMaterial = smooth
     ? new MeshStandardNodeMaterial({ roughness: 0.9, metalness: 0 })
     : new MeshLambertNodeMaterial();
 
@@ -340,8 +341,13 @@ function createMaterial(
     f.y
   );
 
+  const world = vec2(
+    tileA.x.add(local.x.mul(size)),
+    tileA.y.add(local.y.mul(size))
+  );
+
   const shaded = shadeSurface(surface, {
-    world: vec2(tileA.x.add(local.x.mul(size)), tileA.y.add(local.y.mul(size))),
+    world,
     height,
     normal,
     relief: ground.x,
@@ -353,6 +359,7 @@ function createMaterial(
   );
   material.colorNode = mix(seabed, shaded.color, onLand);
   material.aoNode = mix(float(1), shaded.occlusion, onLand);
+  material.emissiveNode = quakeGlow(world);
 
   return material;
 }

@@ -18,6 +18,8 @@ const nothing: Positions = {
   vessels: [],
   traffic: null,
   weather: null,
+  quakes: [],
+  tide: null,
 };
 
 /** Answers for the positions with `respond`. */
