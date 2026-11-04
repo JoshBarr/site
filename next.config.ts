@@ -9,7 +9,16 @@ import type { NextConfig } from "next";
  */
 const TILE_CACHE = "public, max-age=3600, stale-while-revalidate=86400";
 
+/** satellite.js's WASM builds, which hang Turbopack; see noWasm.ts. */
+const NO_WASM = "./src/components/scene/sky/noWasm.ts";
+
 const config: NextConfig = {
+  turbopack: {
+    resolveAlias: {
+      "#wasm-single-thread": NO_WASM,
+      "#wasm-multi-thread": NO_WASM,
+    },
+  },
   async headers() {
     return [
       {
