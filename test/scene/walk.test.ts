@@ -40,8 +40,8 @@ describe("walking from the keyboard", () => {
     const near = second(low, 100);
     const far = second(high, 1000);
 
-    expect(near.forward).toBeGreaterThan(40);
-    expect(near.forward).toBeLessThan(75);
+    expect(near.forward).toBeGreaterThan(160);
+    expect(near.forward).toBeLessThan(300);
     expect(far.forward).toBeCloseTo(near.forward * 10);
     expect(near.right).toBe(0);
 
@@ -52,22 +52,22 @@ describe("walking from the keyboard", () => {
     expect(low.step(1 / 60, 100)).toBeNull();
   });
 
-  it("goes no faster on the diagonal, and Shift hurries it", () => {
+  it("goes no faster on the diagonal, and Shift slows it", () => {
     const straight = new Walk();
     const diagonal = new Walk();
-    const fast = new Walk();
+    const slow = new Walk();
     straight.press("KeyD");
     diagonal.press("KeyS");
     diagonal.press("KeyD");
-    fast.press("ShiftRight");
-    fast.press("KeyD");
+    slow.press("ShiftRight");
+    slow.press("KeyD");
 
     const across = second(straight, 100).right;
     const { forward, right } = second(diagonal, 100);
 
     expect(Math.hypot(forward, right)).toBeCloseTo(across);
     expect(forward).toBeLessThan(0);
-    expect(second(fast, 100).right).toBeCloseTo(across * 4);
+    expect(second(slow, 100).right).toBeCloseTo(across / 4);
   });
 
   it("turns left on Q and right on E, and not both", () => {

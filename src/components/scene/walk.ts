@@ -14,19 +14,19 @@ const MOVES = {
 
 const walks = (code: string): code is keyof typeof MOVES => code in MOVES;
 
-const FAST = new Set(["ShiftLeft", "ShiftRight"]);
+const SLOW = new Set(["ShiftLeft", "ShiftRight"]);
 
 /** Seconds to get most of the way up to speed, or to stop. */
 const EASE = 0.15;
 
 /** Ground speed is this many times the height above ground, per second. */
-const SPEED_PER_HEIGHT = 0.75;
+const SPEED_PER_HEIGHT = 3;
 
 /** Slowest and fastest across the ground, m/s. */
-const SPEED: [number, number] = [15, 2500];
+const SPEED: [number, number] = [60, 10000];
 
-/** Shift goes this many times faster. */
-const FAST_BY = 4;
+/** Shift goes this many times slower. */
+const SLOW_BY = 4;
 
 /** Turning, radians a second. */
 const TURN_RATE = Math.PI / 3;
@@ -54,7 +54,7 @@ export function typing(target: EventTarget | null) {
 
 /**
  * Walking the camera over the map from the keyboard: WASD or the arrows to
- * move, Q and E to turn, Shift to hurry. It eases up to speed and to a stop,
+ * move, Q and E to turn, Shift to slow down. It eases up to speed and to a stop,
  * faster the higher it is.
  */
 export class Walk {
@@ -63,7 +63,7 @@ export class Walk {
 
   /** Holds `code` down. True if it's a key that walks. */
   press(code: string) {
-    if (FAST.has(code)) this.held.add(code);
+    if (SLOW.has(code)) this.held.add(code);
 
     if (!walks(code)) return false;
     this.held.add(code);
@@ -104,12 +104,12 @@ export class Walk {
       Math.hypot(forward, right) /
         Math.max(Math.abs(forward), Math.abs(right)) || 1;
 
-    const fast = [...this.held].some((code) => FAST.has(code)) ? FAST_BY : 1;
+    const slow = [...this.held].some((code) => SLOW.has(code)) ? SLOW_BY : 1;
 
     const speed =
       (Math.min(Math.max(height * SPEED_PER_HEIGHT, SPEED[0]), SPEED[1]) *
-        fast *
         delta) /
+      slow /
       across;
 
     return {
