@@ -81,7 +81,8 @@ import {
 import { DEPTH_POINTS, sceneDepthsAt } from "./sceneDepth";
 import { connectCamera, shotFromUrl } from "./shots/shots";
 import { useRenderer } from "./renderer";
-import { useInView } from "./visibility";
+import { sceneShown, useInView } from "./visibility";
+import { typing, Walk } from "./walk";
 import { sceneNow, useSeek } from "./clock";
 import { attachInspector, showStats, Stats, switchedOff } from "./stats";
 
@@ -195,6 +196,9 @@ const MAX_POLAR_ANGLE = Math.PI * 0.5;
  */
 const CAMERA_PRIORITY = 0.5;
 
+/** Before the controls update, so a step's in this frame's view. */
+const WALK_PRIORITY = -2;
+
 /** A press moving less than this, pixels, and let go within CLICK_TIME, ms, is a click. */
 const CLICK_SLOP = 6;
 const CLICK_TIME = 500;
@@ -224,6 +228,9 @@ const flown: [Vector3, Vector3] = [new Vector3(), new Vector3()];
 
 /** Where the pivot's going, looking around a vehicle, and by how much. */
 const carried: [Vector3, Vector3] = [new Vector3(), new Vector3()];
+
+/** Which way's ahead and to the right, walking. */
+const walked: [Vector3, Vector3] = [new Vector3(), new Vector3()];
 
 /** Handing back from following, the orbit target's this far off, m. */
 const HAND_BACK: [number, number] = [50, 2000];
@@ -349,6 +356,9 @@ function Controls({
   /** Flying to a set view, picked from the shot panel. */
   const flight = useRef<ViewFlight | null>(null);
 
+  /** Walking about from the keyboard. */
+  const walk = useMemo(() => new Walk(), []);
+
   // Back to orbiting, from where the follow rig left the camera.
   const handBack = useCallback(() => {
     const c = controls.current;
@@ -420,7 +430,27 @@ function Controls({
 
     const keys = (e: KeyboardEvent) => {
       if (e.key === "Escape") stopFollowing();
+
+      // Walking, unless typing, or the page is scrolled off the scene.
+      if (
+        e.metaKey ||
+        e.ctrlKey ||
+        e.altKey ||
+        typing(e.target) ||
+        !sceneShown() ||
+        !walk.press(e.code)
+      ) {
+        return;
+      }
+
+      e.preventDefault();
+      touched.current = true;
+      flight.current = null;
+      stopFollowing();
     };
+
+    const keyUp = (e: KeyboardEvent) => walk.release(e.code);
+    const blur = () => walk.clear();
 
     // Clicking a vehicle (not dragging, and with one finger) follows it.
     // Presses end on the window: they may be let go off the map.
@@ -521,6 +551,8 @@ function Controls({
     element.addEventListener("pointermove", hover);
     element.addEventListener("wheel", take, { capture: true });
     window.addEventListener("keydown", keys);
+    window.addEventListener("keyup", keyUp);
+    window.addEventListener("blur", blur);
 
     return () => {
       element.removeEventListener("pointerdown", down, { capture: true });
@@ -529,10 +561,13 @@ function Controls({
       element.removeEventListener("pointermove", hover);
       element.removeEventListener("wheel", take, { capture: true });
       window.removeEventListener("keydown", keys);
+      window.removeEventListener("keyup", keyUp);
+      window.removeEventListener("blur", blur);
+      walk.clear();
       disposed = true;
       element.style.cursor = "";
     };
-  }, [events, renderer, lookAround]);
+  }, [events, renderer, lookAround, walk]);
 
   // Set views, picked from the shot panel, and the view now, for copying.
   useEffect(
@@ -601,6 +636,39 @@ function Controls({
     );
     placed.current = true;
   }, [boundary, position, target]);
+
+  // Walked across the ground the way it faces, before the controls place the
+  // camera this frame. Once the rig's let go, if it had the camera.
+  useFrame((_, delta) => {
+    const c = controls.current;
+
+    if (!c) return;
+    const { camera } = c;
+    const ground = heightAt.current?.(camera.position.x, camera.position.z);
+    const height = camera.position.y - Math.max(ground ?? 0, seaFloor.current);
+    const step = walk.step(delta, height);
+
+    if (!step || followingRef.current) return;
+    const ahead = walked[0].set(0, 0, -1).applyQuaternion(camera.quaternion);
+    ahead.y = 0;
+
+    // Looking straight down, ahead is the top of the view.
+    if (ahead.lengthSq() < 1e-6) {
+      ahead.set(0, 1, 0).applyQuaternion(camera.quaternion).setY(0);
+    }
+
+    ahead.normalize();
+    const right = walked[1].set(-ahead.z, 0, ahead.x);
+
+    const to = c
+      .getTarget(orbit)
+      .addScaledVector(ahead, step.forward)
+      .addScaledVector(right, step.right);
+
+    c.moveTo(to.x, to.y, to.z, false);
+
+    if (step.turn) c.rotate(step.turn, 0, false);
+  }, WALK_PRIORITY);
 
   useFrame((_, delta) => {
     const c = controls.current;

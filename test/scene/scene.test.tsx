@@ -230,4 +230,62 @@ describe("the scene", { timeout: 30_000 }, () => {
     expect(c.enabled).toBe(true);
     expect(c.maxPolarAngle).toBe(Math.PI / 2);
   });
+  it("walks the way it faces from the keyboard, and turns", async () => {
+    scene = await renderScene(NOON);
+    await frames(5);
+    const { camera } = scene.state();
+
+    const key = (type: string, code: string, target: EventTarget = window) =>
+      target.dispatchEvent(
+        new KeyboardEvent(type, { code, bubbles: true, cancelable: true })
+      );
+
+    /** Which way it's facing across the ground, and how far it's turned left. */
+    const facing = () =>
+      camera.getWorldDirection(new Vector3()).setY(0).normalize();
+
+    const heading = () => Math.atan2(-facing().x, -facing().z);
+
+    // Forward, along the ground.
+    const ahead = facing();
+    let from = camera.position.clone();
+    key("keydown", "KeyW");
+    await frames(30);
+    key("keyup", "KeyW");
+    await frames(30);
+    const forward = camera.position.clone().sub(from).setY(0);
+
+    expect(forward.length()).toBeGreaterThan(100);
+    expect(forward.normalize().dot(ahead)).toBeGreaterThan(0.99);
+
+    // Right, with the arrow.
+    from = camera.position.clone();
+    key("keydown", "ArrowRight");
+    await frames(30);
+    key("keyup", "ArrowRight");
+    await frames(30);
+    const right = camera.position.clone().sub(from).setY(0).normalize();
+
+    expect(right.dot(new Vector3(-ahead.z, 0, ahead.x))).toBeGreaterThan(0.99);
+
+    // Q turns left.
+    const before = heading();
+    key("keydown", "KeyQ");
+    await frames(30);
+    key("keyup", "KeyQ");
+    await frames(60);
+
+    expect(heading() - before).toBeGreaterThan(0.2);
+
+    // Not while typing.
+    const input = document.createElement("input");
+    document.body.append(input);
+    from = camera.position.clone();
+    key("keydown", "KeyW", input);
+    await frames(30);
+    key("keyup", "KeyW", input);
+    input.remove();
+
+    expect(camera.position.distanceTo(from)).toBeLessThan(1e-6);
+  });
 });
