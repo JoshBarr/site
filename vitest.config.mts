@@ -13,6 +13,11 @@ for (const name of Object.keys(process.env)) {
   if (DEPLOYED.test(name)) delete process.env[name];
 }
 
+// Vitest sets it to "test" only if it isn't set, and a Vercel build sets
+// "production": React's production build has no act(), which every React
+// test needs.
+Object.assign(process.env, { NODE_ENV: "test" });
+
 export default defineConfig({
   test: {
     environment: "node",

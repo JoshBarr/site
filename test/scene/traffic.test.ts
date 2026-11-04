@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { keepToKerb } from "../../src/components/scene/buses/run";
 import { Roads } from "../../src/components/scene/traffic/roads";
 import { RoadUser, Traffic } from "../../src/components/scene/traffic/sim";
@@ -64,6 +64,27 @@ function bus(x: number, speed = 0, held = 0): RoadUser {
     held,
   };
 }
+
+/**
+ * Mulberry32 from `seed`: the same cars every run. Traffic's filled at
+ * random, and about one fill in a hundred puts no car beside the bus to be
+ * held up, which failed deploys.
+ */
+function seeded(seed: number) {
+  let a = seed;
+
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+beforeEach(() => {
+  vi.spyOn(Math, "random").mockImplementation(seeded(1));
+});
 
 function traffic() {
   const sim = new Traffic(street(), index, 2000);
