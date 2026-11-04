@@ -193,6 +193,11 @@ export class BuildingCache {
     this.group.matrixAutoUpdate = false;
   }
 
+  /** Tiles on their way. */
+  get loading() {
+    return this.inFlight.size;
+  }
+
   /** True when the tile can be drawn: loaded, empty, or given up on. */
   ready(tile: BuildingTile) {
     return (

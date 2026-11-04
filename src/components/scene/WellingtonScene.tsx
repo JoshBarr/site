@@ -38,6 +38,8 @@ import {
 import { hazeGlowAtNight } from "./skyglow";
 import { Conditions, lowCloudBase, useConditions } from "./weather";
 import { loadManifest, nztmToWorld, TileIndex } from "./terrain/manifest";
+import { track } from "./loading";
+import { SceneLoading } from "./SceneLoading";
 import {
   HeightQuery,
   Terrain,
@@ -1050,7 +1052,11 @@ export const CAMERA = { fov: DEFAULT_FOV, near: 5, far: 80000 };
 export const WellingtonScene: React.FC<{
   /** False clears the sky (and its rain) whatever the forecast says. */
   clouds?: boolean;
-}> = ({ clouds = true }) => {
+  /** Kept out of sight, still loading; it fades up when this turns false. */
+  hidden?: boolean;
+  /** Called once the first view has loaded. */
+  onSettled?: () => void;
+}> = ({ clouds = true, hidden = false, onSettled }) => {
   const [index, setIndex] = useState<TileIndex | null>(null);
   const mobile = useIsMobile();
   const forecast = useConditions();
@@ -1067,46 +1073,58 @@ export const WellingtonScene: React.FC<{
   const inView = useInView(canvas);
 
   useEffect(() => {
-    loadManifest().then(setIndex, (e) => console.error(e));
+    track(loadManifest()).then(setIndex, (e) => console.error(e));
   }, []);
 
   return (
-    <Canvas
-      ref={setCanvas}
-      // Scrolled past, the scene stops drawing.
-      frameloop={inView ? "always" : "never"}
-      shadows="percentage"
-      // With 4× MSAA in the scene pass, 2× buys little over 1.5× at
-      // nearly twice the fill.
-      dpr={[1, 1.5]}
-      gl={async (props) => {
-        const renderer = new WebGPURenderer({
-          // SAFETY: R3F's props are for a WebGLRenderer, and WebGPURenderer
-          // takes the same ones; the types differ only in which declaration
-          // of OffscreenCanvas each was built against.
-          ...(props as any),
-          antialias: true,
-          // ?webgl tests the fallback path browsers without WebGPU get.
-          forceWebGL: new URLSearchParams(location.search).has("webgl"),
-        });
+    <div style={{ position: "relative", width: "100%", height: "100%" }}>
+      <Canvas
+        ref={setCanvas}
+        style={{
+          opacity: hidden ? 0 : 1,
+          pointerEvents: hidden ? "none" : undefined,
+          transition: "opacity 1.6s ease",
+        }}
+        // Scrolled past, the scene stops drawing.
+        frameloop={inView ? "always" : "never"}
+        shadows="percentage"
+        // With 4× MSAA in the scene pass, 2× buys little over 1.5× at
+        // nearly twice the fill.
+        dpr={[1, 1.5]}
+        gl={async (props) => {
+          const renderer = new WebGPURenderer({
+            // SAFETY: R3F's props are for a WebGLRenderer, and WebGPURenderer
+            // takes the same ones; the types differ only in which declaration
+            // of OffscreenCanvas each was built against.
+            ...(props as any),
+            antialias: true,
+            // ?webgl tests the fallback path browsers without WebGPU get.
+            forceWebGL: new URLSearchParams(location.search).has("webgl"),
+          });
 
-        await renderer.init();
+          await renderer.init();
 
-        if (stats) await attachInspector(renderer);
+          if (stats) await attachInspector(renderer);
 
-        return renderer;
-      }}
-      camera={CAMERA}
-    >
-      {index && (
-        <Scene
-          index={index}
-          conditions={conditions}
-          time={time}
-          mobile={mobile}
-        />
-      )}
-      {stats && <Stats />}
-    </Canvas>
+          return renderer;
+        }}
+        camera={CAMERA}
+      >
+        {index && (
+          <Scene
+            index={index}
+            conditions={conditions}
+            time={time}
+            mobile={mobile}
+          />
+        )}
+        {stats && <Stats />}
+      </Canvas>
+      <SceneLoading
+        started={index !== null}
+        hidden={hidden}
+        onSettled={onSettled}
+      />
+    </div>
   );
 };

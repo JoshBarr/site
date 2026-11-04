@@ -8,6 +8,8 @@ type Theme = "theme--light" | "theme--dark" | string;
 interface HeaderProps {
   siteTitle: string;
   theme: Theme;
+  /** Laid over the top of the page, rather than above it. */
+  floating?: boolean;
 }
 
 const ScrollToTop = () => {
@@ -80,9 +82,13 @@ const ScrollToTop = () => {
   );
 };
 
-const Header = ({ siteTitle }: HeaderProps) => (
+const Header = ({ siteTitle, floating }: HeaderProps) => (
   <>
-    <div className={"header  theme-header theme-color relative z-1"}>
+    <div
+      className={`header theme-header theme-color z-1 ${
+        floating ? "header--floating" : "relative"
+      }`}
+    >
       <div className="container container--secondary grid grid-odd align-center">
         <h2
           className={
@@ -109,7 +115,12 @@ const Header = ({ siteTitle }: HeaderProps) => (
         </h2>
         <nav className="header__nav grid-span-5 align-right grid-span-4@medium grid-span-6@large">
           {/* <Link className="theme-link" to="/services">Services</Link> */}
-          {/* <Link className="theme-link" to="/work">Work</Link> */}
+          <Link
+            className="theme-link-selectable theme-link-secondary"
+            href="/work"
+          >
+            Work
+          </Link>
           <Link
             className="theme-link-selectable theme-link-secondary"
             href="/articles"
@@ -122,12 +133,6 @@ const Header = ({ siteTitle }: HeaderProps) => (
           >
             Bookmarks
           </Link>
-          <a
-            className="theme-link-selectable theme-link-secondary"
-            href="mailto:josh@joshbarr.com"
-          >
-            josh@joshbarr.com
-          </a>
         </nav>
       </div>
     </div>

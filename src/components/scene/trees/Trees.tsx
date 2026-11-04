@@ -13,6 +13,7 @@ import {
   Vector4,
 } from "three/webgpu";
 import { castsNearShadow } from "../landmarks/nearShadow";
+import { addLoadingSource, track } from "../loading";
 import { TileIndex } from "../terrain/manifest";
 import { verticalScale } from "../terrain/Terrain";
 import { windVector } from "../weather";
@@ -94,7 +95,7 @@ export function Trees({
   }, [wind]);
 
   useEffect(() => {
-    loadTreeIndex().then(
+    track(loadTreeIndex()).then(
       (index) => {
         const { origin, rootSize } = terrain.manifest;
         const [e, n] = index.manifest.origin;
@@ -169,6 +170,8 @@ function TreeTiles({
     }),
     [index]
   );
+
+  useEffect(() => addLoadingSource(() => state.inFlight.size), [state]);
 
   useEffect(
     () => () => {

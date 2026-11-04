@@ -6,15 +6,18 @@ interface LayoutProps {
   theme?: string;
   /** Data credits for the page, shown under the footer links. */
   credits?: ReactNode;
+  /** Lays the header over the top of the page, e.g. a full-screen scene. */
+  floatingHeader?: boolean;
 }
 
 const Layout: FC<LayoutProps> = ({
   children,
   theme = "theme--hero",
   credits,
+  floatingHeader,
 }) => (
   <>
-    <Header theme={theme} siteTitle={"Josh Barr"} />
+    <Header theme={theme} siteTitle={"Josh Barr"} floating={floatingHeader} />
     <div className={`children`}>
       <div className="theme-background">{children}</div>
     </div>

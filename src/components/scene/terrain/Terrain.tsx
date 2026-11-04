@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
+import { addLoadingSource } from "../loading";
 import {
   BufferAttribute,
   DataArrayTexture,
@@ -555,6 +556,8 @@ export function Terrain({
 
     return () => onHeightQuery?.(null);
   }, [cache, onHeightQuery]);
+
+  useEffect(() => addLoadingSource(() => cache.loading), [cache]);
 
   useEffect(
     () => () => {

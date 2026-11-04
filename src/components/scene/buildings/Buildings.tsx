@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { REFLECTION_LAYER } from "../environment";
+import { addLoadingSource, track } from "../loading";
 import { castsNearShadow } from "../landmarks/nearShadow";
 import { setCityLights } from "../skyglow";
 import { TileIndex } from "../terrain/manifest";
@@ -74,7 +75,7 @@ export function Buildings({
   }, [lights, occupancy]);
 
   useEffect(() => {
-    loadBuildingIndex().then(
+    track(loadBuildingIndex()).then(
       (index) => {
         const { origin, rootSize } = terrain.manifest;
         const [e, n] = index.manifest.origin;
@@ -136,6 +137,8 @@ function BuildingTiles({
 
     return { cache, material, lightsMaterial };
   }, [index, quality]);
+
+  useEffect(() => addLoadingSource(() => cache.loading), [cache]);
 
   useEffect(
     () => () => {
