@@ -119,6 +119,12 @@ export const SHOTS: Shot[] = [
     group: "Transport",
     view: [1749420, 5429402, 90, 1749070, 5428698, 5],
   },
+  {
+    id: "cable-car",
+    name: "Cable car",
+    group: "Transport",
+    view: [1748030, 5428035, 175, 1748450, 5428150, 35],
+  },
 ];
 
 /** The camera's view now, while the scene's up. */

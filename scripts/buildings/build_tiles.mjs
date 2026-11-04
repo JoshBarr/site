@@ -14,6 +14,12 @@
 // .cache/buildings/footprints.json). They're all suburban, and left out
 // wherever the council's models stand.
 //
+// The council's models take in some of the cable car's own structures: its
+// upper line as one long block, and the shelter at Talavera. The scene lays
+// the line itself, and those would cover the cars, so anything that's
+// nearly all on its track (public/rail/cablecar.json, so build that first)
+// is left out.
+//
 // Each building keeps its roof, simplified, and gets new walls dropped
 // straight down from the roof's outline to below the ground. The source's
 // walls (window reveals, ledges, balconies) are most of its triangles and
@@ -76,6 +82,14 @@ const TERRAIN = path.join(ROOT, "public/terrain");
 const OUT_DIR = path.join(ROOT, "public/buildings");
 const CACHE_DIR = path.join(ROOT, ".cache/buildings");
 const FOOTPRINTS = path.join(CACHE_DIR, "footprints.json");
+const CABLE_CAR = path.join(ROOT, "public/rail/cablecar.json");
+
+/**
+ * A building with this share of its roof within `ON_TRACK` m of the cable
+ * car's track is the line's, not a building beside it.
+ */
+const ON_TRACK = 5;
+const ON_TRACK_SHARE = 0.9;
 
 /**
  * A footprint whose centre is in a cell of this size (m) that a council model
@@ -758,6 +772,53 @@ async function loadFootprints(modelled) {
 }
 
 /**
+ * Whether `b` is the cable car's: nearly all its roof (by plan area, at
+ * each triangle's centre) within ON_TRACK of the track, as segments in
+ * NZTM.
+ */
+function onTrack(b, track) {
+  const { positions: p, roof } = b;
+  let on = 0;
+
+  // Distance from (e, n) to the segment.
+  const distance = (e, n, [ae, an, be, bn]) => {
+    const de = be - ae;
+    const dn = bn - an;
+    const along = ((e - ae) * de + (n - an) * dn) / (de * de + dn * dn || 1);
+    const u = Math.min(Math.max(along, 0), 1);
+
+    return Math.hypot(e - ae - u * de, n - an - u * dn);
+  };
+
+  for (let t = 0; t < roof.length; t += 3) {
+    const [a, c, d] = [roof[t], roof[t + 1], roof[t + 2]];
+    const e = (p[a * 3] + p[c * 3] + p[d * 3]) / 3;
+    const n = (p[a * 3 + 1] + p[c * 3 + 1] + p[d * 3 + 1]) / 3;
+
+    if (track.some((segment) => distance(e, n, segment) < ON_TRACK)) {
+      on += Math.abs(triangleNormal(p, a, c, d)[2]) / 2;
+    }
+  }
+
+  return on >= ON_TRACK_SHARE * b.area;
+}
+
+/** The cable car's track as segments [e0, n0, e1, n1], NZTM. */
+async function loadCableCarTrack() {
+  const { nodes, ways } = JSON.parse(await readFile(CABLE_CAR, "utf8"));
+  const segments = [];
+
+  for (const [, ...path] of ways) {
+    for (let k = 0; k + 1 < path.length; k++) {
+      const [a, b] = [path[k] * 3, path[k + 1] * 3];
+      segments.push([nodes[a], nodes[a + 1], nodes[b], nodes[b + 1]]);
+    }
+  }
+
+  return segments;
+}
+
+/**
  * A footprint's flat roof, `height` above its ground, in the same form as
  * prepareBuilding's. Null when the outline won't triangulate.
  */
@@ -942,6 +1003,13 @@ async function main() {
 
   // Footprints are raised from the DEM already.
   for (const b of buildings) b.shift = b.footprint ? 0 : -datum;
+
+  // Then the cable car's are left out (not before: the datum stays the
+  // same, and so does every other building).
+  const track = await loadCableCarTrack();
+  const beside = buildings.filter((b) => !onTrack(b, track));
+  console.log(`${buildings.length - beside.length} on the cable car's track`);
+  buildings = beside;
 
   await rm(OUT_DIR, { recursive: true, force: true });
   const manifestLevels = [];

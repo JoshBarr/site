@@ -13,7 +13,8 @@ export const CAR = { length: 10.5, width: 2.5 };
  */
 const LEAN = 0.2;
 
-const RED = 0xb3262e;
+/** The cars' red, as grey: the scene keeps its colour for data. */
+const BODY = 0x515151;
 const ROOF = 0x9a9a9a;
 const GLASS = 0x1c2124;
 const UNDERFRAME = 0x2b2b2b;
@@ -59,13 +60,13 @@ export function createCableCarGeometry() {
   b.use(UNDERFRAME);
   body(b, band(0.6, 0.9, 0.12), END - 0.2);
 
-  b.use(RED);
+  b.use(BODY);
   body(b, band(0.9, 1.75));
 
   // Windows all round, and the pillars between them on the sides.
   b.use(GLASS, WINDOW_GLOW);
   body(b, band(1.75, 2.7, 0.02));
-  b.use(RED);
+  b.use(BODY);
 
   for (let z = -END; z <= END + 0.01; z += CAR.length / 7) {
     const w = 0.09;

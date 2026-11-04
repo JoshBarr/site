@@ -242,6 +242,11 @@ export function carsAt(runs: Run[], time: number): [number, number] {
     run = next;
   }
 
+  return carsOn(run, time);
+}
+
+/** Where each car is at `time` on `run`, 0 at the top to 1 at the bottom. */
+export function carsOn(run: Run, time: number): [number, number] {
   const [down, up] = positionsAt(run, time);
 
   return run.down === 0 ? [down, up] : [up, down];
