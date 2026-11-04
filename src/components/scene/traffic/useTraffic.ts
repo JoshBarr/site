@@ -4,6 +4,7 @@ import type { Seek } from "../clock";
 import { sceneShown } from "../visibility";
 import { STALE } from "../../../lib/traffic";
 import type { TrafficResponse, TrafficSpeeds } from "../../../lib/traffic";
+import { arrive } from "../time/jump";
 
 /** NZTA's speeds move every minute or two; /api/traffic refreshes each minute. */
 const POLL = 60_000;
@@ -25,6 +26,7 @@ export function useTraffic() {
   }>({ speeds: null, ready: false, seek });
 
   useEffect(() => {
+    const arrived = arrive();
     let known: TrafficResponse | null = null;
     let timer: ReturnType<typeof setTimeout>;
     let stopped = false;
@@ -51,6 +53,7 @@ export function useTraffic() {
             ? last
             : { speeds: fresh, ready: true, seek }
         );
+        arrived();
       }
 
       timer = setTimeout(poll, POLL);
@@ -60,6 +63,7 @@ export function useTraffic() {
 
     return () => {
       stopped = true;
+      arrived();
       clearTimeout(timer);
     };
   }, [seek]);

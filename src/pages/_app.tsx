@@ -10,7 +10,8 @@ const plex = IBM_Plex_Sans({
 
 const plexMono = IBM_Plex_Mono({
   subsets: ["latin"],
-  weight: ["400", "700"],
+  // 500 and 600 for the scene's controls.
+  weight: ["400", "500", "600", "700"],
   style: ["normal", "italic"],
 });
 
@@ -24,6 +25,10 @@ export default function JoshBarrSite({ Component, pageProps }) {
   return (
     <>
       <style jsx global>{`
+        :root {
+          --font-mono: ${plexMono.style.fontFamily};
+        }
+
         html {
           font-family: ${plex.style.fontFamily}, sans-serif;
         }

@@ -20,7 +20,6 @@ import {
 import { sceneNow, useSeek } from "../clock";
 import { Toggle } from "@base-ui/react/toggle";
 import { ToggleGroup } from "@base-ui/react/toggle-group";
-import { Icon } from "../controls/icons";
 import ui from "../controls/SceneControls.module.css";
 import { jump, MARGIN, useWaiting } from "./jump";
 import {
@@ -595,13 +594,14 @@ const DayMarks = memo(function DayMarks({
 });
 
 /**
- * The drawer, opened by its tab: `open` and `onOpenChange` are the page's,
- * so it can move what's above out of the way.
+ * The drawer, opened by the controls' Time travel button
+ * (../controls/SceneControls.tsx), which ride up on it.
  */
 export const TimeTravel: React.FC<{
   open: boolean;
-  onOpenChange: (open: boolean) => void;
-}> = ({ open, onOpenChange }) => {
+  /** Ride on the drawer's top edge, rising with it: the scene's controls. */
+  children?: React.ReactNode;
+}> = ({ open, children }) => {
   const { replaying } = useSeek();
   const waiting = useWaiting();
   const [now, setNow] = useState<number | null>(null);
@@ -879,23 +879,22 @@ export const TimeTravel: React.FC<{
         transform: open ? "translateY(0)" : `translateY(${height}px)`,
         transition: "transform 380ms cubic-bezier(0.2, 0.8, 0.2, 1)",
         color: INK,
-        font: "12px system-ui, sans-serif",
+        font: "12px var(--font-mono), ui-monospace, monospace",
         userSelect: "none",
       }}
     >
       <div
-        className={`${ui.Theme} ${ui.Glass} ${ui.Toolbar}`}
-        style={{ position: "absolute", right: 16, bottom: "calc(100% + 12px)" }}
+        style={{
+          position: "absolute",
+          left: 16,
+          right: 16,
+          bottom: "calc(100% + 16px)",
+          display: "flex",
+          justifyContent: "flex-end",
+          pointerEvents: "none",
+        }}
       >
-        <button
-          type="button"
-          onClick={() => onOpenChange(!open)}
-          aria-expanded={open}
-          className={`${ui.ToolButton} ${ui.Labelled}`}
-        >
-          <Icon name={open ? "close" : "history"} size={18} />
-          Time travel
-        </button>
+        {children}
       </div>
 
       <div
@@ -937,30 +936,6 @@ export const TimeTravel: React.FC<{
               position: "relative",
             }}
           >
-            {/* The ruler's corner. Replaying, the controls' pill says when. */}
-            {!replaying && (
-              <span
-                style={{
-                  position: "absolute",
-                  top: 4,
-                  left: narrow ? 8 : 16,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 5,
-                  fontSize: 11.5,
-                }}
-              >
-                <span
-                  style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: "50%",
-                    background: "#ff5a4f",
-                  }}
-                />
-                Live
-              </span>
-            )}
             <span
               style={{
                 position: "absolute",

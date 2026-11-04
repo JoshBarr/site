@@ -5,7 +5,6 @@ import { TypedIntro } from "../components/TypedIntro";
 import { GetStaticProps } from "next";
 import dynamic from "next/dynamic";
 import { SceneControls } from "../components/scene/controls/SceneControls";
-import { TimeTravel } from "../components/scene/time/TimeTravel";
 
 const WellingtonScene = dynamic(
   async () =>
@@ -63,7 +62,6 @@ const IndexPage: React.FC = () => {
   const [loaded, setLoaded] = useState(false);
   const [typed, setTyped] = useState(false);
   const [clouds, setClouds] = useState(true);
-  const [travelling, setTravelling] = useState(false);
   const onLoaded = useCallback(() => setLoaded(true), []);
   const onTyped = useCallback(() => setTyped(true), []);
   // The intro is typed out while the scene loads, then gives way to it.
@@ -82,14 +80,7 @@ const IndexPage: React.FC = () => {
         <TypedIntro hidden={revealed} onTyped={onTyped} />
         {/* Once the scene's shown, not over the intro. */}
         {revealed && (
-          <>
-            <SceneControls
-              clouds={clouds}
-              onCloudsChange={setClouds}
-              className="hero__controls"
-            />
-            <TimeTravel open={travelling} onOpenChange={setTravelling} />
-          </>
+          <SceneControls clouds={clouds} onCloudsChange={setClouds} />
         )}
       </div>
     </Layout>

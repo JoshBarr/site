@@ -3,6 +3,7 @@ import { layerUrl, sceneNow, type Seek, skewFrom, useSeek } from "../clock";
 import { sceneShown } from "../visibility";
 import { isStale } from "../../../lib/trains";
 import type { Train, TrainsResponse } from "../../../lib/trains";
+import { arrive } from "../time/jump";
 
 export type { Train };
 
@@ -26,6 +27,7 @@ export function useTrains() {
   });
 
   useEffect(() => {
+    const arrived = arrive();
     let known: Train[] = [];
     let timer: ReturnType<typeof setTimeout>;
     let stopped = false;
@@ -54,6 +56,7 @@ export function useTrains() {
 
         if (stopped) return;
         setShown({ seek, trains: known });
+        arrived();
       }
 
       timer = setTimeout(poll, POLL);
@@ -63,6 +66,7 @@ export function useTrains() {
 
     return () => {
       stopped = true;
+      arrived();
       clearTimeout(timer);
     };
   }, [seek]);

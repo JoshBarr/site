@@ -40,6 +40,7 @@ import { Conditions, lowCloudBase, useConditions } from "./weather";
 import { loadManifest, nztmToWorld, TileIndex } from "./terrain/manifest";
 import { track } from "./loading";
 import { SceneLoading } from "./SceneLoading";
+import { Travelling } from "./time/Travelling";
 import {
   HeightQuery,
   Terrain,
@@ -1194,6 +1195,7 @@ export const WellingtonScene: React.FC<{
         hidden={hidden}
         onSettled={onSettled}
       />
+      <Travelling hidden={hidden} />
     </div>
   );
 };

@@ -3,6 +3,7 @@ import { layerUrl, sceneNow, type Seek, skewFrom, useSeek } from "../clock";
 import { sceneShown } from "../visibility";
 import { HISTORY } from "../../../lib/flights";
 import type { Aircraft, FlightsResponse } from "../../../lib/flights";
+import { arrive } from "../time/jump";
 
 export type { Aircraft };
 
@@ -56,6 +57,7 @@ export function useFlights(): Flights {
   });
 
   useEffect(() => {
+    const arrived = arrive();
     const known = new Map<string, Aircraft>();
     let timer: ReturnType<typeof setTimeout>;
     let stopped = false;
@@ -106,6 +108,7 @@ export function useFlights(): Flights {
 
         if (stopped) return;
         setShown({ seek, flights: { aircraft: [...known.values()], skew } });
+        arrived();
       } else {
         // Hidden or scrolled away: catch up on what's missed when back.
         history = true;
@@ -121,6 +124,7 @@ export function useFlights(): Flights {
 
     return () => {
       stopped = true;
+      arrived();
       clearTimeout(timer);
     };
   }, [seek]);

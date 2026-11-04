@@ -4,6 +4,7 @@ import type { Tide } from "../../../lib/tide";
 import { layerUrl, sceneNow, useSeek } from "../clock";
 import { seaLevel } from "../environment";
 import { sceneShown } from "../visibility";
+import { arrive } from "../time/jump";
 
 /** /api/tide's gauge is read every five minutes. */
 const POLL = 5 * 60_000;
@@ -38,6 +39,7 @@ export function useTide() {
   const fixed = useRef<number | null | undefined>(undefined);
 
   useEffect(() => {
+    const arrived = arrive();
     let timer: ReturnType<typeof setTimeout>;
     let stopped = false;
     let asked = false;
@@ -55,6 +57,8 @@ export function useTide() {
         } catch (e) {
           console.error("[tide]", e);
         }
+
+        arrived();
       }
 
       if (!stopped) timer = setTimeout(poll, POLL);
@@ -64,6 +68,7 @@ export function useTide() {
 
     return () => {
       stopped = true;
+      arrived();
       clearTimeout(timer);
     };
   }, [seek]);

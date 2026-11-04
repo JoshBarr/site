@@ -3,6 +3,7 @@ import { layerUrl, sceneNow, type Seek, skewFrom, useSeek } from "../clock";
 import { sceneShown } from "../visibility";
 import { isStale } from "../../../lib/vessels";
 import type { Vessel, VesselsResponse } from "../../../lib/vessels";
+import { arrive } from "../time/jump";
 
 export type { Vessel };
 
@@ -26,6 +27,7 @@ export function useVessels() {
   });
 
   useEffect(() => {
+    const arrived = arrive();
     let known: Vessel[] = [];
     let timer: ReturnType<typeof setTimeout>;
     let stopped = false;
@@ -54,6 +56,7 @@ export function useVessels() {
 
         if (stopped) return;
         setShown({ seek, vessels: known });
+        arrived();
       }
 
       timer = setTimeout(poll, POLL);
@@ -63,6 +66,7 @@ export function useVessels() {
 
     return () => {
       stopped = true;
+      arrived();
       clearTimeout(timer);
     };
   }, [seek]);

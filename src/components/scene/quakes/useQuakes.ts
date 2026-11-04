@@ -3,6 +3,7 @@ import { layerUrl, sceneNow, skewFrom, useSeek } from "../clock";
 import { sceneShown } from "../visibility";
 import type { Quake } from "../../../lib/quakes";
 import type { QuakesResponse } from "../../../pages/api/quakes";
+import { arrive } from "../time/jump";
 
 /** A quake, and when its ripple starts on the scene's clock: null for none. */
 export interface Shown {
@@ -64,6 +65,7 @@ export function useQuakes() {
   const shown = useRef(new Map<string, Shown>());
 
   useEffect(() => {
+    const arrived = arrive();
     const known = new Map<string, Shown>();
     let timer: ReturnType<typeof setTimeout>;
     let stopped = false;
@@ -118,6 +120,8 @@ export function useQuakes() {
         } catch (e) {
           console.error("[quakes]", e);
         }
+
+        arrived();
       }
 
       if (!stopped) timer = setTimeout(poll, POLL);
@@ -127,6 +131,7 @@ export function useQuakes() {
 
     return () => {
       stopped = true;
+      arrived();
       clearTimeout(timer);
     };
   }, [seek]);

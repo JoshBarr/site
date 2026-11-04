@@ -50,10 +50,19 @@ let timer: ReturnType<typeof setTimeout> | undefined;
 let waiting: number | null = null;
 const listeners = new Set<() => void>();
 
+/** Whether the page has jumped at all: its first load isn't travelling. */
+let jumped = false;
+
+/** Layers still fetching their first answer since the clock was set. */
+let arriving = 0;
+
+const notify = () => {
+  for (const listener of listeners) listener();
+};
+
 function setWaiting(time: number | null) {
   waiting = time;
-
-  for (const listener of listeners) listener();
+  notify();
 }
 
 function subscribe(listener: () => void) {
@@ -68,6 +77,7 @@ function subscribe(listener: () => void) {
  */
 export function jump(time: number | null) {
   clearTimeout(timer);
+  jumped = true;
 
   const now = () => {
     if (time !== null) last = Date.now();
@@ -92,3 +102,32 @@ export const useWaiting = () =>
     () => waiting,
     () => null
   );
+
+/**
+ * Counts a layer as on its way to the scene's time until the returned
+ * function's called (again is fine): from setting out after the clock's
+ * set to its first answer, or giving up.
+ */
+export function arrive() {
+  let done = false;
+
+  arriving++;
+  notify();
+
+  return () => {
+    if (done) return;
+    done = true;
+    arriving--;
+    notify();
+  };
+}
+
+/**
+ * Whether a jump's under way: waiting its turn, or layers still fetching
+ * where it went.
+ */
+export const isTravelling = () => waiting !== null || (jumped && arriving > 0);
+
+/** isTravelling, for React. */
+export const useTravelling = () =>
+  useSyncExternalStore(subscribe, isTravelling, () => false);

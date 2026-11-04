@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { Conditions } from "../../lib/weather";
 import { layerUrl, useSeek } from "./clock";
 import { sceneShown } from "./visibility";
+import { arrive } from "./time/jump";
 
 export type { Conditions };
 
@@ -101,6 +102,7 @@ export function useConditions(): Conditions {
   );
 
   useEffect(() => {
+    const arrived = arrive();
     let timer: ReturnType<typeof setTimeout>;
     let stopped = false;
     let asked = false;
@@ -127,6 +129,8 @@ export function useConditions(): Conditions {
         } catch (e) {
           console.error("[weather]", e);
         }
+
+        arrived();
       }
 
       if (!stopped) timer = setTimeout(poll, POLL);
@@ -136,6 +140,7 @@ export function useConditions(): Conditions {
 
     return () => {
       stopped = true;
+      arrived();
       clearTimeout(timer);
     };
   }, [seek]);

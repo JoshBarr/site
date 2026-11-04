@@ -7,6 +7,7 @@ import { cloudShadowMap, overcast, overcastFor } from "../environment";
 import { nightGlow, setNightGlow } from "../glow";
 import { depthOfField } from "../lens";
 import { quakeWarp } from "../quakes/glow";
+import { tvScreen } from "../time/tv";
 import { switchedOff } from "../stats";
 import { Conditions, lowCloudBase, windVector } from "../weather";
 import { CloudQuality, createCloudNode } from "./cloudNode";
@@ -130,7 +131,7 @@ export function Clouds({
     setNightGlow(night);
   }, [night]);
 
-  const { scenePass, pipeline, glow, history, drops } = useMemo(() => {
+  const { scenePass, pipeline, glow, history, drops, tv } = useMemo(() => {
     const pipeline = new RenderPipeline(renderer);
     const scenePass = pass(scene, camera);
     const depth = scenePass.getTextureNode("depth");
@@ -141,9 +142,10 @@ export function Clouds({
     const color = glow ? seen.add(glow) : seen;
 
     if (!noiseReady || switchedOff("clouds")) {
-      pipeline.outputNode = depthOfField(color, depth);
+      const tv = tvScreen(depthOfField(color, depth));
+      pipeline.outputNode = tv.node;
 
-      return { scenePass, pipeline, glow, history: null, drops: null };
+      return { scenePass, pipeline, glow, history: null, drops: null, tv };
     }
 
     const offset = uniform(0);
@@ -187,9 +189,10 @@ export function Clouds({
     );
 
     if (!raining) {
-      pipeline.outputNode = composite;
+      const tv = tvScreen(composite);
+      pipeline.outputNode = tv.node;
 
-      return { scenePass, pipeline, glow, history, drops: null };
+      return { scenePass, pipeline, glow, history, drops: null, tv };
     }
 
     // Drops go over the clouds: from under them, they're in front.
@@ -214,24 +217,26 @@ export function Clouds({
     const over = (under, layer) => under.mul(layer.a.oneMinus()).add(layer.rgb);
 
     if (!WET_LENS) {
-      pipeline.outputNode = vec4(over(composite.rgb, streaks), 1);
+      const tv = tvScreen(vec4(over(composite.rgb, streaks), 1));
+      pipeline.outputNode = tv.node;
 
-      return { scenePass, pipeline, glow, history, drops };
+      return { scenePass, pipeline, glow, history, drops, tv };
     }
 
-    pipeline.outputNode = wetLens(
-      vec4(over(composite.rgb, streaks), 1),
-      (uv) => {
+    const tv = tvScreen(
+      wetLens(vec4(over(composite.rgb, streaks), 1), (uv) => {
         const sky = clouds.sample(uv);
 
         return over(
           output.sample(uv).rgb.mul(sky.a).add(sky.rgb),
           streaks.sample(uv)
         );
-      }
+      })
     );
 
-    return { scenePass, pipeline, glow, history, drops };
+    pipeline.outputNode = tv.node;
+
+    return { scenePass, pipeline, glow, history, drops, tv };
   }, [renderer, scene, camera, noiseReady, rain, quality, dark, raining]);
 
   // For reading back what's in front of what.
@@ -244,12 +249,13 @@ export function Clouds({
   useEffect(
     () => () => {
       pipeline.dispose();
+      tv.dispose();
       glow?.dispose();
       history?.dispose();
       drops?.geometry.dispose();
       drops?.material.dispose();
     },
-    [pipeline, glow, history, drops]
+    [pipeline, tv, glow, history, drops]
   );
 
   useEffect(() => {
@@ -301,6 +307,7 @@ export function Clouds({
       camera.position.z,
       delta
     );
+    tv.update(delta);
     pipeline.render();
   }, 1);
 

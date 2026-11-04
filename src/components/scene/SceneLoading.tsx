@@ -15,7 +15,7 @@ const SETTLE = 1000;
 const SHOW = 500;
 const HIDE = 300;
 
-const panel: React.CSSProperties = {
+export const panel: React.CSSProperties = {
   display: "flex",
   borderRadius: 6,
   background: "rgba(0, 0, 0, 0.55)",

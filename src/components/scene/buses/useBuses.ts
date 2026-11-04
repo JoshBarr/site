@@ -3,6 +3,7 @@ import { layerUrl, sceneNow, type Seek, skewFrom, useSeek } from "../clock";
 import { sceneShown } from "../visibility";
 import { isStale } from "../../../lib/buses";
 import type { Bus, BusesResponse } from "../../../lib/buses";
+import { arrive } from "../time/jump";
 
 export type { Bus };
 
@@ -26,6 +27,7 @@ export function useBuses() {
   });
 
   useEffect(() => {
+    const arrived = arrive();
     let known: Bus[] = [];
     let timer: ReturnType<typeof setTimeout>;
     let stopped = false;
@@ -54,6 +56,7 @@ export function useBuses() {
 
         if (stopped) return;
         setShown({ seek, buses: known });
+        arrived();
       }
 
       timer = setTimeout(poll, POLL);
@@ -63,6 +66,7 @@ export function useBuses() {
 
     return () => {
       stopped = true;
+      arrived();
       clearTimeout(timer);
     };
   }, [seek]);
