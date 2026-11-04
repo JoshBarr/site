@@ -35,6 +35,7 @@ import {
   turns,
   valueAt,
 } from "./marks";
+import { Spinner } from "../SceneLoading";
 import { useTimelineDays } from "./useTimeline";
 
 // Time travel: a drawer at the foot of the scene, a timeline of the last 30
@@ -194,7 +195,8 @@ const QUAKE = "#ff8a6b";
 
 const hourly = new Intl.DateTimeFormat("en-NZ", {
   timeZone: ZONE,
-  hour: "numeric",
+  hour: "2-digit",
+  hourCycle: "h23",
 });
 
 const clock = new Intl.DateTimeFormat("en-NZ", {
@@ -224,12 +226,8 @@ const moment = new Intl.DateTimeFormat("en-NZ", {
   minute: "2-digit",
 });
 
-/** "5pm", or "noon". */
-function hourLabel(time: number) {
-  const label = hourly.format(time).replace(" ", "");
-
-  return label === "12pm" ? "noon" : label;
-}
+/** "0600", "1800": the hours are always on the hour. */
+const hourLabel = (time: number) => `${hourly.format(time)}00`;
 
 const tight = (time: number) => clock.format(time).replace(" ", "");
 
@@ -656,11 +654,17 @@ export const TimeTravel: React.FC<{
     ? bounds.filter(({ start, end }) => end > shownFrom && start < shownTo)
     : [];
 
-  const loaded = useTimelineDays(
+  const { days: loaded, settled } = useTimelineDays(
     visible.map(({ day }) => day),
     today,
     open
   );
+
+  // A spinner until the first days in view are in; after that, days
+  // scrolled to fill in as they come.
+  const [ready, setReady] = useState(false);
+
+  if (!ready && settled) setReady(true);
 
   const scales = useMemo(() => scalesOf([...loaded.values()]), [loaded]);
 
@@ -916,12 +920,32 @@ export const TimeTravel: React.FC<{
           borderTop: "1px solid rgba(255, 255, 255, 0.08)",
         }}
       >
+        {!ready && (
+          <div
+            role="status"
+            aria-label="Loading"
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "grid",
+              placeItems: "center",
+              color: MUTED,
+            }}
+          >
+            <Spinner size={20} />
+          </div>
+        )}
+
         <div
           style={{
             position: "relative",
             display: "flex",
             height: PLOT,
             marginTop: PAD,
+            // Laid out all along, to be measured; shown once there's data.
+            opacity: ready ? 1 : 0,
+            pointerEvents: ready ? undefined : "none",
+            transition: "opacity 200ms",
           }}
         >
           <div

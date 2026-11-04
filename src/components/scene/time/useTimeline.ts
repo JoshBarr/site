@@ -39,7 +39,8 @@ async function fetchDay(day: string) {
 
 /**
  * The days in `wanted` (NZ dates) fetched so far, by date; `today`'s kept
- * fresh. Nothing's fetched while `active` is false.
+ * fresh. Nothing's fetched while `active` is false. `settled` once every
+ * wanted day's been asked for and answered, or failed.
  */
 export function useTimelineDays(
   wanted: string[],
@@ -94,7 +95,10 @@ export function useTimelineDays(
       if (known) days.set(day, known);
     }
 
-    return days;
+    const settled =
+      key !== "" && key.split(",").every((day) => fetched.has(day));
+
+    return { days, settled };
     // A new map each time one's fetched.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, version]);
