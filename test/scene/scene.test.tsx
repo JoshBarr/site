@@ -29,6 +29,9 @@ import { renderScene, shown } from "./render";
 const NOON = new Date("2026-01-15T12:00:00+13:00");
 const MIDNIGHT = new Date("2026-01-15T00:00:00+13:00");
 
+/** Under the test weather's cloud base, 900 m, as views are put. */
+const UNDER_DECK = 800;
+
 /**
  * An A320 cruising north over the harbour, above where landing lights go on,
  * for the last minute: planes are drawn half a minute behind.
@@ -276,6 +279,9 @@ describe("the scene", { timeout: 30_000 }, () => {
     expect(getSnapshot().following).toBeNull();
     expect(c.enabled).toBe(true);
     expect(c.maxPolarAngle).toBe(Math.PI / 2);
+    // Down from its cruise, under the cloud.
+    expect(camera.position.y).toBeLessThan(UNDER_DECK + 0.01);
+    expect(c.getTarget(new Vector3()).y).toBeLessThan(camera.position.y);
   });
 
   it("hands back from a shot on the ground stepped back far enough to turn", async () => {
@@ -515,7 +521,8 @@ describe("the scene", { timeout: 30_000 }, () => {
     await frames(5);
 
     expect(getMapView()).toBe(false);
-    expect(camera.position.y).toBeLessThan(4000);
+    // Under the cloud the map view hid.
+    expect(camera.position.y).toBeLessThan(UNDER_DECK + 0.01);
     expect(c.mouseButtons.left).toBe(ACTION.ROTATE);
     expect(c.maxDistance).toBe(14000);
   });

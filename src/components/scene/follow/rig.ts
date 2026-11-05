@@ -1,5 +1,6 @@
 import { PerspectiveCamera, Vector3 } from "three/webgpu";
 import { RUNWAY } from "../airport/airfield";
+import { arcUnder } from "../underDeck";
 import { Category, getSnapshot, next, subject } from "./store";
 
 // Where the camera goes to follow a vehicle, shot by shot:
@@ -225,6 +226,8 @@ export class FollowRig {
   private flight = 0;
   private duration = 0;
   private arc = 0;
+  /** No higher than this the arc flown in tops out, m: under a low deck. */
+  ceiling = Infinity;
   /** What the camera's given. */
   readonly shot = shot();
 
@@ -368,7 +371,11 @@ export class FollowRig {
       const u = Math.min(this.flight / this.duration, 1);
       const s = smootherstep(u);
       out.position.lerpVectors(this.from.position, this.rig.position, s);
-      out.position.y += this.arc * Math.sin(Math.PI * s);
+      out.position.y = arcUnder(
+        out.position.y,
+        this.arc * Math.sin(Math.PI * s),
+        this.ceiling
+      );
       // Turning to it in the first half.
       out.target.lerpVectors(
         this.from.target,

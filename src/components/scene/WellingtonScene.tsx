@@ -120,6 +120,7 @@ import {
   useMapView,
 } from "./mapView";
 import { sceneNow, useSeek } from "./clock";
+import { arcUnder, beneath, ceilingFor, DECK_CLEARANCE } from "./underDeck";
 import { attachInspector, showStats, Stats, switchedOff } from "./stats";
 
 // Over the harbour, looking west across Te Aro to Kelburn.
@@ -128,15 +129,8 @@ const START_ALTITUDE = 900;
 const START_TARGET: [number, number] = [1747500, 5428700];
 const TARGET_ALTITUDE = 150;
 
-/** Starting under a lower deck, this far beneath its base, m. */
-const DECK_CLEARANCE = 100;
-
 /** The usual start, or under the low cloud if its base is lower. */
-function startAltitude(deck: number | null) {
-  return deck === null
-    ? START_ALTITUDE
-    : Math.min(START_ALTITUDE, deck - DECK_CLEARANCE);
-}
+const startAltitude = (deck: number | null) => ceilingFor(deck, START_ALTITUDE);
 
 /** Sky samples reach this far for the city's glow, m. */
 const SKYGLOW_DISTANCE = 20000;
@@ -493,6 +487,26 @@ function Controls({
   const seaFloor = useRef(0);
   seaFloor.current = SEA_CLEARANCE + significantHeight(sea);
 
+  // Views the scene puts the camera in, not walked or dragged there, and the
+  // arcs it flies between them, stay under a low deck.
+  const ceiling = useRef(CEILING);
+  ceiling.current = ceilingFor(deck, CEILING);
+
+  // Under it, unless the ground it's aimed at is up in the cloud too: then
+  // no lower than a little over that.
+  const underDeck = useCallback(
+    (camera: Vector3, target: Vector3, onGround: boolean) =>
+      beneath(
+        camera,
+        target,
+        onGround
+          ? Math.max(ceiling.current, target.y + DECK_CLEARANCE)
+          : ceiling.current,
+        MIN_DISTANCE
+      ),
+    []
+  );
+
   const rig = useMemo(
     () =>
       new FollowRig(
@@ -564,6 +578,7 @@ function Controls({
 
     if (
       back.length() >= HAND_BACK_ORBIT &&
+      from.y <= ceiling.current &&
       boundary.containsPoint(from) &&
       boundary.containsPoint(orbit)
     ) {
@@ -575,8 +590,9 @@ function Controls({
 
     // Too near to turn about, stepped back along the view. Out of bounds,
     // the controls would snap the camera back in on the next drag: flown in
-    // instead, looking the same way. Either way the bounds go on once it's
-    // there.
+    // instead, looking the same way. Up in a low deck (following an aircraft
+    // climbing out, say), flown down under it. Either way the bounds go on
+    // once it's there.
     const into = (point: Vector3) =>
       boundary.containsPoint(point) ? point : inside.clampPoint(point, point);
 
@@ -585,6 +601,8 @@ function Controls({
       Math.min(Math.max(back.length(), HAND_BACK_ORBIT), RETURN_DISTANCE)
     );
     const to = into(back.add(target));
+
+    if (underDeck(to, target, hit !== null)) into(to);
     const ground = heightAt.current?.(to.x, to.z) ?? 0;
     to.y = Math.max(to.y, ground + GROUND_CLEARANCE, target.y + MIN_DISTANCE);
     c.setBoundary();
@@ -604,7 +622,7 @@ function Controls({
       ...flightFor(from.distanceTo(to)),
       arrive: () => c.setBoundary(boundary),
     };
-  }, [boundary, inside, orbit, heightAt]);
+  }, [boundary, inside, orbit, heightAt, underDeck]);
 
   // Stops any flight to a view where it is, the orbit's bounds back on if
   // it was flying back into them.
@@ -699,6 +717,9 @@ function Controls({
             target,
           ];
 
+      // Down under a low deck: the map view hides the clouds, this doesn't.
+      if (!map) underDeck(to[0], to[1], true);
+
       const settle = () => {
         c.minDistance = map ? MAP_ZOOM[0] : MIN_DISTANCE;
         c.maxDistance = map ? MAP_ZOOM[1] : MAX_DISTANCE;
@@ -726,7 +747,7 @@ function Controls({
         arrive: settle,
       };
     },
-    [boundary, inside, heightAt, handBack, land]
+    [boundary, inside, heightAt, handBack, land, underDeck]
   );
 
   useEffect(
@@ -981,10 +1002,14 @@ function Controls({
           land();
           const [px, pz] = nztmToWorld(manifest, pe, pn);
           const [tx, tz] = nztmToWorld(manifest, te, tn);
+          const to = new Vector3(px, pAlt, pz);
+          const aim = new Vector3(tx, tAlt, tz);
+          // Set over the ground; under a low deck, below it.
+          underDeck(to, aim, true);
 
           if (getSnapshot().cut) {
             flight.current = null;
-            c.setLookAt(px, pAlt, pz, tx, tAlt, tz, false);
+            c.setLookAt(to.x, to.y, to.z, aim.x, aim.y, aim.z, false);
 
             return;
           }
@@ -992,16 +1017,15 @@ function Controls({
           // Flown here frame by frame, not by the controls' own transition:
           // lifting the camera off a hill on the way would end that early.
           const from = c.camera.position.clone();
-          const to = new Vector3(px, pAlt, pz);
           flight.current = {
             from: [from, c.getTarget(new Vector3())],
-            to: [to, new Vector3(tx, tAlt, tz)],
+            to: [to, aim],
             time: 0,
             ...flightFor(from.distanceTo(to)),
           };
         }
       ),
-    [manifest, handBack, land]
+    [manifest, handBack, land, underDeck]
   );
 
   // Where the view starts, and again (gliding there) if the forecast arrives
@@ -1299,6 +1323,7 @@ function Controls({
 
     if (scopeTo(c, camera, delta)) return;
 
+    rig.ceiling = ceiling.current;
     const shot = rig.update(camera, delta);
     const { following } = getSnapshot();
 
@@ -1371,7 +1396,7 @@ function Controls({
       const u = Math.min(f.time / f.duration, 1);
       const s = smootherstep(u);
       const p = flown[0].lerpVectors(f.from[0], f.to[0], s);
-      p.y += f.arc * Math.sin(Math.PI * s);
+      p.y = arcUnder(p.y, f.arc * Math.sin(Math.PI * s), ceiling.current);
 
       const t = flown[1].lerpVectors(
         f.from[1],
