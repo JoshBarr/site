@@ -506,14 +506,16 @@ function Controls({
     const c = controls.current;
     const { following } = getSnapshot();
 
+    // Not while flying in: a press then (often the one shutting a panel)
+    // would leave the camera wherever on the way it had got to.
     if (
       !c ||
       !following ||
       !followingRef.current ||
-      !rig.tracking ||
+      rig.arriving ||
       lookingAround.current
     ) {
-      return;
+      return false;
     }
 
     const { position: p, target: t } = rig.shot;
@@ -527,7 +529,23 @@ function Controls({
     c.maxDistance = MAX_DISTANCE;
     c.enabled = true;
     turnAbout(c, true);
+
+    return true;
   }, [rig]);
+
+  // A press that turned out to be a click, not a drag: the rig has the
+  // camera back, from where it is, which is where the rig left it.
+  const putBack = useCallback(() => {
+    const c = controls.current;
+
+    if (!c || !lookingAround.current) return;
+    lookingAround.current = null;
+    c.minDistance = 0;
+    c.maxDistance = Infinity;
+    c.maxPolarAngle = Math.PI;
+    c.enabled = false;
+    turnAbout(c, false);
+  }, []);
 
   // Touching the map while following looks around the vehicle, and carries
   // on as that drag or zoom: this runs before the controls see the event.
@@ -537,7 +555,8 @@ function Controls({
     const take = () => {
       touched.current = true;
       land();
-      lookAround();
+
+      return lookAround();
     };
 
     const keys = (e: KeyboardEvent) => {
@@ -571,7 +590,14 @@ function Controls({
     // Presses end on the window: they may be let go off the map.
     const pointers = new Set<number>();
     let disposed = false;
-    let press: { x: number; y: number; time: number } | null = null;
+
+    let press: {
+      x: number;
+      y: number;
+      time: number;
+      /** Whether it took the camera from the rig to look around. */
+      took: boolean;
+    } | null = null;
 
     // The nearest vehicle to the pointer that isn't behind anything.
     const vehicleUnder = async (e: PointerEvent) => {
@@ -602,11 +628,11 @@ function Controls({
 
     const down = (e: PointerEvent) => {
       pointers.add(e.pointerId);
+      const took = take();
       press =
         pointers.size === 1 && e.button === 0
-          ? { x: e.clientX, y: e.clientY, time: e.timeStamp }
+          ? { x: e.clientX, y: e.clientY, time: e.timeStamp, took }
           : null;
-      take();
     };
 
     const up = (e: PointerEvent) => {
@@ -621,6 +647,9 @@ function Controls({
       ) {
         return;
       }
+
+      // Only a click: the rig carries on as it was.
+      if (p.took) putBack();
 
       vehicleUnder(e).then((vehicle) => {
         if (vehicle && !disposed) followVehicle(vehicle);
@@ -683,7 +712,7 @@ function Controls({
       disposed = true;
       element.style.cursor = "";
     };
-  }, [events, renderer, lookAround, walk, land]);
+  }, [events, renderer, lookAround, putBack, walk, land]);
 
   // Set views, picked from the shot panel, and the view now, for copying.
   useEffect(

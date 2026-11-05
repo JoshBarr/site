@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { PerspectiveCamera } from "three/webgpu";
 import { sceneNow } from "../clock";
@@ -33,6 +33,12 @@ const jolt = (t: number, axis: 0 | 1) =>
 export function Quakes({ index }: { index: TileIndex }) {
   const quakes = useQuakes();
   const camera = useThree((state) => state.camera);
+
+  /** Whether the viewer's asked for less motion; read each frame. */
+  const lessMotion = useMemo(
+    () => matchMedia("(prefers-reduced-motion: reduce)"),
+    []
+  );
 
   useEffect(
     () => () => {
@@ -90,7 +96,9 @@ export function Quakes({ index }: { index: TileIndex }) {
 
     if (!(camera instanceof PerspectiveCamera)) return;
 
-    if (felt > 0) {
+    // The ripple still shows where it's felt; the view only shakes for
+    // those who haven't asked for less motion.
+    if (felt > 0 && !lessMotion.matches) {
       const t = clock.elapsedTime;
       const { width, height } = size;
 

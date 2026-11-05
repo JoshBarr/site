@@ -322,7 +322,7 @@ const TransportPanel: React.FC = () => {
             >
               <span className={styles.RowLabel}>{label}</span>
               <span className={styles.Detail}>
-                {detail ?? (moving ? "" : still)}
+                {[detail, moving ? null : still].filter(Boolean).join(" · ")}
               </span>
             </button>
           </li>

@@ -240,6 +240,8 @@ function Fleet({
         runs.map(({ bus, fixes }): Candidate => ({
           id: bus.id,
           label: `Route ${routes.nameOf(bus.route)}`,
+          // Telling apart those on the same route.
+          detail: `#${bus.id}`,
           moving: fixes[fixes.length - 1].s - fixes[0].s > MOVING,
         })),
       [runs, routes]

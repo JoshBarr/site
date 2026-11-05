@@ -449,6 +449,7 @@ export function Trains({
         runs.map(({ train, fixes }): Candidate => ({
           id: train.id,
           label: LINE_NAMES[train.line],
+          detail: `#${train.id}`,
           moving: fixes[fixes.length - 1].s - fixes[0].s > MOVING,
         })),
       [runs]

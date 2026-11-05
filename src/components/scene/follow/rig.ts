@@ -238,6 +238,14 @@ export class FollowRig {
     return this.ready;
   }
 
+  /**
+   * Whether it's still on its way to the subject: not seen yet, or flying
+   * in. Hands off it till it's there.
+   */
+  get arriving() {
+    return !this.ready || (!getSnapshot().cut && this.flight < this.duration);
+  }
+
   /** Radians clockwise from north, the way the shot's facing the subject. */
   get facing() {
     return this.heading;

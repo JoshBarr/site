@@ -206,6 +206,26 @@ describe("the scene", { timeout: 30_000 }, () => {
     expect(c.enabled).toBe(false);
     expect(shot).toBeLessThan(300);
 
+    // A click on the map (shutting a panel, say) isn't a hand on the
+    // camera: the rig keeps it.
+    const press = (type: string, target: EventTarget) =>
+      target.dispatchEvent(
+        new PointerEvent(type, {
+          pointerId: 1,
+          button: 0,
+          clientX: 10,
+          clientY: 10,
+          bubbles: true,
+        })
+      );
+
+    press("pointerdown", gl.domElement);
+    press("pointerup", window);
+    await frames(30);
+
+    expect(c.enabled).toBe(false);
+    expect(offset(camera).length()).toBeCloseTo(shot, -1);
+
     // Zooming out keeps following it, and leaves the camera there.
     gl.domElement.dispatchEvent(
       new WheelEvent("wheel", { deltaY: 400, bubbles: true, cancelable: true })

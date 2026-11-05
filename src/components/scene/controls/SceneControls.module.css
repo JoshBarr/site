@@ -841,3 +841,37 @@
   display: grid;
   color: var(--tint);
 }
+
+/* Fingers: buttons at least 44px square, and the small segments (the
+   drawer's zoom, Fly/Cut) taller to tap than they look. */
+@media (pointer: coarse) {
+  .ToolButton {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+  }
+
+  .Labelled {
+    width: auto;
+  }
+
+  .Following {
+    height: 50px;
+  }
+
+  .Back {
+    width: 44px;
+    height: 44px;
+    margin: -10px -4px -10px -12px;
+  }
+
+  .Segment {
+    position: relative;
+
+    &::after {
+      content: "";
+      position: absolute;
+      inset: -12px 0;
+    }
+  }
+}

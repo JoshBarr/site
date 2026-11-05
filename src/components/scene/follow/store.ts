@@ -15,7 +15,7 @@ export interface Candidate {
   label: string;
   /** Under way, so picked before those standing still, and listed first. */
   moving: boolean;
-  /** A word on what it's doing, listed beside it: "12 kn", "on the ground". */
+  /** Listed beside it: its speed, say, or a fleet number to tell it apart. */
   detail?: string;
   /** On the map now; those that aren't are passed over. Assumed if absent. */
   drawn?: () => boolean;
