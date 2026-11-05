@@ -63,6 +63,7 @@ async function settled(time: Date, aircraft: Aircraft[] = []) {
       drawn("buildings")[0]?.children.some(shown) &&
       drawn("trees")[0]?.children.length > 0 &&
       drawn("trains").length > 0 &&
+      drawn("buses").length > 0 &&
       drawn("cars").length > 0
   );
 

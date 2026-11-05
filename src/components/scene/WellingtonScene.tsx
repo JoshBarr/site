@@ -29,16 +29,20 @@ import {
   smoothstep,
 } from "three/tsl";
 import {
+  clearAround,
+  clearRadius,
   hazeColor,
   hazeDensity,
   hazeDensityForVisibility,
   hazeTransmittance,
+  hazeTransmittanceBetween,
+  outsideClearing,
   phase,
 } from "./haze";
 import { hazeGlowAtNight } from "./skyglow";
 import { Conditions, lowCloudBase, useConditions } from "./weather";
 import { loadManifest, nztmToWorld, TileIndex } from "./terrain/manifest";
-import { track } from "./loading";
+import { addLoadingSource, track } from "./loading";
 import { SceneLoading } from "./SceneLoading";
 import { Travelling } from "./time/Travelling";
 import {
@@ -78,6 +82,7 @@ import {
   followVehicle,
   Following,
   getSnapshot,
+  setReach,
   stop as stopFollowing,
   vehiclesAt,
 } from "./follow/store";
@@ -136,7 +141,10 @@ function Atmosphere({
       hazeGlowAtNight(cameraPosition, positionWorld)
     );
 
-    scene.fogNode = fog(fogColor, max(haze, edgeFade));
+    scene.fogNode = fog(
+      fogColor,
+      max(haze, edgeFade).mul(outsideClearing(positionWorld))
+    );
 
     // Sky: zenith to horizon, hazier toward the horizon, glowing and with a
     // small disc toward the sun. Under a deck it goes flat grey: the clouds
@@ -216,6 +224,27 @@ const TAP_REACH = 24;
  */
 const HIDDEN_BY = 0.02;
 
+/**
+ * Clicks pass over vehicles fainter than this through the haze: what's left
+ * of them is only their trail.
+ */
+const FAINTEST = 0.15;
+
+/** How often to look whether the followed vehicle is hidden, s. */
+const PROBE = 0.25;
+
+/** Of a followed vehicle's length, the radius cleared of fog around it. */
+const CLEARING = 0.7;
+
+/**
+ * Handing back from somewhere out of the orbit's bounds (following an
+ * aircraft off the map, or up at its cruise), the view's flown back in:
+ * looking as it was, from no further than this off, m, and this far inside
+ * the bounds, as a fraction of their size.
+ */
+const RETURN_DISTANCE = 3000;
+const RETURN_INSET = 0.04;
+
 /** Camera and target, from where they were to a set view, and how far in. */
 interface ViewFlight {
   from: [Vector3, Vector3];
@@ -225,6 +254,8 @@ interface ViewFlight {
   duration: number;
   /** Height of the arc flown, m. */
   arc: number;
+  /** Bounds to put on the orbit once it's there (flying in from outside them). */
+  bound?: boolean;
 }
 
 const flown: [Vector3, Vector3] = [new Vector3(), new Vector3()];
@@ -323,6 +354,29 @@ function Controls({
     [half]
   );
 
+  // Vehicles out of bounds can't be picked: the camera couldn't stay there.
+  useEffect(() => {
+    setReach(
+      (x, z) =>
+        x >= boundary.min.x &&
+        x <= boundary.max.x &&
+        z >= boundary.min.z &&
+        z <= boundary.max.z
+    );
+
+    return () => setReach(() => true);
+  }, [boundary]);
+
+  /** A little inside the bounds, to fly back into. */
+  const inside = useMemo(() => {
+    const size = boundary.getSize(new Vector3()).multiplyScalar(RETURN_INSET);
+
+    return new Box3(
+      boundary.min.clone().add(size),
+      boundary.max.clone().sub(size)
+    );
+  }, [boundary]);
+
   const controls = useRef<Controller>(null);
   const orbit = useMemo(() => new Vector3(), []);
   const renderer = useRenderer();
@@ -378,7 +432,6 @@ function Controls({
     c.maxDistance = MAX_DISTANCE;
     c.maxPolarAngle = MAX_POLAR_ANGLE;
     c.boundaryEnclosesCamera = true;
-    c.setBoundary(boundary);
     c.enabled = true;
     turnAbout(c, false);
 
@@ -400,9 +453,52 @@ function Controls({
 
     orbit.multiplyScalar(distance).add(camera.position);
     orbit.y = Math.min(orbit.y, camera.position.y);
-    const { x, y, z } = camera.position;
+    const from = camera.position.clone();
+    const { x, y, z } = from;
+
+    if (boundary.containsPoint(from) && boundary.containsPoint(orbit)) {
+      c.setBoundary(boundary);
+      c.setLookAt(x, y, z, orbit.x, orbit.y, orbit.z, false);
+
+      return;
+    }
+
+    // Out of bounds, the controls would snap the camera back in on the
+    // next drag. Flown in instead, looking the same way, the bounds put on
+    // once it's there.
+    const target = inside.clampPoint(orbit, new Vector3());
+    const back = from.clone().sub(orbit);
+    back.setLength(Math.min(back.length(), RETURN_DISTANCE));
+    const to = inside.clampPoint(back.add(target), new Vector3());
+    const ground = heightAt.current?.(to.x, to.z) ?? 0;
+    to.y = Math.max(to.y, ground + GROUND_CLEARANCE, target.y + MIN_DISTANCE);
+    c.setBoundary();
     c.setLookAt(x, y, z, orbit.x, orbit.y, orbit.z, false);
-  }, [boundary, orbit, heightAt]);
+
+    if (getSnapshot().cut) {
+      c.setLookAt(to.x, to.y, to.z, target.x, target.y, target.z, false);
+      c.setBoundary(boundary);
+
+      return;
+    }
+
+    flight.current = {
+      from: [from, orbit.clone()],
+      to: [to, target],
+      time: 0,
+      ...flightFor(from.distanceTo(to)),
+      bound: true,
+    };
+  }, [boundary, inside, orbit, heightAt]);
+
+  // Stops any flight to a view where it is, the orbit's bounds back on if
+  // it was flying back into them.
+  const land = useCallback(() => {
+    const f = flight.current;
+    flight.current = null;
+
+    if (f?.bound) controls.current?.setBoundary(boundary);
+  }, [boundary]);
 
   // Turning about the followed vehicle by hand, from where the rig had the
   // camera, the pivot sliding over onto the vehicle from what it aimed at.
@@ -440,7 +536,7 @@ function Controls({
 
     const take = () => {
       touched.current = true;
-      flight.current = null;
+      land();
       lookAround();
     };
 
@@ -449,7 +545,9 @@ function Controls({
       if (e.key === "Escape" && !e.defaultPrevented) stopFollowing();
 
       // Walking, unless typing, or the page is scrolled off the scene.
+      // Nor arrows a menu, a list or a toggle group has used.
       if (
+        e.defaultPrevented ||
         e.metaKey ||
         e.ctrlKey ||
         e.altKey ||
@@ -462,7 +560,7 @@ function Controls({
 
       e.preventDefault();
       touched.current = true;
-      flight.current = null;
+      land();
       stopFollowing();
     };
 
@@ -487,7 +585,8 @@ function Controls({
         ((e.clientX - rect.left) / rect.width) * 2 - 1,
         1 - ((e.clientY - rect.top) / rect.height) * 2,
         rect.height,
-        e.pointerType === "touch" ? TAP_REACH : undefined
+        e.pointerType === "touch" ? TAP_REACH : undefined,
+        (at) => hazeTransmittanceBetween(camera.position, at) > FAINTEST
       ).slice(0, DEPTH_POINTS);
 
       if (!sightings.length) return null;
@@ -584,7 +683,7 @@ function Controls({
       disposed = true;
       element.style.cursor = "";
     };
-  }, [events, renderer, lookAround, walk]);
+  }, [events, renderer, lookAround, walk, land]);
 
   // Set views, picked from the shot panel, and the view now, for copying.
   useEffect(
@@ -607,6 +706,7 @@ function Controls({
           touched.current = true;
           stopFollowing();
           handBack();
+          land();
           const [px, pz] = nztmToWorld(manifest, pe, pn);
           const [tx, tz] = nztmToWorld(manifest, te, tn);
 
@@ -629,7 +729,7 @@ function Controls({
           };
         }
       ),
-    [manifest, handBack]
+    [manifest, handBack, land]
   );
 
   // Where the view starts, and again (gliding there) if the forecast arrives
@@ -653,6 +753,18 @@ function Controls({
     );
     placed.current = true;
   }, [boundary, position, target]);
+
+  // Jumping in time, what's followed is gone (or somewhere else), and the
+  // rig would hold the camera on nothing until it gave up. Let it go, and
+  // the view stays where it is whatever the weather then.
+  const { epoch } = useSeek();
+  const firstEpoch = useRef(epoch);
+
+  useEffect(() => {
+    if (epoch === firstEpoch.current) return;
+    touched.current = true;
+    stopFollowing();
+  }, [epoch]);
 
   // Walked across the ground the way it faces, before the controls place the
   // camera this frame. Once the rig's let go, if it had the camera.
@@ -686,6 +798,56 @@ function Controls({
 
     if (step.turn) c.rotate(step.turn, 0, false);
   }, WALK_PRIORITY);
+
+  // Every PROBE seconds, whether what's followed is hidden behind something,
+  // from the depth the scene was drawn with: its middle and ends, two of
+  // three behind something nearer and it is. The rig lifts over it.
+  const probing = useRef({ wait: 0, busy: false });
+
+  const probe = useCallback(
+    (camera: PerspectiveCamera, delta: number, byHand: boolean) => {
+      const p = probing.current;
+      p.wait -= delta;
+
+      if (p.busy || p.wait > 0 || byHand || !rig.ground) return;
+      p.wait = PROBE;
+      const reach = rig.length * 0.4;
+      const ahead = [Math.sin(rig.facing), -Math.cos(rig.facing)];
+
+      const points = [-1, 0, 1].flatMap((end) => {
+        const at = new Vector3(
+          rig.at.x + ahead[0] * reach * end,
+          rig.at.y,
+          rig.at.z + ahead[1] * reach * end
+        );
+
+        const depth = -at.clone().applyMatrix4(camera.matrixWorldInverse).z;
+        at.project(camera);
+
+        return depth > 0 && Math.abs(at.x) < 1 && Math.abs(at.y) < 1
+          ? [{ x: at.x, y: at.y, depth }]
+          : [];
+      });
+
+      if (!points.length) return;
+      p.busy = true;
+      sceneDepthsAt(renderer, camera, points)
+        .then((scene) => {
+          if (!scene) return;
+
+          const hidden = points.filter(
+            ({ depth }, i) =>
+              scene[i] < depth - rig.length / 2 - depth * HIDDEN_BY
+          ).length;
+
+          rig.hidden(hidden * 3 >= points.length * 2, PROBE);
+        }, console.error)
+        .finally(() => {
+          p.busy = false;
+        });
+    },
+    [rig, renderer]
+  );
 
   useFrame((_, delta) => {
     const c = controls.current;
@@ -726,6 +888,8 @@ function Controls({
         // Out of the orbit's limits: landings are watched from the ground,
         // looking up, and aircraft fly off the edge of the map.
         followingRef.current = true;
+        // Not to be put back at the start by a later forecast.
+        touched.current = true;
         c.setBoundary();
         c.boundaryEnclosesCamera = false;
         c.minDistance = 0;
@@ -743,6 +907,16 @@ function Controls({
       c.setLookAt(p.x, p.y, p.z, t.x, t.y, t.z, false);
     } else {
       handBack();
+    }
+
+    // The followed vehicle out of the fog, and over anything hiding it.
+    if (shot && rig.tracking) {
+      clearAround.value.copy(rig.at);
+      clearRadius.value = rig.length * CLEARING;
+      probe(camera, delta, Boolean(around));
+    } else {
+      clearRadius.value = 0;
+      clearAround.value.set(0, -1e7, 0);
     }
 
     const f = flight.current;
@@ -767,7 +941,7 @@ function Controls({
       camera.lookAt(t);
       c.setLookAt(p.x, p.y, p.z, t.x, t.y, t.z, false);
 
-      if (u === 1) flight.current = null;
+      if (u === 1) land();
     }
 
     // The lens goes back to the scene's when the rig lets go.
@@ -1011,6 +1185,49 @@ function useIsMobile() {
   return mobile;
 }
 
+/**
+ * The layers, in the order they're put in the scene, one a frame after the
+ * terrain, the clouds (which draw the frame) and the camera. Each builds its
+ * shaders and geometry on its first frame: all at once, that frame took
+ * 300–600 ms and the load stuttered; one at a time, it's a few shorter ones.
+ */
+export const LAYERS = [
+  "ocean",
+  "buildings",
+  "trees",
+  "landmarks",
+  "airfield",
+  "sky",
+  "quakes",
+  "railway",
+  "vessels",
+  "cablecar",
+  "traffic",
+  "buses",
+  "flights",
+] as const;
+
+type Layer = (typeof LAYERS)[number];
+
+/**
+ * Which of LAYERS are in the scene yet: one more each frame, counted as
+ * loading until they all are, so the first view doesn't settle without them.
+ */
+function useLayers() {
+  const [count, setCount] = useState(0);
+  const left = useRef<number>(LAYERS.length);
+
+  useEffect(() => addLoadingSource(() => (left.current > 0 ? 1 : 0)), []);
+
+  useFrame(() => {
+    if (count >= LAYERS.length) return;
+    left.current = LAYERS.length - count - 1;
+    setCount(count + 1);
+  });
+
+  return (layer: Layer) => LAYERS.indexOf(layer) < count && !switchedOff(layer);
+}
+
 /** Everything in the Canvas: Wellington at `time`, under `conditions`. */
 export function Scene({
   index,
@@ -1049,6 +1266,8 @@ export function Scene({
     scene.matrixAutoUpdate = false;
   }, [scene]);
 
+  const shown = useLayers();
+
   return (
     <>
       <ambientLight ref={litForReflections} intensity={skylight} />
@@ -1059,7 +1278,7 @@ export function Scene({
         cloudCover={conditions.cloudCover}
         position={sun}
       />
-      {!switchedOff("sky") && <Sky time={time} sunAltitude={sun.altitude} />}
+      {shown("sky") && <Sky time={time} sunAltitude={sun.altitude} />}
       {!switchedOff("terrain") && (
         <Terrain
           onHeightQuery={setHeightQuery}
@@ -1067,7 +1286,7 @@ export function Scene({
           quality={mobile ? TERRAIN_MOBILE : TERRAIN_DESKTOP}
         />
       )}
-      {!switchedOff("ocean") && (
+      {shown("ocean") && (
         <Suspense fallback={null}>
           <Ocean
             conditions={sea}
@@ -1076,8 +1295,8 @@ export function Scene({
           />
         </Suspense>
       )}
-      {!switchedOff("quakes") && <Quakes index={index} />}
-      {!switchedOff("landmarks") && (
+      {shown("quakes") && <Quakes index={index} />}
+      {shown("landmarks") && (
         <Landmarks
           index={index}
           wind={conditions.wind}
@@ -1085,7 +1304,7 @@ export function Scene({
           shadowMapSize={mobile ? 2048 : 4096}
         />
       )}
-      {!switchedOff("buildings") && (
+      {shown("buildings") && (
         <Buildings
           terrain={index}
           quality={mobile ? BUILDINGS_MOBILE : BUILDINGS_DESKTOP}
@@ -1093,28 +1312,24 @@ export function Scene({
           occupancy={windowsLitAt(time)}
         />
       )}
-      {!switchedOff("trees") && (
+      {shown("trees") && (
         <Trees
           terrain={index}
           quality={mobile ? TREES_MOBILE : TREES_DESKTOP}
           wind={conditions.wind}
         />
       )}
-      {!switchedOff("airfield") && (
-        <AirfieldLights index={index} lights={lights} />
-      )}
-      {!switchedOff("vessels") && (
-        <Vessels index={index} sea={sea} lights={lights} />
-      )}
-      {!switchedOff("railway") && <Railway index={index} lights={lights} />}
-      {!switchedOff("cablecar") && <CableCar index={index} lights={lights} />}
-      {!switchedOff("traffic") && (
+      {shown("airfield") && <AirfieldLights index={index} lights={lights} />}
+      {shown("vessels") && <Vessels index={index} sea={sea} lights={lights} />}
+      {shown("railway") && <Railway index={index} lights={lights} />}
+      {shown("cablecar") && <CableCar index={index} lights={lights} />}
+      {shown("traffic") && (
         <Traffic index={index} lights={lights} time={time} />
       )}
-      {!switchedOff("buses") && (
+      {shown("buses") && (
         <Buses index={index} heightAt={heightAt} lights={lights} />
       )}
-      {!switchedOff("flights") && (
+      {shown("flights") && (
         <Flights
           index={index}
           heightAt={heightAt}

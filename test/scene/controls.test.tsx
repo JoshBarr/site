@@ -163,18 +163,24 @@ describe("the scene's controls", () => {
       expect(row("Aircraft").hasAttribute("disabled")).toBe(true);
     });
 
-    it("follows one of a kind, moves on to the next, and stops", async () => {
+    it("follows one of a kind at random, moves on to the next, and stops", async () => {
       const { user } = setup();
       const panel = await open(user, "Follow transport");
-      const buses = within(panel).getByRole("button", { name: /Buses/ });
 
-      await user.click(buses);
+      // First the kind, then one of them.
+      await user.click(within(panel).getByRole("button", { name: /Buses/ }));
+      await user.click(
+        within(panel).getByRole("button", { name: /at random/ })
+      );
 
       const first = getSnapshot().following;
 
-      expect(buses.getAttribute("aria-pressed")).toBe("true");
       expect(first?.category).toBe("bus");
-      expect(within(panel).getByText(first?.label ?? "?")).toBeTruthy();
+      expect(
+        within(panel)
+          .getByRole("button", { name: first?.label, pressed: true })
+          .getAttribute("aria-pressed")
+      ).toBe("true");
 
       await user.click(within(panel).getByRole("button", { name: "Next" }));
 
@@ -192,6 +198,31 @@ describe("the scene's controls", () => {
       expect(
         screen.queryByRole("button", { name: "Stop following" })
       ).toBeNull();
+    });
+
+    it("follows the one picked from a kind's list, and goes back to the kinds", async () => {
+      const { user } = setup();
+      const panel = await open(user, "Follow transport");
+
+      await user.click(within(panel).getByRole("button", { name: /Buses/ }));
+
+      const list = within(panel).getByRole("list", { name: "Buses" });
+      const [, second] = within(list).getAllByRole("button");
+
+      await user.click(second);
+
+      expect(getSnapshot().following?.label).toBe(second.textContent);
+      expect(second.getAttribute("aria-pressed")).toBe("true");
+
+      await user.click(
+        within(panel).getByRole("button", { name: "All kinds of transport" })
+      );
+
+      expect(
+        within(panel)
+          .getByRole("button", { name: /Buses/ })
+          .getAttribute("aria-pressed")
+      ).toBe("true");
     });
   });
 

@@ -106,6 +106,27 @@ const FINAL_ALIGNED = (25 * Math.PI) / 180;
 /** Landing, the shot looks down a glide this steep, radians. */
 const GLIDE = (3 * Math.PI) / 180;
 
+/**
+ * Hidden behind something (a building, a hill, trees), a shot on the ground
+ * lifts toward looking straight down from this high, degrees, and stands
+ * off up to LIFT_BACK times as far.
+ */
+const LIFT_ELEVATION = 78;
+const LIFT_BACK = 1.6;
+
+/** Each look that finds it hidden lifts it this much more, of the way up. */
+const LIFT_STEP = 0.25;
+
+/**
+ * Clear for this long, s, it starts back down, this much of the way a
+ * second: slowly, so it doesn't drop straight back behind the same block.
+ */
+const LIFT_HOLD = 4;
+const LIFT_FALL = 0.12;
+
+/** Seconds for the shot to follow the lift. */
+const LIFT_EASE = 0.7;
+
 type PlaneMode = "taxi" | "takeoff" | "cruise" | "landing";
 
 const radians = (degrees: number) => (degrees * Math.PI) / 180;
@@ -190,6 +211,10 @@ export class FollowRig {
   length = 10;
   ground = true;
   private mode: PlaneMode | null = null;
+  /** How far up to lift the shot (0..1), what it's at, and seconds clear. */
+  private lift = 0;
+  private lifted = 0;
+  private clear = 0;
   /** On the shot, eased. */
   private rig = shot();
   private wanted = shot();
@@ -213,6 +238,30 @@ export class FollowRig {
     return this.ready;
   }
 
+  /** Radians clockwise from north, the way the shot's facing the subject. */
+  get facing() {
+    return this.heading;
+  }
+
+  /**
+   * Whether the subject was hidden from the camera when last looked at, so
+   * shots on the ground lift over whatever was in the way.
+   */
+  hidden(hidden: boolean, since: number) {
+    if (hidden) {
+      this.lift = Math.min(this.lift + LIFT_STEP, 1);
+      this.clear = 0;
+
+      return;
+    }
+
+    this.clear += since;
+
+    if (this.clear > LIFT_HOLD) {
+      this.lift = Math.max(this.lift - LIFT_FALL * since, 0);
+    }
+  }
+
   /** The shot for this frame, or null with nothing followed. */
   update(camera: PerspectiveCamera, delta: number): Shot | null {
     const { following, cut } = getSnapshot();
@@ -232,6 +281,7 @@ export class FollowRig {
       this.category = following.category;
       this.side = hash(following.id) < 0.5 ? -1 : 1;
       this.time = this.lost = 0;
+      this.lift = this.lifted = this.clear = 0;
       this.mode = null;
       this.from.position.copy(camera.position);
       camera.getWorldDirection(look);
@@ -279,6 +329,7 @@ export class FollowRig {
       this.at.add(move);
       this.heading +=
         wrap(subject.heading - this.heading) * ease(delta, TURN[this.category]);
+      this.lifted += (this.lift - this.lifted) * ease(delta, LIFT_EASE);
       this.aim();
       // Carried along with it, then eased onto the shot.
       this.rig.position.add(move);
@@ -320,8 +371,39 @@ export class FollowRig {
     return out;
   }
 
-  /** Sets `wanted` for this frame. */
+  /** Sets `wanted` for this frame, lifted if it's been hidden. */
   private aim() {
+    this.frame();
+
+    if (!subject.ground || this.lifted < 1e-3) return;
+
+    // Swung up about it, toward overhead, and further off.
+    const { position } = this.wanted;
+    const dx = position.x - subject.x;
+    const dz = position.z - subject.z;
+    const across = Math.hypot(dx, dz);
+    const up = position.y - subject.y;
+    const elevation = Math.atan2(up, across);
+
+    const lifted =
+      elevation + (radians(LIFT_ELEVATION) - elevation) * this.lifted;
+
+    if (lifted <= elevation) return;
+
+    const distance =
+      Math.hypot(across, up) * (1 + (LIFT_BACK - 1) * this.lifted);
+
+    const flat = (distance * Math.cos(lifted)) / (across || 1);
+
+    position.set(
+      subject.x + (across ? dx * flat : 0),
+      subject.y + distance * Math.sin(lifted),
+      subject.z + (across ? dz * flat : 0)
+    );
+  }
+
+  /** Sets `wanted` for this frame, for what it's doing. */
+  private frame() {
     const h = this.heading;
 
     switch (this.category) {

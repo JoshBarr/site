@@ -13,8 +13,10 @@ export interface Candidate {
   id: string;
   /** Shown while it's followed: a route, a ship's name, a callsign. */
   label: string;
-  /** Under way, so picked before those standing still. */
+  /** Under way, so picked before those standing still, and listed first. */
   moving: boolean;
+  /** A word on what it's doing, listed beside it: "12 kn", "on the ground". */
+  detail?: string;
   /** On the map now; those that aren't are passed over. Assumed if absent. */
   drawn?: () => boolean;
 }
@@ -104,6 +106,53 @@ class Spots {
 
 const spots = new Map<Category, Spots>();
 
+/**
+ * Whether a vehicle at world x, z is somewhere the camera can be: off the
+ * map's faded edges, only its trail shows through the fog. All, until the
+ * controls say.
+ */
+let reachable: (x: number, z: number) => boolean = () => true;
+
+/** Limits what can be picked to where `reach` says. */
+export function setReach(reach: (x: number, z: number) => boolean) {
+  reachable = reach;
+}
+
+/**
+ * Whether `id` of `category` was drawn somewhere reachable last frame. One
+ * whose layer hasn't said where it's drawn (not yet, or ever) can't be
+ * ruled out.
+ */
+function inReach(category: Category, id: string) {
+  const drawn = spots.get(category);
+  let placed = false;
+
+  for (let i = 0; drawn && i < drawn.count; i++) {
+    if (drawn.ids[i] !== id) continue;
+
+    if (reachable(drawn.at[i * 4], drawn.at[i * 4 + 2])) return true;
+    placed = true;
+  }
+
+  return !placed;
+}
+
+/** Labels in reading order, numbers by value: Route 2 before Route 14. */
+const byLabel = new Intl.Collator("en-NZ", { numeric: true });
+
+/**
+ * What of `category` can be followed now: drawn, and somewhere reachable.
+ * Those under way first, then by label.
+ */
+export function available(category: Category): Candidate[] {
+  return (candidates.get(category) ?? [])
+    .filter(({ id, drawn }) => (drawn?.() ?? true) && inReach(category, id))
+    .sort(
+      (a, b) =>
+        Number(b.moving) - Number(a.moving) || byLabel.compare(a.label, b.label)
+    );
+}
+
 /** Followed since each category's list last went round, so Next doesn't repeat. */
 const visited = new Map<Category, Set<string>>();
 const listeners = new Set<() => void>();
@@ -164,13 +213,14 @@ export function publish(at: Partial<Subject> & Pick<Subject, "x" | "y" | "z">) {
 }
 
 /**
- * One of `category` drawn now at random, not `avoid`, and not one followed
- * since the list last went round. Those under way go first.
+ * One of `category` available now at random, not `avoid`, and not one
+ * followed since the list last went round. While any are under way, it's
+ * only those, round and round: ships at anchor are a long wait to get past.
  */
 function pick(category: Category, avoid?: string): Following | null {
-  const list = (candidates.get(category) ?? []).filter(
-    ({ drawn }) => drawn?.() ?? true
-  );
+  const all = available(category);
+  const moving = all.filter((c) => c.moving);
+  const list = moving.length ? moving : all;
 
   let seen = visited.get(category);
 
@@ -181,10 +231,6 @@ function pick(category: Category, avoid?: string): Following | null {
     seen.clear();
     pool = list.filter(({ id }) => id !== avoid);
   }
-
-  const moving = pool.filter((c) => c.moving);
-
-  if (moving.length) pool = moving;
 
   if (!pool.length) return null;
   const { id, label } = pool[Math.floor(Math.random() * pool.length)];
@@ -222,7 +268,9 @@ export function vehiclesAt(
   x: number,
   y: number,
   height: number,
-  reach = REACH
+  reach = REACH,
+  /** Whether a spot this far off can be made out at all, through the haze. */
+  visible: (at: Vector3) => boolean = () => true
 ): Sighting[] {
   // Pixels across a metre one metre away.
   const scale = height / 2 / Math.tan((camera.fov * Math.PI) / 360);
@@ -234,7 +282,15 @@ export function vehiclesAt(
       spot.set(at[o], at[o + 1], at[o + 2]);
       projected.copy(spot).project(camera);
 
-      if (projected.z < -1 || projected.z > 1) continue;
+      if (
+        projected.z < -1 ||
+        projected.z > 1 ||
+        !reachable(spot.x, spot.z) ||
+        !visible(spot)
+      ) {
+        continue;
+      }
+
       const depth = -spot.applyMatrix4(camera.matrixWorldInverse).z;
       const dx = ((projected.x - x) * height * camera.aspect) / 2;
       const dy = ((projected.y - y) * height) / 2;

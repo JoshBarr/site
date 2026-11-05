@@ -6,9 +6,11 @@ import { Toggle } from "@base-ui/react/toggle";
 import { ToggleGroup } from "@base-ui/react/toggle-group";
 import { Tooltip } from "@base-ui/react/tooltip";
 import {
+  available,
   CATEGORIES,
   Category,
   follow,
+  followVehicle,
   getSnapshot,
   next,
   setCut,
@@ -41,12 +43,18 @@ type PanelId = "places" | "transport" | "settings";
 const panels = Popover.createHandle<PanelId>();
 
 // Each in the colour of its trails, by `data-tint` in the stylesheet.
-const VEHICLES: Record<Category, { name: string; icon: IconName }> = {
-  bus: { name: "Buses", icon: "bus" },
-  train: { name: "Trains", icon: "train" },
-  ship: { name: "Ships", icon: "ship" },
-  plane: { name: "Aircraft", icon: "plane" },
+const VEHICLES: Record<
+  Category,
+  { name: string; icon: IconName; still: string }
+> = {
+  bus: { name: "Buses", icon: "bus", still: "stopped" },
+  train: { name: "Trains", icon: "train", still: "stopped" },
+  ship: { name: "Ships", icon: "ship", still: "stopped" },
+  plane: { name: "Aircraft", icon: "plane", still: "on the ground" },
 };
+
+/** How often the lists of what can be followed are looked at again, ms. */
+const LIST_REFRESH = 1000;
 
 const cx = (...names: string[]) => names.join(" ");
 
@@ -194,51 +202,133 @@ const PlacesPanel: React.FC<{
   );
 };
 
+/** What of each kind can be followed now, looked at again every so often. */
+function useAvailable() {
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => setTick((n) => n + 1), LIST_REFRESH);
+
+    return () => clearInterval(id);
+  }, []);
+
+  return available;
+}
+
 /**
- * Pick a kind of vehicle and the camera follows one of them, or click one
- * on the map; picking the same kind again, or Next, moves on to another.
+ * Two steps: a kind of vehicle, then one of them, by name or at random.
+ * Or click one on the map; Next moves on to another of the same kind.
  */
 const TransportPanel: React.FC = () => {
-  const { following, counts } = useFollow();
+  const { following } = useFollow();
+  const list = useAvailable();
+
+  const [category, setCategory] = useState<Category | null>(
+    following?.category ?? null
+  );
+
+  const now = following && (
+    <div className={styles.Now}>
+      <div className={styles.NowText}>
+        <span>Following</span>
+        <span>{following.label}</span>
+      </div>
+      <button
+        type="button"
+        className={cx(styles.Row, styles.Button, styles.Small)}
+        onClick={next}
+      >
+        <Icon name="next" size={18} />
+        Next
+      </button>
+    </div>
+  );
+
+  if (!category) {
+    return (
+      <div className={styles.Panel}>
+        <Header title="Follow" hint="or click one on the map" />
+        {CATEGORIES.map((kind) => {
+          const { name, icon } = VEHICLES[kind];
+          const count = list(kind).length;
+
+          return (
+            <button
+              key={kind}
+              type="button"
+              className={cx(styles.Row, styles.Button, styles.Vehicle)}
+              data-tint={kind}
+              disabled={!count}
+              aria-pressed={following?.category === kind}
+              onClick={() => setCategory(kind)}
+            >
+              <Icon name={icon} />
+              <span className={styles.RowLabel}>{name}</span>
+              <span className={styles.Value}>{count}</span>
+              <span className={styles.Onward}>
+                <Icon name="chevron" size={18} />
+              </span>
+            </button>
+          );
+        })}
+        {now}
+      </div>
+    );
+  }
+
+  const { name, icon, still } = VEHICLES[category];
+  const vehicles = list(category);
 
   return (
-    <div className={styles.Panel}>
-      <Header title="Follow" hint="or click one on the map" />
-      {CATEGORIES.map((category) => {
-        const { name, icon } = VEHICLES[category];
-
-        return (
-          <button
-            key={category}
-            type="button"
-            className={cx(styles.Row, styles.Button, styles.Vehicle)}
-            data-tint={category}
-            disabled={!counts[category]}
-            aria-pressed={following?.category === category}
-            onClick={() => follow(category)}
-          >
-            <Icon name={icon} />
-            <span className={styles.RowLabel}>{name}</span>
-            <span className={styles.Value}>{counts[category]}</span>
-          </button>
-        );
-      })}
-      {following && (
-        <div className={styles.Now}>
-          <div className={styles.NowText}>
-            <span>Following</span>
-            <span>{following.label}</span>
-          </div>
-          <button
-            type="button"
-            className={cx(styles.Row, styles.Button, styles.Small)}
-            onClick={next}
-          >
-            <Icon name="next" size={18} />
-            Next
-          </button>
-        </div>
-      )}
+    <div className={styles.Panel} data-tint={category}>
+      <div className={styles.Header}>
+        <button
+          type="button"
+          className={styles.Back}
+          aria-label="All kinds of transport"
+          onClick={() => setCategory(null)}
+        >
+          <Icon name="back" size={20} />
+        </button>
+        <span className={styles.Tinted}>
+          <Icon name={icon} size={18} />
+        </span>
+        <Popover.Title className={cx(styles.Title, styles.Grow)}>
+          {name}
+        </Popover.Title>
+        <p className={styles.Hint}>{vehicles.length}</p>
+      </div>
+      <button
+        type="button"
+        className={cx(styles.Row, styles.Button, styles.Vehicle)}
+        disabled={!vehicles.length}
+        onClick={() => follow(category)}
+      >
+        <Icon name="shuffle" size={18} />
+        <span className={styles.RowLabel}>
+          {following?.category === category ? "Another" : "Any"}, at random
+        </span>
+      </button>
+      <ul className={styles.Choices} aria-label={name}>
+        {vehicles.map(({ id, label, moving, detail }) => (
+          <li key={id}>
+            <button
+              type="button"
+              className={cx(styles.Row, styles.Button, styles.Choice)}
+              aria-pressed={
+                following?.category === category && following.id === id
+              }
+              onClick={() => followVehicle({ category, id, label })}
+            >
+              <span className={styles.RowLabel}>{label}</span>
+              <span className={styles.Detail}>
+                {detail ?? (moving ? "" : still)}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      {now}
     </div>
   );
 };
@@ -426,11 +516,13 @@ export const SceneControls: React.FC<{
                     trigger={
                       <button
                         type="button"
+                        aria-label="Stop following"
                         className={cx(styles.ToolButton, styles.Labelled)}
                         onClick={stop}
                       >
                         <Icon name="close" size={18} />
-                        Stop following
+                        <span className={styles.Wide}>Stop following</span>
+                        <span className={styles.Narrow}>Stop</span>
                       </button>
                     }
                   />

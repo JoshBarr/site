@@ -8,7 +8,11 @@ import type { Aircraft } from "../../src/lib/flights";
 import { STALE } from "../../src/lib/traffic";
 import { loadManifest } from "../../src/components/scene/terrain/manifest";
 import type { Conditions } from "../../src/components/scene/weather";
-import { CAMERA, Scene } from "../../src/components/scene/WellingtonScene";
+import {
+  CAMERA,
+  LAYERS,
+  Scene,
+} from "../../src/components/scene/WellingtonScene";
 import { server } from "../msw";
 
 /** happy-dom's page: the scene's relative URLs resolve against it. */
@@ -154,6 +158,12 @@ export async function renderScene(time: Date, aircraft: Aircraft[] = []) {
     </>,
     { gl: createRenderer, camera: CAMERA }
   );
+
+  // The layers go in one a frame.
+  for (let i = 0; i <= LAYERS.length; i++) {
+    await renderer.advanceFrames(1, 1 / 60);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
 
   // SAFETY: the root of test-renderer's tree is the THREE.Scene.
   const scene = renderer.scene.instance as Object3D;

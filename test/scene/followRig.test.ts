@@ -77,6 +77,35 @@ const bus = (t: number): Pose => ({
 const at = ({ x, y, z }: Pose) => new Vector3(x, y, z);
 
 describe("the follow rig", () => {
+  it("lifts over whatever hides a vehicle on the ground, and back down once clear", () => {
+    setCut(true);
+    followVehicle({ category: "bus", id: "2158", label: "Route 2" });
+
+    const elevation = (shot: Shot, t: number) => {
+      const off = shot.position.clone().sub(at(bus(t)));
+
+      return (Math.atan2(off.y, Math.hypot(off.x, off.z)) * 180) / Math.PI;
+    };
+
+    const before = run(3, bus).at(-1);
+
+    // Hidden at four looks in a row.
+    for (let i = 0; i < 4; i++) rig.hidden(true, 0.25);
+    const lifted = run(3, bus, 3).at(-1);
+
+    // Clear, held up a while, then slowly down.
+    rig.hidden(false, 2);
+    const held = run(1, bus, 6).at(-1);
+    rig.hidden(false, 12);
+    const after = run(4, bus, 7).at(-1);
+
+    if (!before || !lifted || !held || !after) throw new Error("no shot");
+    expect(elevation(lifted, 6)).toBeGreaterThan(elevation(before, 3) + 30);
+    // Still up (settling the last of the way), not on its way down.
+    expect(elevation(held, 7)).toBeGreaterThanOrEqual(elevation(lifted, 6) - 1);
+    expect(elevation(after, 11)).toBeLessThan(elevation(held, 7) - 20);
+  });
+
   it("lets go with nothing followed", () => {
     expect(rig.update(camera, DT)).toBeNull();
   });

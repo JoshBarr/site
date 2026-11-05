@@ -1,4 +1,4 @@
-import { Color } from "three/webgpu";
+import { Color, Vector3 } from "three/webgpu";
 import {
   abs,
   dot,
@@ -53,6 +53,41 @@ function hazeDepth(from, to) {
 /** Fraction of light from `to` that reaches `from` through the haze. */
 export function hazeTransmittance(from, to) {
   return exp(hazeDepth(from, to).negate());
+}
+
+/**
+ * hazeTransmittance, on the CPU: whether something at `to` can be made out
+ * from `from` at all.
+ */
+export function hazeTransmittanceBetween(from: Vector3, to: Vector3) {
+  const h0 = Math.max(from.y, 0);
+  const k = (Math.max(to.y, 0) - h0) / hazeHeight.value;
+  const ratio = Math.abs(k) < 1e-3 ? 1 - k * 0.5 : (1 - Math.exp(-k)) / k;
+
+  return Math.exp(
+    -hazeDensity.value *
+      from.distanceTo(to) *
+      Math.exp(-h0 / hazeHeight.value) *
+      ratio
+  );
+}
+
+/**
+ * Around the vehicle the camera's following, out to this radius (m), fading
+ * back in by twice it, there's no fog: it's what's being watched, and an
+ * aircraft off the map's edge or in thick haze would be grey on grey.
+ */
+export const clearAround = uniform(new Vector3(0, -1e7, 0));
+export const clearRadius = uniform(0);
+
+/** 0 in the clearing around the followed vehicle, 1 beyond it. */
+export function outsideClearing(position) {
+  return position
+    .distance(clearAround)
+    .div(max(clearRadius, 0.01))
+    .sub(1)
+    .clamp(0, 1)
+    .smoothstep(0, 1);
 }
 
 /** Henyey-Greenstein phase function. */

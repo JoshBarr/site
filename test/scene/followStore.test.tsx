@@ -4,12 +4,14 @@ import { createRoot, Root } from "react-dom/client";
 import { PerspectiveCamera } from "three/webgpu";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  available,
   Candidate,
   Category,
   follow,
   followed,
   getSnapshot,
   next,
+  setReach,
   stop,
   useFollowCandidates,
   useFollowSpots,
@@ -113,6 +115,69 @@ describe("the follow store", () => {
       act(() => follow("ship"));
       expect(followed("ship")).toBe("g");
       act(stop);
+    }
+  });
+
+  it("keeps to those under way, round and round, while any are", () => {
+    const still = (id: string): Candidate => ({ id, label: id, moving: false });
+
+    mount(
+      <Layer
+        category="ship"
+        list={[
+          still("anchored"),
+          moving("ferry"),
+          still("moored"),
+          moving("tug"),
+        ]}
+      />
+    );
+
+    act(() => follow("ship"));
+    const seen = new Set([followed("ship")]);
+
+    for (let i = 0; i < 6; i++) {
+      act(next);
+      seen.add(followed("ship"));
+    }
+
+    expect(seen).toEqual(new Set(["ferry", "tug"]));
+  });
+
+  it("passes over those drawn out of reach, and lists the rest under way first", () => {
+    mount(
+      <Layer
+        category="plane"
+        list={[
+          { id: "parked", label: "NZ 14", moving: false },
+          moving("far", "NZ 2"),
+          moving("near", "NZ 400"),
+          moving("close", "NZ 30"),
+        ]}
+        spots={[
+          ["parked", 0, 0, 0, 30],
+          ["far", 50_000, 3000, 0, 30],
+          ["near", 100, 500, 0, 30],
+          ["close", 200, 500, 0, 30],
+        ]}
+      />
+    );
+
+    setReach((x) => x < 10_000);
+
+    try {
+      expect(available("plane").map(({ id }) => id)).toEqual([
+        "close",
+        "near",
+        "parked",
+      ]);
+
+      for (let i = 0; i < 4; i++) {
+        act(() => follow("plane"));
+        expect(followed("plane")).not.toBe("far");
+      }
+    } finally {
+      setReach(() => true);
     }
   });
 

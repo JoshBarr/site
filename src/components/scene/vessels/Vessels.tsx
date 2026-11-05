@@ -69,6 +69,15 @@ import {
 
 const MAX_VESSELS = 256;
 
+/**
+ * Faster than this, m/s (about 2 kn), a ship's under way for following: at
+ * anchor, they swing about it at up to a knot or so.
+ */
+const FOLLOW_UNDER_WAY = 1;
+
+/** m/s in a knot. */
+const KNOT = 1852 / 3600;
+
 /** Superstructure and deck cargo. */
 const MAX_PARTS_PER_VESSEL = 2;
 
@@ -764,7 +773,11 @@ export function Vessels({
         ships.map(({ vessel }): Candidate => ({
           id: String(vessel.mmsi),
           label: vessel.name ?? `MMSI ${vessel.mmsi}`,
-          moving: vessel.speed > UNDER_WAY,
+          moving: vessel.speed > FOLLOW_UNDER_WAY,
+          detail:
+            vessel.speed > FOLLOW_UNDER_WAY
+              ? `${Math.round(vessel.speed / KNOT)} kn`
+              : undefined,
         })),
       [ships]
     )
