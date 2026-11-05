@@ -307,6 +307,21 @@ const walked: [Vector3, Vector3] = [new Vector3(), new Vector3()];
  */
 const HAND_BACK: [number, number, number] = [MIN_DISTANCE * 2, 2000, 8000];
 
+/**
+ * Handing back, the camera's at least this far off the orbit target, m,
+ * stepped back along the view if it was nearer. A shot on the ground is tens
+ * of metres off its vehicle, and turning about a target that near only spins
+ * the camera where it is.
+ */
+const HAND_BACK_ORBIT = 600;
+
+/**
+ * Fingers turn the view this fraction as fast as the mouse does. The controls
+ * turn a full circle for a drag the view's height, which on a phone is a few
+ * centimetres of finger.
+ */
+const TOUCH_TURN = 0.4;
+
 /** Seconds for the pivot to settle most of the way onto a vehicle looked around. */
 const PIVOT = 0.6;
 
@@ -545,21 +560,31 @@ function Controls({
     orbit.y = Math.min(orbit.y, camera.position.y);
     const from = camera.position.clone();
     const { x, y, z } = from;
+    const back = from.clone().sub(orbit);
 
-    if (boundary.containsPoint(from) && boundary.containsPoint(orbit)) {
+    if (
+      back.length() >= HAND_BACK_ORBIT &&
+      boundary.containsPoint(from) &&
+      boundary.containsPoint(orbit)
+    ) {
       c.setBoundary(boundary);
       c.setLookAt(x, y, z, orbit.x, orbit.y, orbit.z, false);
 
       return;
     }
 
-    // Out of bounds, the controls would snap the camera back in on the
-    // next drag. Flown in instead, looking the same way, the bounds put on
-    // once it's there.
-    const target = inside.clampPoint(orbit, new Vector3());
-    const back = from.clone().sub(orbit);
-    back.setLength(Math.min(back.length(), RETURN_DISTANCE));
-    const to = inside.clampPoint(back.add(target), new Vector3());
+    // Too near to turn about, stepped back along the view. Out of bounds,
+    // the controls would snap the camera back in on the next drag: flown in
+    // instead, looking the same way. Either way the bounds go on once it's
+    // there.
+    const into = (point: Vector3) =>
+      boundary.containsPoint(point) ? point : inside.clampPoint(point, point);
+
+    const target = into(orbit.clone());
+    back.setLength(
+      Math.min(Math.max(back.length(), HAND_BACK_ORBIT), RETURN_DISTANCE)
+    );
+    const to = into(back.add(target));
     const ground = heightAt.current?.(to.x, to.z) ?? 0;
     to.y = Math.max(to.y, ground + GROUND_CLEARANCE, target.y + MIN_DISTANCE);
     c.setBoundary();
@@ -812,6 +837,14 @@ function Controls({
     const down = (e: PointerEvent) => {
       pointers.add(e.pointerId);
       still();
+      const c = controls.current;
+
+      if (c) {
+        const turn = e.pointerType === "touch" ? TOUCH_TURN : 1;
+        c.azimuthRotateSpeed = turn;
+        c.polarRotateSpeed = turn;
+      }
+
       const took = take();
       press =
         pointers.size === 1 && e.button === 0

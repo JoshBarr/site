@@ -50,6 +50,24 @@ function cruising(): Aircraft {
   };
 }
 
+/** A jet taxiing up Wellington's runway, at 8 m/s. */
+function taxiing(): Aircraft {
+  const now = Date.now();
+
+  return {
+    hex: "c81e30",
+    callsign: "ANZ456",
+    registration: "ZK-OXC",
+    type: "A320",
+    category: "A3",
+    route: null,
+    fixes: [
+      [1751180, 5422800, null, now - 60_000, 8, 4, 0],
+      [1751214, 5423280, null, now, 8, 4, 0],
+    ],
+  };
+}
+
 let scene: Awaited<ReturnType<typeof renderScene>> | undefined;
 
 afterEach(async () => {
@@ -259,6 +277,86 @@ describe("the scene", { timeout: 30_000 }, () => {
     expect(c.enabled).toBe(true);
     expect(c.maxPolarAngle).toBe(Math.PI / 2);
   });
+
+  it("hands back from a shot on the ground stepped back far enough to turn", async () => {
+    scene = await renderScene(NOON, [taxiing()]);
+    await scene.until(() => getSnapshot().counts.plane > 0);
+
+    setCut(true);
+    await act(async () => follow("plane"));
+    await frames(30);
+
+    const { camera, controls: c } = scene.state();
+
+    if (!(camera instanceof PerspectiveCamera)) throw new Error("no camera");
+
+    if (!(c instanceof CameraControlsImpl)) throw new Error("no controls");
+    const looking = camera.getWorldDirection(new Vector3());
+
+    // The rig's shot is close in, a couple of lengths off.
+    expect(offset(camera).length()).toBeLessThan(300);
+
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    await frames(2);
+
+    // Orbiting the ground it looked at, from far enough off to turn about
+    // it rather than spin on the spot, looking the same way.
+    const target = c.getTarget(new Vector3());
+
+    expect(getSnapshot().following).toBeNull();
+    expect(target.distanceTo(camera.position)).toBeGreaterThan(599);
+    expect(
+      target.clone().sub(camera.position).normalize().dot(looking)
+    ).toBeGreaterThan(0.99);
+  });
+
+  it("turns less for a finger's drag than the mouse's", async () => {
+    scene = await renderScene(NOON);
+    await frames(5);
+    const { controls: c, gl } = scene.state();
+
+    if (!(c instanceof CameraControlsImpl)) throw new Error("no controls");
+    const element = gl.domElement;
+    element.getBoundingClientRect = () => new DOMRect(0, 0, 400, 800);
+
+    const drag = async (pointerType: string) => {
+      const before = c.azimuthAngle;
+
+      const pointer = (type: string, target: EventTarget, clientX: number) =>
+        target.dispatchEvent(
+          new PointerEvent(type, {
+            pointerId: 1,
+            pointerType,
+            isPrimary: true,
+            button: 0,
+            buttons: 1,
+            clientX,
+            clientY: 400,
+            bubbles: true,
+          })
+        );
+
+      pointer("pointerdown", element, 100);
+
+      for (let x = 110; x <= 200; x += 10) {
+        pointer("pointermove", document, x);
+        await frames(1);
+      }
+
+      pointer("pointerup", document, 200);
+      await frames(60);
+
+      return Math.abs(c.azimuthAngle - before);
+    };
+
+    const mouse = await drag("mouse");
+    const finger = await drag("touch");
+
+    // A hundred pixels of a view 800 high: an eighth of a turn by mouse.
+    expect(mouse).toBeCloseTo(Math.PI / 4, 1);
+    expect(finger / mouse).toBeCloseTo(0.4, 1);
+  });
+
   it("walks the way it faces from the keyboard, and turns", async () => {
     scene = await renderScene(NOON);
     await frames(5);

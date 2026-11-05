@@ -1371,8 +1371,13 @@ h1 {
 }
 
 .hero__scene {
-  position: relative;
-  width: 100%;
+  /* Fixed, as /scene is, so the page doesn't scroll: in the flow, the large
+     viewport made it the toolbar's height taller than what iOS Safari shows
+     with its toolbar up. */
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
   /* The large viewport: on a phone it runs on under iOS Safari's toolbar,
      which the scene shows through. Its controls stay above the toolbar. */
   height: 100vh;
