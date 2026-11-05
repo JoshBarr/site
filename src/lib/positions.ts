@@ -5,6 +5,7 @@ import {
   busFix,
   conditions,
   fix,
+  gauges,
   quake,
   routeEnd,
   seaLevel,
@@ -44,6 +45,8 @@ export const positions = z.object({
   quakes: z.array(quake).default([]),
   /** Null until the tide gauge has been heard from. */
   tide: seaLevel.nullable().default(null),
+  /** Null until the rain gauges have been heard from. */
+  rain: gauges.nullable().default(null),
 });
 
 export type Positions = z.infer<typeof positions>;

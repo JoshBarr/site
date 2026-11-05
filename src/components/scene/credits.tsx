@@ -81,6 +81,15 @@ export const LIVE_CREDITS: Credit[] = [
     who: [{ name: "MetService", href: "https://www.metservice.com" }],
   },
   {
+    what: "rain gauges",
+    who: [
+      {
+        name: "Greater Wellington Regional Council",
+        href: "https://www.gw.govt.nz/environment/environmental-data/",
+      },
+    ],
+  },
+  {
     what: "ship positions",
     who: [
       { name: "Open Waters AIS", href: "https://openwaters.io/ais/" },

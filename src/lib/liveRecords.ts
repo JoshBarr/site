@@ -5,6 +5,7 @@ import type { CableCarTrip, Timetable } from "./cablecar";
 import type { Fix, RouteEnd } from "./flights";
 import type { Sighting } from "./flightStore";
 import type { Quake } from "./quakes";
+import type { Gauge, Rainfall } from "./rainGauges";
 import { orbit } from "./satellites";
 import { point, trailPoint } from "./schemas";
 import type { TrafficSpeeds } from "./traffic";
@@ -247,6 +248,16 @@ export const seaLevel = z.object({
   rate: z.number(),
 }) satisfies z.ZodType<Tide>;
 
+const gauge = z.object({
+  position: point,
+  rate: z.number(),
+}) satisfies z.ZodType<Gauge>;
+
+export const gauges = z.object({
+  time: z.number(),
+  gauges: z.array(gauge),
+}) satisfies z.ZodType<Rainfall>;
+
 /** NZTA's speeds. */
 export const traffic = log("traffic", speeds);
 
@@ -261,6 +272,9 @@ export const quakes = log("quakes", z.object({ quakes: z.array(quake) }));
 
 /** The harbour's height above mean sea level, every five minutes. */
 export const tide = log("tide", seaLevel);
+
+/** How hard it's raining at each of GWRC's gauges, every five minutes. */
+export const rain = log("rain", gauges);
 
 /** Every airport on a callsign's route, or null if adsb.im doesn't know it. */
 export const routes = collection("routes", 1, {

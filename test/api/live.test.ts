@@ -2,11 +2,13 @@ import { HttpResponse } from "msw/http";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bus } from "../../src/lib/buses";
 import type { Aircraft } from "../../src/lib/flights";
+import type { Rainfall } from "../../src/lib/rainGauges";
 import type { Train } from "../../src/lib/trains";
 import type { Vessel } from "../../src/lib/vessels";
 import * as buses from "../../src/pages/api/buses";
 import * as flights from "../../src/pages/api/flights";
 import * as quakes from "../../src/pages/api/quakes";
+import * as rain from "../../src/pages/api/rain";
 import * as tide from "../../src/pages/api/tide";
 import * as traffic from "../../src/pages/api/traffic";
 import * as trains from "../../src/pages/api/trains";
@@ -237,6 +239,23 @@ describe("the live API routes", () => {
     expect(await response.json()).toEqual(level);
   });
 
+  it("serve the rain gauges", async () => {
+    const gauges: Rainfall = {
+      time: ago(120),
+      gauges: [{ position: [1748900, 5428300], rate: 2.4 }],
+    };
+
+    published({ rain: gauges });
+
+    const response = await call(rain);
+
+    expect(response.headers.get("cache-control")).toBe(
+      "public, s-maxage=60, stale-while-revalidate=300"
+    );
+
+    expect(await response.json()).toEqual(gauges);
+  });
+
   describe("are unavailable, briefly cached", () => {
     beforeEach(() => {
       vi.spyOn(console, "error").mockImplementation(() => {});
@@ -302,6 +321,7 @@ describe("the live API routes", () => {
       });
 
       expect((await call(tide)).status).toBe(502);
+      expect((await call(rain)).status).toBe(502);
     });
 
     it("when MetService hasn't, for a minute", async () => {

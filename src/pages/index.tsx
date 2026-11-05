@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import Layout from "../components/layout";
 import SEO from "../components/seo";
-import { TypedIntro, TypingTime } from "../components/TypedIntro";
+import { Intro } from "../components/Intro";
 import { LoadingFill } from "../components/LoadingFill";
 import { GetStaticProps } from "next";
 import dynamic from "next/dynamic";
@@ -23,14 +23,11 @@ let shownBefore = false;
 const IndexPage: React.FC = () => {
   const [skipIntro] = useState(() => shownBefore);
   const [loaded, setLoaded] = useState(false);
-  const [typed, setTyped] = useState(false);
-  const [typing, setTyping] = useState<TypingTime | null>(null);
   const [returned, setReturned] = useState(false);
   const [clouds, setClouds] = useState(true);
   const onLoaded = useCallback(() => setLoaded(true), []);
-  const onTyped = useCallback(() => setTyped(true), []);
-  // The intro is typed out while the scene loads, then gives way to it.
-  const revealed = returned || (loaded && typed);
+  // The intro's shown while the scene loads, then gives way to it.
+  const revealed = returned || loaded;
 
   useEffect(() => {
     if (revealed) shownBefore = true;
@@ -57,13 +54,8 @@ const IndexPage: React.FC = () => {
           onSettled={onLoaded}
         />
         {/* Back again, the scene fades straight up without it. */}
-        {!skipIntro && <LoadingFill hidden={revealed} typing={typing} />}
-        <TypedIntro
-          hidden={revealed || skipIntro}
-          typed={skipIntro}
-          onTyped={onTyped}
-          onTyping={setTyping}
-        />
+        {!skipIntro && <LoadingFill hidden={revealed} />}
+        <Intro hidden={revealed || skipIntro} />
         {/* Once the scene's shown, not over the intro. */}
         {revealed && (
           <SceneControls clouds={clouds} onCloudsChange={setClouds} />

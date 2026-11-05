@@ -7,6 +7,7 @@ import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import { Live, Positions } from "../live";
 import { makeFeeds } from "./feeds";
+import { logMemory } from "./memory";
 import { pollMinute } from "./minute";
 import { LiveBucket, publisher } from "./positions";
 import { LiveTable } from "./table";
@@ -91,6 +92,7 @@ export default class Poller extends AWS.Lambda.Function<Poller>()(
       () =>
         useKeys.pipe(
           Effect.andThen(pollMinute(feeds)),
+          Effect.andThen(logMemory),
           Effect.provideService(LiveTable, live),
           Effect.provideService(LiveBucket, bucket)
         )

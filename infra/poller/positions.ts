@@ -66,6 +66,7 @@ export const publisher = ({ logs, routes }: Feeds) =>
         weather: logs.weather.polls,
         quakes: logs.quakes.polls,
         tide: logs.tide.polls,
+        rain: logs.rain.polls,
       });
 
       const now = yield* Clock.currentTimeMillis;
@@ -82,6 +83,7 @@ export const publisher = ({ logs, routes }: Feeds) =>
         weather: polls.weather.at(-1)?.data ?? null,
         quakes: polls.quakes.at(-1)?.data.quakes ?? [],
         tide: polls.tide.at(-1)?.data ?? null,
+        rain: polls.rain.at(-1)?.data ?? null,
       });
 
       const data = gzipSync(JSON.stringify(body));

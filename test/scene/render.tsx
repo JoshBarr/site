@@ -77,8 +77,8 @@ function serve(aircraft: Aircraft[]) {
 }
 
 /**
- * The renderer, without a GPU: it's never initialised, and drawing and
- * compute do nothing. The layers build their objects as they would.
+ * The renderer, without a GPU: it's never initialised, and drawing,
+ * compute and compiling compute do nothing. The layers build their objects as they would.
  */
 function createRenderer({
   canvas,
@@ -90,6 +90,7 @@ function createRenderer({
   const renderer = new WebGPURenderer({ canvas: canvas as HTMLCanvasElement });
   vi.spyOn(renderer, "render").mockImplementation(() => {});
   vi.spyOn(renderer, "compute").mockImplementation(() => undefined);
+  vi.spyOn(renderer, "compileComputeAsync").mockResolvedValue(undefined);
 
   return renderer;
 }

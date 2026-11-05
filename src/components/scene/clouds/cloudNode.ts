@@ -43,6 +43,7 @@ import {
   saturate,
 } from "./density";
 import { rainfall, RainUniforms } from "./rain";
+import { rainDeck } from "./rainField";
 
 export interface CloudQuality {
   /** Steps along the view ray. */
@@ -129,9 +130,10 @@ export function createCloudNode({
   offset?: any;
 }) {
   const density = (p, cheap = false) =>
-    layerDensity(p, low, LOW_STYLE, { lid: deckLid, cheap }).add(
-      layerDensity(p, mid, MID_STYLE, { cheap })
-    );
+    layerDensity(p, low, LOW_STYLE, {
+      lid: max(deckLid, rainDeck(p.xz)),
+      cheap,
+    }).add(layerDensity(p, mid, MID_STYLE, { cheap }));
 
   // Set by the march, written to the second output.
   const distance = property("float", "cloudDistance");

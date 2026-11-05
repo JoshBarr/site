@@ -11,6 +11,7 @@ import {
   headings,
   routes,
   quakes,
+  rain,
   tide,
   timeline,
   traffic,
@@ -1153,6 +1154,76 @@ describe("the poller", () => {
       expect(table.records(tide)[0].data).toMatchObject({ level: 0.2 });
     });
   });
+
+  describe("rain", () => {
+    const SERVER = "https://hilltop.gw.govt.nz/data.hts";
+
+    let asked: string[];
+
+    /** Te Papa's gauge: 1 mm in the half hour to `minutes` ago, NZST. */
+    const tips = (minutes: number) =>
+      [20, 10].map((m) => {
+        const time = new Date(Date.now() - (minutes + m) * 60_000);
+        const nzst = new Date(time.getTime() + 12 * 3600_000);
+
+        return `<E><T>${nzst.toISOString().slice(0, 19)}</T><I1>0.5</I1></E>`;
+      });
+
+    beforeEach(() => {
+      asked = [];
+
+      server.use(
+        http.get(SERVER, ({ request }) => {
+          const request_ = new URL(request.url).searchParams.get("Request");
+          asked.push(request_ ?? "");
+
+          return new HttpResponse(
+            request_ === "SiteList"
+              ? `<HilltopServer><Site Name="Wellington at Te Papa"><Latitude>-41.2903</Latitude><Longitude>174.7813</Longitude></Site></HilltopServer>`
+              : `<Hilltop><Measurement SiteName="Wellington at Te Papa"><DataSource Name="Rainfall" NumItems="1"></DataSource><Data>${tips(0).join("")}</Data></Measurement></Hilltop>`
+          );
+        })
+      );
+    });
+
+    it("logs each gauge's rate every five minutes", async () => {
+      const feed = await coldFeed("rain");
+
+      await run(feed.poll);
+
+      expect(table.records(rain)[0].data).toEqual({
+        time: NOW,
+        gauges: [{ position: [1749154, 5427486], rate: 2 }],
+      });
+
+      freezeTime(NOW + 4 * 60_000);
+      await run(feed.poll);
+      freezeTime(NOW + 5 * 60_000);
+      await run(feed.poll);
+
+      expect(table.records(rain)).toHaveLength(2);
+      // Where they are once, until it's a day old.
+      expect(asked).toEqual(["SiteList", "GetData", "GetData"]);
+    });
+
+    it("asks where they are again once it's a day old", async () => {
+      const feed = await coldFeed("rain");
+
+      await run(feed.poll);
+      freezeTime(NOW + 24 * 3600_000);
+      await run(feed.poll);
+
+      expect(asked).toEqual(["SiteList", "GetData", "SiteList", "GetData"]);
+    });
+
+    it("goes by the last poll stored when it starts", async () => {
+      table.seed(rain, ago(60), { time: ago(60), gauges: [] }, ago(60));
+
+      await run((await coldFeed("rain")).poll);
+
+      expect(asked).toEqual([]);
+    });
+  });
 });
 
 describe("publishing the positions", () => {
@@ -1208,6 +1279,7 @@ describe("publishing the positions", () => {
       weather: null,
       quakes: [],
       tide: null,
+      rain: null,
     });
   });
 

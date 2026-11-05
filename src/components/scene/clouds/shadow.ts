@@ -31,6 +31,7 @@ import {
   LOW_STYLE,
   MID_STYLE,
 } from "./density";
+import { rainDeck } from "./rainField";
 
 // The clouds' shadows, worked out once a frame into a small map over the
 // country around the camera, rather than for every pixel lit. Each texel holds
@@ -120,7 +121,12 @@ export function createCloudShadowMap(toSun) {
         const xz = origin.add(slope.mul(y.sub(plane)));
         const q = vec3(xz.x, y, xz.y);
         depth.addAssign(
-          layerDensity(q, layer, style, { cheap: true, erosion: EROSION })
+          layerDensity(q, layer, style, {
+            cheap: true,
+            erosion: EROSION,
+            // The deck over measured rain shades what's under it.
+            lid: layer === low ? rainDeck(xz) : null,
+          })
         );
       }
     }

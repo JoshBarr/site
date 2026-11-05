@@ -10,6 +10,7 @@ import {
   type LiveData,
   type LiveRecord,
   quakes,
+  rain,
   routePrefix,
   routes,
   tide,
@@ -22,6 +23,7 @@ import {
 import { fetchBuses, fetchTrains } from "../../src/lib/metlink";
 import { fetchTraffic } from "../../src/lib/nzta";
 import { fetchQuakes } from "../../src/lib/quakes";
+import { fetchGaugeSites, fetchRainfall } from "../../src/lib/rainGauges";
 import { fetchMeanLevel, fetchTide } from "../../src/lib/tide";
 import { onMap, TRAIL } from "../../src/lib/trains";
 import { pollHarbour, reportedHeading } from "../../src/lib/vesselStore";
@@ -48,7 +50,8 @@ type LogCollection =
   | typeof traffic
   | typeof weather
   | typeof quakes
-  | typeof tide;
+  | typeof tide
+  | typeof rain;
 
 interface Spec<L extends LogCollection> {
   log: L;
@@ -420,6 +423,48 @@ const tideFeed = Effect.gen(function* () {
   });
 });
 
+/** How often the rain gauges are asked, ms: they're telemetered about as often. */
+const RAIN_EVERY = 5 * 60_000;
+
+/** How long the gauges' sites are trusted, ms. */
+const SITES_AGAIN = 24 * 3600_000;
+
+const rainFeed = Effect.gen(function* () {
+  // Where the gauges are, and when that was fetched: they seldom move.
+  const sites = yield* Ref.make<{
+    where: Awaited<ReturnType<typeof fetchGaugeSites>>;
+    fetched: number;
+  } | null>(null);
+
+  return yield* feed({
+    log: rain,
+    every: 60_000,
+    offset: 35_000,
+    window: 0,
+    poll: (previous) =>
+      Effect.gen(function* () {
+        const now = yield* Clock.currentTimeMillis;
+
+        if (previous && now - previous.sk < RAIN_EVERY) return null;
+
+        let known = yield* Ref.get(sites);
+
+        if (!known || now - known.fetched >= SITES_AGAIN) {
+          known = {
+            where: yield* Effect.tryPromise(fetchGaugeSites),
+            fetched: now,
+          };
+
+          yield* Ref.set(sites, known);
+        }
+
+        const { where } = known;
+
+        return yield* Effect.tryPromise(() => fetchRainfall(where, now));
+      }),
+  });
+});
+
 /** Every feed, made once per container, and what they know of routes. */
 export const makeFeeds = Effect.gen(function* () {
   const routeMemory: Routes = { known: new Map(), due: new Map() };
@@ -522,6 +567,8 @@ export const makeFeeds = Effect.gen(function* () {
     }),
 
     tide: tideFeed,
+
+    rain: rainFeed,
   });
 
   return { logs, routes: routeMemory.known };

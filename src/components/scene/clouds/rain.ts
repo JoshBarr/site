@@ -4,6 +4,7 @@ import { overcast } from "../environment";
 import { Conditions, windVector } from "../weather";
 import type { CloudLayerUniforms } from "./density";
 import { coverageMap, coverageMapAt, LOW_ANGLE } from "./coverage";
+import { rainAt, rainDeck, rainShare } from "./rainField";
 
 // Rain falls from the low cloud: from the thick of each cloud, and from all
 // of an overcast deck, blowing downwind as it falls. Seen far off it's grey
@@ -68,9 +69,10 @@ const STREAK_SCALE = 1800;
 /**
  * How hard it's raining at p, 0..1 of the rate. Traced back along the drops'
  * slant to the low cloud's base: it rains from the middle of each cloud
- * region, not its ragged edges, and everywhere under an overcast deck. Some
- * clouds rain harder than others, and unevenly, which the slant draws out
- * into streaks.
+ * region, not its ragged edges, and everywhere under an overcast deck or
+ * the deck the gauges close over the rain (./rainField.ts), as hard as
+ * they measured it there. Some clouds rain harder than others, and
+ * unevenly, which the slant draws out into streaks.
  */
 export function rainfall(
   weather: DataTexture,
@@ -86,7 +88,8 @@ export function rainfall(
   const raining = smoothstep(threshold, threshold.add(0.15), map);
   const streaks = texture(weather, source.add(low.offset).div(STREAK_SCALE)).r;
 
-  return max(raining, overcast)
+  return max(raining, overcast, rainDeck(source))
+    .mul(rainShare(source))
     .mul(mix(0.5, 1, broad.g))
     .mul(mix(0.35, 1.3, streaks))
     .mul(smoothstep(base.add(50), base.sub(FADE_IN), p.y));
@@ -111,20 +114,24 @@ export function rainfallAt(
   const base = low.shape.value.x;
   const fallen = Math.max(base - p.y, 0);
   const slant = fallen / rain.fall.value;
+  const x = p.x - rain.wind.value.x * slant;
+  const z = p.z - rain.wind.value.y * slant;
 
   const { broad, map } = coverageMapAt(
     weather,
-    p.x - rain.wind.value.x * slant,
-    p.z - rain.wind.value.y * slant,
+    x,
+    z,
     low.offset.value,
     LOW_ANGLE
   );
 
   const threshold = 1 - low.shape.value.z;
   const raining = smoothstepTo(threshold, threshold + 0.15, map);
+  const { share, deck } = rainAt(x, z);
 
   return (
-    Math.max(raining, overcast.value) *
+    Math.max(raining, overcast.value, deck) *
+    share *
     (0.5 + 0.5 * broad.g) *
     smoothstepTo(base + 50, base - FADE_IN, p.y)
   );

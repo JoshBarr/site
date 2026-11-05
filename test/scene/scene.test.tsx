@@ -316,7 +316,7 @@ describe("the scene", { timeout: 30_000 }, () => {
     ).toBeGreaterThan(0.99);
   });
 
-  it("turns less for a finger's drag than the mouse's", async () => {
+  it("turns the view a fraction of the controls' speed, by mouse or finger", async () => {
     scene = await renderScene(NOON);
     await frames(5);
     const { controls: c, gl } = scene.state();
@@ -358,9 +358,10 @@ describe("the scene", { timeout: 30_000 }, () => {
     const mouse = await drag("mouse");
     const finger = await drag("touch");
 
-    // A hundred pixels of a view 800 high: an eighth of a turn by mouse.
-    expect(mouse).toBeCloseTo(Math.PI / 4, 1);
-    expect(finger / mouse).toBeCloseTo(0.4, 1);
+    // A hundred pixels of a view 800 high is an eighth of a turn to the
+    // controls: a fifth of that by mouse, two fifths by finger.
+    expect(mouse).toBeCloseTo((Math.PI / 4) * 0.2, 2);
+    expect(finger / mouse).toBeCloseTo(2, 1);
   });
 
   it("walks the way it faces from the keyboard, and turns", async () => {

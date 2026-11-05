@@ -3,6 +3,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Live } from "../live";
+import { logMemory } from "../poller/memory";
 import { LiveTable } from "../poller/table";
 import { updateCableCar } from "./cablecar";
 import { updateSatellites } from "./satellites";
@@ -21,10 +22,10 @@ export default class Timetables extends AWS.Lambda.Function<Timetables>()(
     main: import.meta.url,
     functionUrl: false,
     architecture: "arm64",
-    // As the poller, with room for the stop times. A second or so a day, a
-    // few when there's a new timetable: ~15 GB-s a month, and if every run
-    // took its full minute, ~300, of the free 400k (the poller takes ~357k).
-    memorySize: 160,
+    // Reading the stop times ran at 159 of 160 MB (2026-11-06). Once a day,
+    // ~32 s: ~240 GB-s a month at 256 MB, and if every run took its full
+    // minute, ~480, of the free 400k (the poller takes ~350k).
+    memorySize: 256,
     timeout: Duration.seconds(60),
     // A failed morning is tried again the next.
     eventInvokeConfig: { maximumRetryAttempts: 0, maximumEventAge: "1 hour" },
@@ -68,7 +69,10 @@ export default class Timetables extends AWS.Lambda.Function<Timetables>()(
             ),
           ],
           { discard: true }
-        ).pipe(Effect.provideService(LiveTable, live))
+        ).pipe(
+          Effect.andThen(logMemory),
+          Effect.provideService(LiveTable, live)
+        )
     );
 
     return {};

@@ -23,6 +23,7 @@ import {
   vec2,
   vec4,
 } from "three/tsl";
+import { track } from "../loading";
 import { buildSpectrum, Cascade, OceanConditions } from "./spectrum";
 
 // TSL complex numbers are vec2 (re, im). Typed loosely: the TSL typings
@@ -56,6 +57,13 @@ export class OceanSimulation {
   private h0: any;
   private waves: any;
   private passes: ComputeNode[] = [];
+  /**
+   * Its pipelines compiling, then compiled: three dispatches a compute
+   * pass whether its pipeline's ready or not, and compiled synchronously
+   * they'd hold up the GPU process (see ../pipelines.ts).
+   */
+  private compiled: Promise<void> | null = null;
+  private ready = false;
 
   constructor(size: number, cascades: Cascade[]) {
     this.size = size;
@@ -92,6 +100,16 @@ export class OceanSimulation {
 
   update(renderer: WebGPURenderer, time: number) {
     this.time.value = time;
+
+    if (!this.ready) {
+      this.compiled ??= track(renderer.compileComputeAsync(this.passes)).then(
+        () => {
+          this.ready = true;
+        }
+      );
+
+      return;
+    }
 
     // One compute pass; WebGPU orders its dispatches.
     renderer.compute(this.passes);

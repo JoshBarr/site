@@ -8,6 +8,7 @@ import {
   cableCar,
   flights,
   quakes,
+  rain,
   routePrefix,
   routes,
   satellites,
@@ -21,6 +22,7 @@ import {
 import { canRead, readNewest, readOldest, readSince } from "./liveTable";
 import { loadPositions, type Positions } from "./positions";
 import type { Quake } from "./quakes";
+import type { Rainfall } from "./rainGauges";
 import type { Orbit } from "./satellites";
 import type { Tide } from "./tide";
 import { nextDay, nzMidnight, type TimelineDay, toDay } from "./timeline";
@@ -287,6 +289,15 @@ export const loadTide = (at?: number): Promise<Tide | null> =>
     "tide",
     async () => (await readNewest(tide, "", at))?.data ?? null,
     (positions) => positions.tide,
+    at
+  );
+
+/** The rain gauges' newest rates at `at` (or now); null if there are none. */
+export const loadRain = (at?: number): Promise<Rainfall | null> =>
+  fromTable(
+    "rain",
+    async () => (await readNewest(rain, "", at))?.data ?? null,
+    (positions) => positions.rain,
     at
   );
 

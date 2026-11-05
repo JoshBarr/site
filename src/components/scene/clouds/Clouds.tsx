@@ -27,6 +27,7 @@ import {
   dropFraction,
   rainfallAt,
 } from "./rain";
+import { PlacedGauge, rainField, setRainField } from "./rainField";
 import { cloudHistory } from "./temporal";
 import { lensWetness, updateLensWetness, wetLens } from "./wetLens";
 import { useRenderer } from "../renderer";
@@ -107,14 +108,18 @@ function applyConditions(
  * that. Takes over the frame from react-three-fiber. `night` (0..1) makes
  * lights glow, under the clouds. `hidden` leaves the cloud and rain out, the
  * light still as dull as the cover makes it, for looking down through them.
+ * With `gauges`, the rain's where and as hard as they measure it
+ * (./rainField.ts), whatever the forecast says; without, it's the forecast's.
  */
 export function Clouds({
-  conditions,
+  conditions: forecast,
+  gauges = null,
   quality,
   night = 0,
   hidden = false,
 }: {
   conditions: Conditions;
+  gauges?: PlacedGauge[] | null;
   quality: CloudQuality;
   night?: number;
   hidden?: boolean;
@@ -126,10 +131,20 @@ export function Clouds({
 
   const rain = useMemo(createRainUniforms, []);
 
+  // The field's a shared texture, filled as the gauges change.
+  const measured = useMemo(() => setRainField(gauges), [gauges]);
+
+  const conditions = useMemo(
+    () =>
+      measured === null ? forecast : { ...forecast, precipitation: measured },
+    [forecast, measured]
+  );
+
   useEffect(() => {
     applyConditions(conditions, !hidden, layers.low, layers.mid, layers.cirrus);
     applyRain(hidden ? { ...conditions, precipitation: 0 } : conditions, rain);
-  }, [conditions, rain, hidden]);
+    rainField.deck.value = !hidden && measured ? 1 : 0;
+  }, [conditions, rain, hidden, measured]);
 
   const raining = !hidden && conditions.precipitation > 0;
 

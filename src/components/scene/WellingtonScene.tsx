@@ -45,6 +45,7 @@ import { Conditions, lowCloudBase, useConditions } from "./weather";
 import { loadManifest, nztmToWorld, TileIndex } from "./terrain/manifest";
 import { addLoadingSource, track } from "./loading";
 import { SceneLoading } from "./SceneLoading";
+import { CompileInBackground } from "./pipelines";
 import { Travelling } from "./time/Travelling";
 import {
   HeightQuery,
@@ -56,6 +57,7 @@ import { SunPosition, sunDirection, sunPosition } from "./sun";
 import * as environment from "./environment";
 import { Ocean, OCEAN_DESKTOP, OCEAN_MOBILE } from "./ocean/Ocean";
 import { useTide } from "./ocean/tide";
+import { type Gauge, useRainGauges } from "./rainGauges";
 import { Quakes } from "./quakes/Quakes";
 import { OceanConditions, significantHeight } from "./ocean/spectrum";
 import { Clouds } from "./clouds/Clouds";
@@ -310,9 +312,15 @@ const HAND_BACK: [number, number, number] = [MIN_DISTANCE * 2, 2000, 8000];
 const HAND_BACK_ORBIT = 600;
 
 /**
- * Fingers turn the view this fraction as fast as the mouse does. The controls
- * turn a full circle for a drag the view's height, which on a phone is a few
- * centimetres of finger.
+ * The mouse turns the view this fraction of the controls' own speed, a full
+ * circle for a drag the view's height: at that a flick of the wrist swung the
+ * whole harbour round. Now a drag the view's height turns a fifth of one.
+ */
+const MOUSE_TURN = 0.2;
+
+/**
+ * Fingers turn the view this fraction of the controls' own speed. A drag the
+ * view's height on a phone is a few centimetres of finger.
  */
 const TOUCH_TURN = 0.4;
 
@@ -861,7 +869,7 @@ function Controls({
       const c = controls.current;
 
       if (c) {
-        const turn = e.pointerType === "touch" ? TOUCH_TURN : 1;
+        const turn = e.pointerType === "touch" ? TOUCH_TURN : MOUSE_TURN;
         c.azimuthRotateSpeed = turn;
         c.polarRotateSpeed = turn;
       }
@@ -1699,11 +1707,14 @@ function useLayers() {
 export function Scene({
   index,
   conditions,
+  gauges = null,
   time,
   mobile,
 }: {
   index: TileIndex;
   conditions: Conditions;
+  /** The rain gauges, null to go by the forecast. */
+  gauges?: Gauge[] | null;
   time: Date;
   mobile: boolean;
 }) {
@@ -1719,6 +1730,16 @@ export function Scene({
   }, [skylight]);
 
   useTide();
+
+  const placed = useMemo(
+    () =>
+      gauges?.map(({ position: [easting, northing], rate }) => {
+        const [x, z] = nztmToWorld(index.manifest, easting, northing);
+
+        return { x, z, rate };
+      }) ?? null,
+    [gauges, index]
+  );
 
   const setHeightQuery = useCallback((query: HeightQuery | null) => {
     heightAt.current = query;
@@ -1811,6 +1832,7 @@ export function Scene({
       )}
       <Clouds
         conditions={conditions}
+        gauges={placed}
         quality={mobile ? CLOUDS_MOBILE : CLOUDS_DESKTOP}
         night={lights}
         hidden={map}
@@ -1854,6 +1876,9 @@ export const WellingtonScene: React.FC<{
   const [index, setIndex] = useState<TileIndex | null>(null);
   const mobile = useIsMobile();
   const forecast = useConditions();
+  const measured = useRainGauges();
+  // No clouds, no rain.
+  const gauges = clouds ? measured : null;
 
   const conditions = useMemo(
     () =>
@@ -1904,10 +1929,12 @@ export const WellingtonScene: React.FC<{
         }}
         camera={CAMERA}
       >
+        <CompileInBackground />
         {index && (
           <Scene
             index={index}
             conditions={conditions}
+            gauges={gauges}
             time={time}
             mobile={mobile}
           />
