@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { HalfFloatType, RenderPipeline, Scene } from "three/webgpu";
-import { pass, rtt, texture, uniform, vec4 } from "three/tsl";
+import { mix, pass, rtt, select, texture, uniform, vec4 } from "three/tsl";
 import { gaussianBlur } from "three/addons/tsl/display/GaussianBlurNode.js";
 import { cloudShadowMap, overcast, overcastFor } from "../environment";
 import { nightGlow, setNightGlow } from "../glow";
@@ -14,7 +14,9 @@ import { CloudQuality, createCloudNode } from "./cloudNode";
 import {
   CloudLayerUniforms,
   cloudLayers as layers,
+  deckLid,
   cloudNoise,
+  cloudsSeen,
   NOISE_SIZE,
   WEATHER_SIZE,
 } from "./density";
@@ -75,15 +77,18 @@ function useCloudNoise() {
  * MetService gives total cover and a cloud base, not layers, so share the
  * cover out: low cloud sits on the reported base (often wrapping the hills),
  * cumulus above it, and a cirrus sheet that's nearly always faintly there.
+ * Not `shown`, the sky's no less overcast, but there's no cloud to see.
  */
 function applyConditions(
   conditions: Conditions,
+  shown: boolean,
   low: CloudLayerUniforms,
   mid: CloudLayerUniforms,
   cirrus: CloudLayerUniforms
 ) {
-  const cover = Math.min(Math.max(conditions.cloudCover, 0), 1);
-  overcast.value = overcastFor(cover);
+  overcast.value = overcastFor(Math.min(Math.max(conditions.cloudCover, 0), 1));
+  deckLid.value = shown ? overcast.value : 0;
+  const cover = shown ? Math.min(Math.max(conditions.cloudCover, 0), 1) : 0;
   const base = lowCloudBase(conditions);
   // A full deck is thick; broken cloud is shallower.
   const lowTop = base + 250 + 600 * cover + 400 * overcast.value;
@@ -100,16 +105,19 @@ function applyConditions(
  * Renders the scene, then volumetric clouds and their rain over it at reduced
  * resolution, and composites them, then the raindrops near the camera over
  * that. Takes over the frame from react-three-fiber. `night` (0..1) makes
- * lights glow, under the clouds.
+ * lights glow, under the clouds. `hidden` leaves the cloud and rain out, the
+ * light still as dull as the cover makes it, for looking down through them.
  */
 export function Clouds({
   conditions,
   quality,
   night = 0,
+  hidden = false,
 }: {
   conditions: Conditions;
   quality: CloudQuality;
   night?: number;
+  hidden?: boolean;
 }) {
   const renderer = useRenderer();
   const scene = useThree((state) => state.scene);
@@ -119,11 +127,11 @@ export function Clouds({
   const rain = useMemo(createRainUniforms, []);
 
   useEffect(() => {
-    applyConditions(conditions, layers.low, layers.mid, layers.cirrus);
-    applyRain(conditions, rain);
-  }, [conditions, rain]);
+    applyConditions(conditions, !hidden, layers.low, layers.mid, layers.cirrus);
+    applyRain(hidden ? { ...conditions, precipitation: 0 } : conditions, rain);
+  }, [conditions, rain, hidden]);
 
-  const raining = conditions.precipitation > 0;
+  const raining = !hidden && conditions.precipitation > 0;
 
   // Through dusk only the strength moves; the passes change at its ends.
   const dark = night > 0;
@@ -183,8 +191,18 @@ export function Clouds({
     // Just enough blur to dissolve the march's jitter grain.
     const soft = gaussianBlur(history?.getTextureNode() ?? clouds, 1, 0.4);
 
+    // Faded out by cloudsSeen; not drawn at all once it's 0.
+    const cloudy = color.rgb.mul(soft.a).add(soft.rgb);
+
     const composite: any = depthOfField(
-      vec4(color.rgb.mul(soft.a).add(soft.rgb), 1),
+      vec4(
+        select(
+          cloudsSeen.greaterThan(0),
+          mix(color.rgb, cloudy, cloudsSeen),
+          color.rgb
+        ),
+        1
+      ),
       depth
     );
 

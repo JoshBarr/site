@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import React, { act } from "react";
 import { createRoot, Root } from "react-dom/client";
-import { PerspectiveCamera } from "three/webgpu";
+import { PerspectiveCamera, Vector3 } from "three/webgpu";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   available,
@@ -26,13 +26,16 @@ function Layer({
   category,
   list,
   spots = [],
+  sky = false,
 }: {
   category: Category;
   list: Candidate[];
   spots?: Spot[];
+  /** Drawn in the sky, not on the map. */
+  sky?: boolean;
 }) {
   useFollowCandidates(category, list);
-  const drawn = useFollowSpots(category);
+  const drawn = useFollowSpots(category, sky);
   drawn.begin();
 
   for (const spot of spots) drawn.add(...spot);
@@ -235,5 +238,39 @@ describe("the follow store", () => {
     // Both its cars are in reach, but the train comes up once.
     expect(ids(-0.3, 0)).toEqual(["2601"]);
     expect(ids(0.9, 0.9)).toEqual([]);
+  });
+
+  it("picks satellites out of the sky, past the map's bounds and its haze", () => {
+    // Looking up to the north.
+    const camera = new PerspectiveCamera(50, 1, 1, 100_000);
+    camera.position.set(0, 100, 0);
+    camera.lookAt(0, 30_100, -50_000);
+    camera.updateMatrixWorld();
+
+    const at = new Vector3(0, 30_100, -50_000);
+
+    mount(
+      <Layer
+        category="satellite"
+        list={[moving("25544", "ISS (ZARYA)")]}
+        spots={[["25544", at.x, at.y, at.z, 1]]}
+        sky
+      />
+    );
+
+    setReach(() => false);
+
+    try {
+      expect(available("satellite").map(({ id }) => id)).toEqual(["25544"]);
+
+      const [seen] = vehiclesAt(camera, 0, 0, 800, undefined, () => false);
+      expect(seen?.vehicle).toEqual({
+        category: "satellite",
+        id: "25544",
+        label: "ISS (ZARYA)",
+      });
+    } finally {
+      setReach(() => true);
+    }
   });
 });

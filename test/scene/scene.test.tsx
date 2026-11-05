@@ -16,6 +16,13 @@ import {
   stop,
   subject,
 } from "../../src/components/scene/follow/store";
+import {
+  getMapView,
+  MAP_DISTANCE,
+  MAP_POLAR_ANGLE,
+  MAP_ZOOM,
+  setMapView,
+} from "../../src/components/scene/mapView";
 import { renderScene, shown } from "./render";
 
 /** Midsummer in Wellington, NZDT. */
@@ -48,6 +55,7 @@ let scene: Awaited<ReturnType<typeof renderScene>> | undefined;
 afterEach(async () => {
   stop();
   setCut(false);
+  setMapView(false);
   await scene?.unmount();
   scene = undefined;
 });
@@ -308,5 +316,109 @@ describe("the scene", { timeout: 30_000 }, () => {
     input.remove();
 
     expect(camera.position.distanceTo(from)).toBeLessThan(1e-6);
+  });
+
+  it("goes up to the map view and back, panned by the mouse at the edge", async () => {
+    scene = await renderScene(NOON);
+    await frames(5);
+    const { camera, controls: c, gl } = scene.state();
+
+    if (!(c instanceof CameraControlsImpl)) throw new Error("no controls");
+    const { ACTION } = CameraControlsImpl;
+    const element = gl.domElement;
+
+    // happy-dom lays nothing out: the map's 1000 × 600, for the scene's own
+    // handlers and the controls' zoom to the mouse alike.
+    element.getBoundingClientRect = () => new DOMRect(0, 0, 1000, 600);
+
+    // It re-renders the scene, without its clouds.
+    const key = (code: string) =>
+      act(() => {
+        window.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            code,
+            bubbles: true,
+            cancelable: true,
+          })
+        );
+      });
+
+    const mouse = (type: string, clientX: number, clientY: number) =>
+      element.dispatchEvent(
+        new PointerEvent(type, {
+          pointerType: "mouse",
+          clientX,
+          clientY,
+          bubbles: true,
+        })
+      );
+
+    setCut(true);
+    await key("KeyM");
+    await frames(5);
+
+    // High over the ground it was looking at, facing north, at the map's
+    // angle, and every drag pans.
+    const target = c.getTarget(new Vector3());
+
+    expect(getMapView()).toBe(true);
+    expect(camera.position.x - target.x).toBeCloseTo(0, 0);
+    expect(camera.position.z).toBeGreaterThan(target.z);
+    expect(c.polarAngle).toBeCloseTo(MAP_POLAR_ANGLE, 2);
+    expect(c.distance).toBeCloseTo(MAP_DISTANCE, -1);
+    expect(c.mouseButtons.left).toBe(ACTION.TRUCK);
+
+    // The mouse at the right edge pans east, and says so.
+    mouse("pointermove", 999, 300);
+    await frames(30);
+    const moved = c.getTarget(new Vector3()).sub(target);
+
+    expect(element.style.cursor).toBe("e-resize");
+    expect(moved.x).toBeGreaterThan(100);
+    expect(Math.abs(moved.z)).toBeLessThan(moved.x * 0.05);
+    expect(c.polarAngle).toBeCloseTo(MAP_POLAR_ANGLE, 2);
+
+    // Off the map, it stops (but for the controls' smoothing).
+    mouse("pointerleave", 1200, 300);
+    await frames(30);
+    const stopped = c.getTarget(new Vector3());
+    await frames(30);
+
+    expect(c.getTarget(new Vector3()).distanceTo(stopped)).toBeLessThan(5);
+
+    // Zooming in close, toward the mouse, at the same angle.
+    for (let i = 0; i < 12; i++) {
+      const wheel = new WheelEvent("wheel", {
+        deltaY: -2000,
+        bubbles: true,
+        cancelable: true,
+      });
+
+      // happy-dom's wheel events have no position.
+      Object.defineProperties(wheel, {
+        clientX: { value: 700 },
+        clientY: { value: 300 },
+      });
+
+      element.dispatchEvent(wheel);
+      await frames(1);
+    }
+
+    await frames(20);
+    const zoomed = c.getTarget(new Vector3());
+
+    expect(c.distance).toBeLessThan(MAP_ZOOM[0] * 1.1);
+    expect(c.polarAngle).toBeCloseTo(MAP_POLAR_ANGLE, 2);
+    // Toward the right of the view: east.
+    expect(zoomed.x).toBeGreaterThan(stopped.x + 100);
+
+    // Again, and it's back down to orbiting.
+    await key("KeyM");
+    await frames(5);
+
+    expect(getMapView()).toBe(false);
+    expect(camera.position.y).toBeLessThan(4000);
+    expect(c.mouseButtons.left).toBe(ACTION.ROTATE);
+    expect(c.maxDistance).toBe(14000);
   });
 });

@@ -34,6 +34,7 @@ import { hazeColor, hazeTransmittance, phase } from "../haze";
 import { cloudGlowAtNight, hazeGlowAtNight } from "../skyglow";
 import {
   CloudLayerUniforms,
+  deckLid,
   EXTINCTION,
   layerDensity,
   LOW_STYLE,
@@ -128,7 +129,7 @@ export function createCloudNode({
   offset?: any;
 }) {
   const density = (p, cheap = false) =>
-    layerDensity(p, low, LOW_STYLE, { lid: overcast, cheap }).add(
+    layerDensity(p, low, LOW_STYLE, { lid: deckLid, cheap }).add(
       layerDensity(p, mid, MID_STYLE, { cheap })
     );
 

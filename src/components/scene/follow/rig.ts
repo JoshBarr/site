@@ -47,6 +47,8 @@ const TURN: Record<Category, number> = {
   train: 2.5,
   ship: 4,
   plane: 1.5,
+  // Not followed by the rig: the trip to orbit has the camera.
+  satellite: 1,
 };
 
 /** Moving to a new subject: seconds, at least and at most, and m/s. */
@@ -233,6 +235,15 @@ export class FollowRig {
     this.runway = runwayIn(toWorld);
   }
 
+  /**
+   * Lets go of the subject without a shot, so the next one (even the same
+   * one again) starts afresh.
+   */
+  release() {
+    this.key = null;
+    subject.fresh = false;
+  }
+
   /** Whether the subject's been seen since it was picked. */
   get tracking() {
     return this.ready;
@@ -275,8 +286,7 @@ export class FollowRig {
     const { following, cut } = getSnapshot();
 
     if (!following) {
-      this.key = null;
-      subject.fresh = false;
+      this.release();
 
       return null;
     }

@@ -21,6 +21,7 @@ import {
   useFollowCandidates,
 } from "../../src/components/scene/follow/store";
 import { connectCamera, SHOTS } from "../../src/components/scene/shots/shots";
+import { getMapView, setMapView } from "../../src/components/scene/mapView";
 
 // The scene's controls: the toolbar's panels for places, following and
 // settings, the time-travel button, the pills while following or
@@ -92,10 +93,11 @@ afterEach(() => {
   stop();
   setCut(false);
   setSceneTime(null);
+  setMapView(false);
 });
 
 describe("the scene's controls", () => {
-  it("have a toolbar of places, following, settings and time travel", () => {
+  it("have a toolbar of map view, places, following, settings and time travel", () => {
     setup();
 
     const toolbar = screen.getByRole("toolbar", { name: "Map" });
@@ -104,7 +106,28 @@ describe("the scene's controls", () => {
       within(toolbar)
         .getAllByRole("button")
         .map((b) => b.getAttribute("aria-label"))
-    ).toEqual(["Places", "Follow transport", "Settings", "Time travel"]);
+    ).toEqual([
+      "Map view",
+      "Places",
+      "Follow transport",
+      "Settings",
+      "Time travel",
+    ]);
+  });
+
+  it("switch the map view on and off, showing which it's in", async () => {
+    const { user } = setup();
+    const toolbar = screen.getByRole("toolbar", { name: "Map" });
+    const map = within(toolbar).getByRole("button", { name: "Map view" });
+
+    expect(map.getAttribute("aria-pressed")).toBe("false");
+    await user.click(map);
+    expect(getMapView()).toBe(true);
+    expect(map.getAttribute("aria-pressed")).toBe("true");
+
+    // Or from the keyboard, in the scene: the button keeps up.
+    act(() => setMapView(false));
+    expect(map.getAttribute("aria-pressed")).toBe("false");
   });
 
   describe("settings", () => {
@@ -170,7 +193,7 @@ describe("the scene's controls", () => {
       // First the kind, then one of them.
       await user.click(within(panel).getByRole("button", { name: /Buses/ }));
       await user.click(
-        within(panel).getByRole("button", { name: /at random/ })
+        within(panel).getByRole("button", { name: "Lucky dip" })
       );
 
       const first = getSnapshot().following;
@@ -235,16 +258,18 @@ describe("the scene's controls", () => {
       try {
         const panel = await open(user, "Places");
 
-        await user.click(
-          within(panel).getByRole("combobox", { name: "Go to a place" })
+        const button = within(panel).getByRole("button", { name: "Airport" });
+
+        expect(within(panel).getAllByRole("listitem")).toHaveLength(
+          SHOTS.length
         );
-        await user.click(
-          await screen.findByRole("option", { name: "Airport" })
-        );
+
+        await user.click(button);
 
         const airport = SHOTS.find(({ id }) => id === "airport");
 
         expect(went).toHaveBeenCalledWith(airport?.view);
+        expect(button.getAttribute("aria-pressed")).toBe("true");
       } finally {
         disconnect();
       }

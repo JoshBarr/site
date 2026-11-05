@@ -1,6 +1,10 @@
-import React, { useEffect, useState, useSyncExternalStore } from "react";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { Popover } from "@base-ui/react/popover";
-import { Select } from "@base-ui/react/select";
 import { Switch } from "@base-ui/react/switch";
 import { Toggle } from "@base-ui/react/toggle";
 import { ToggleGroup } from "@base-ui/react/toggle-group";
@@ -20,6 +24,7 @@ import {
 import { sceneNow, useSeek } from "../clock";
 import { currentView, goTo, SHOTS } from "../shots/shots";
 import { jump } from "../time/jump";
+import { toggleMapView, useMapView } from "../mapView";
 import { TimeTravel } from "../time/TimeTravel";
 import { useVisibleHeight } from "../useVisibleHeight";
 import {
@@ -32,15 +37,19 @@ import {
 import { Icon, IconName } from "./icons";
 import styles from "./SceneControls.module.css";
 
-// The scene's controls, bottom right: a button each for places, following
-// transport and settings, opening its panel in one popover that moves and
-// resizes from one to the next, and one for the time-travel drawer, which
-// they ride up on; and, while replaying or following, a pill saying when or
+// The scene's controls, bottom right: the map view switch; a button each for
+// places, following transport and settings, opening its panel in one popover
+// that moves and resizes from one to the next; and one for the time-travel
+// drawer, which they ride up on; and, while replaying or following, a pill saying when or
 // what, with the way back. Bottom left, Info: where the data's from.
 
 type PanelId = "places" | "transport" | "settings";
 
 const panels = Popover.createHandle<PanelId>();
+
+/** The panels' gap above the toolbar, and from the screen's edge, px. */
+const GAP = 8;
+const EDGE = 16;
 
 // Each in the colour of its trails, by `data-tint` in the stylesheet.
 const VEHICLES: Record<
@@ -51,15 +60,13 @@ const VEHICLES: Record<
   train: { name: "Trains", icon: "train", still: "stopped" },
   ship: { name: "Ships", icon: "ship", still: "stopped" },
   plane: { name: "Aircraft", icon: "plane", still: "on the ground" },
+  satellite: { name: "Satellites", icon: "satellite", still: "in shadow" },
 };
 
 /** How often the lists of what can be followed are looked at again, ms. */
 const LIST_REFRESH = 1000;
 
 const cx = (...names: string[]) => names.join(" ");
-
-const GROUPS = [...new Set(SHOTS.map(({ group }) => group))];
-const SHOT_ITEMS = SHOTS.map(({ id, name }) => ({ value: id, label: name }));
 
 const useFollow = () =>
   useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
@@ -98,13 +105,9 @@ const PanelButton: React.FC<{
   />
 );
 
-const Header: React.FC<{ title: string; hint?: string }> = ({
-  title,
-  hint,
-}) => (
+const Header: React.FC<{ title: string }> = ({ title }) => (
   <div className={styles.Header}>
     <Popover.Title className={styles.Title}>{title}</Popover.Title>
-    {hint && <p className={styles.Hint}>{hint}</p>}
   </div>
 );
 
@@ -130,66 +133,24 @@ const PlacesPanel: React.FC<{
   return (
     <div className={styles.Panel}>
       <Header title="Places" />
-      <Select.Root
-        items={SHOT_ITEMS}
-        value={shot}
-        // Picking the one already chosen goes there again.
-        onValueChange={(id) => {
-          const picked = SHOTS.find((s) => s.id === id);
-
-          if (!picked) return;
-          onShot(picked.id);
-          goTo(picked);
-        }}
-      >
-        <Select.Trigger
-          className={cx(styles.Row, styles.Button, styles.Trigger)}
-          aria-label="Go to a place"
-        >
-          <span className={styles.RowLabel} style={{ flex: "none" }}>
-            Go to
-          </span>
-          <Select.Value className={styles.Value} placeholder="Choose…" />
-          <Select.Icon className={styles.Chevron}>
-            <Icon name="chevron" />
-          </Select.Icon>
-        </Select.Trigger>
-        <Select.Portal>
-          <Select.Positioner
-            className={`${styles.Theme} ${styles.SelectPositioner}`}
-            alignItemWithTrigger={false}
-            sideOffset={4}
-          >
-            <Select.Popup className={styles.SelectPopup}>
-              <Select.List>
-                {GROUPS.map((group) => (
-                  <Select.Group key={group}>
-                    <Select.GroupLabel className={styles.GroupLabel}>
-                      {group}
-                    </Select.GroupLabel>
-                    {SHOTS.filter((s) => s.group === group).map(
-                      ({ id, name }) => (
-                        <Select.Item
-                          key={id}
-                          value={id}
-                          className={styles.Item}
-                        >
-                          <Select.ItemText className={styles.ItemText}>
-                            {name}
-                          </Select.ItemText>
-                          <Select.ItemIndicator className={styles.ItemCheck}>
-                            <Icon name="check" size={16} />
-                          </Select.ItemIndicator>
-                        </Select.Item>
-                      )
-                    )}
-                  </Select.Group>
-                ))}
-              </Select.List>
-            </Select.Popup>
-          </Select.Positioner>
-        </Select.Portal>
-      </Select.Root>
+      <ul className={styles.Choices} aria-label="Places">
+        {SHOTS.map((picked) => (
+          <li key={picked.id}>
+            <button
+              type="button"
+              className={cx(styles.Row, styles.Button, styles.Choice)}
+              aria-pressed={shot === picked.id}
+              // Picking the one already chosen goes there again.
+              onClick={() => {
+                onShot(picked.id);
+                goTo(picked);
+              }}
+            >
+              <span className={styles.RowLabel}>{picked.name}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
       <button
         type="button"
         className={cx(styles.Row, styles.Button, styles.Centered)}
@@ -216,7 +177,7 @@ function useAvailable() {
 }
 
 /**
- * Two steps: a kind of vehicle, then one of them, by name or at random.
+ * Two steps: a kind of vehicle, then one of them, by name or a lucky dip.
  * Or click one on the map; Next moves on to another of the same kind.
  */
 const TransportPanel: React.FC = () => {
@@ -247,7 +208,7 @@ const TransportPanel: React.FC = () => {
   if (!category) {
     return (
       <div className={styles.Panel}>
-        <Header title="Follow" hint="or click one on the map" />
+        <Header title="Follow" />
         {CATEGORIES.map((kind) => {
           const { name, icon } = VEHICLES[kind];
           const count = list(kind).length;
@@ -305,9 +266,7 @@ const TransportPanel: React.FC = () => {
         onClick={() => follow(category)}
       >
         <Icon name="shuffle" size={18} />
-        <span className={styles.RowLabel}>
-          {following?.category === category ? "Another" : "Any"}, at random
-        </span>
+        <span className={styles.RowLabel}>Lucky dip</span>
       </button>
       <ul className={styles.Choices} aria-label={name}>
         {vehicles.map(({ id, label, moving, detail }) => (
@@ -423,7 +382,7 @@ const Info: React.FC = () => (
       >
         <Popover.Popup className={cx(styles.Glass, styles.Popup)}>
           <div className={cx(styles.Panel, styles.InfoPanel)}>
-            <Header title="Data" hint="" />
+            <Header title="Data" />
             <CreditList title="Map" credits={MAP_CREDITS} />
             <CreditList title="Live" credits={LIVE_CREDITS} />
           </div>
@@ -483,9 +442,17 @@ export const SceneControls: React.FC<{
   onCloudsChange: (clouds: boolean) => void;
 }> = ({ clouds, onCloudsChange }) => {
   const { following } = useFollow();
+  const map = useMapView();
   const [shot, setShot] = useState<string | null>(null);
   const [travelling, setTravelling] = useState(false);
   const height = useVisibleHeight();
+  const toolbar = useRef<HTMLDivElement>(null);
+  // The room above the toolbar, measured as a panel opens, for the panels'
+  // lists to fit in. Not Base UI's --available-height: while it measures the
+  // popup to size the positioner, that's `max-content`, which no calc() takes,
+  // so a list capped by it is measured at full length and the too-tall
+  // positioner is pushed up the screen, away from the toolbar.
+  const [room, setRoom] = useState<number | null>(null);
 
   return (
     <Tooltip.Provider delay={500}>
@@ -529,10 +496,30 @@ export const SceneControls: React.FC<{
                 </div>
               )}
               <div
+                ref={toolbar}
                 role="toolbar"
                 aria-label="Map"
                 className={`${styles.Glass} ${styles.Toolbar}`}
               >
+                <Tip
+                  label={
+                    <>
+                      {map ? "Leave map view" : "Map view"}
+                      <span className={styles.Kbd}>M</span>
+                    </>
+                  }
+                  trigger={
+                    <button
+                      type="button"
+                      aria-label="Map view"
+                      aria-pressed={map}
+                      className={styles.ToolButton}
+                      onClick={toggleMapView}
+                    >
+                      <Icon name="map" />
+                    </button>
+                  }
+                />
                 <PanelButton panel="places" label="Places" icon="place" />
                 <PanelButton
                   panel="transport"
@@ -563,15 +550,29 @@ export const SceneControls: React.FC<{
           </div>
         </TimeTravel>
       </div>
-      <Popover.Root handle={panels}>
+      <Popover.Root
+        handle={panels}
+        onOpenChange={(open) => {
+          const top = toolbar.current?.getBoundingClientRect().top;
+
+          if (open && top !== undefined) setRoom(top - GAP - EDGE);
+        }}
+      >
         {({ payload }) => (
           <Popover.Portal>
             <Popover.Positioner
               side="top"
               align="end"
-              sideOffset={8}
-              collisionPadding={16}
+              sideOffset={GAP}
+              collisionPadding={EDGE}
               className={`${styles.Theme} ${styles.Positioner}`}
+              // SAFETY: React's style type lists no custom properties, but
+              // passes "--" names through to the element as they are.
+              style={
+                room === null
+                  ? undefined
+                  : ({ "--room": `${room}px` } as React.CSSProperties)
+              }
             >
               <Popover.Popup className={`${styles.Glass} ${styles.Popup}`}>
                 <Popover.Viewport className={styles.Viewport}>

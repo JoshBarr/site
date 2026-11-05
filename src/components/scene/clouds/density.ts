@@ -46,6 +46,18 @@ export const cloudLayers = {
   cirrus: createLayerUniforms(),
 };
 
+/**
+ * 0..1, how far an overcast sky closes the low layer into an unbroken deck:
+ * the sky's overcast, unless the clouds are hidden while the light isn't.
+ */
+export const deckLid = uniform(0);
+
+/**
+ * 1..0, how much of the clouds is drawn: zoomed in on a satellite through
+ * the telescope they're let go, as the march falls apart that magnified.
+ */
+export const cloudsSeen = uniform(1);
+
 export const NOISE_SIZE = 64;
 export const WEATHER_SIZE = 256;
 

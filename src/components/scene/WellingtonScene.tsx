@@ -5,6 +5,7 @@ import React, {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { CameraControls, CameraControlsImpl } from "@react-three/drei";
@@ -75,6 +76,20 @@ import { Buses } from "./buses/Buses";
 import { Traffic } from "./traffic/Traffic";
 import { AirfieldLights } from "./airport/AirfieldLights";
 import { Sky } from "./sky/Sky";
+import { sight } from "./sky/orbits";
+import { Telescope } from "./scope/Telescope";
+import {
+  announce,
+  drawVignette,
+  getActive,
+  LOWEST,
+  pose,
+  satelliteFor,
+  scope,
+  setVignette,
+  subscribeActive,
+} from "./scope/scope";
+import { cloudsSeen } from "./clouds/density";
 import { updateLens } from "./lens";
 import { DEFAULT_FOV, flightFor, FollowRig, smootherstep } from "./follow/rig";
 import { groundAlong } from "./ground";
@@ -91,6 +106,19 @@ import { connectCamera, shotFromUrl } from "./shots/shots";
 import { useRenderer } from "./renderer";
 import { sceneShown, useInView } from "./visibility";
 import { typing, Walk } from "./walk";
+import {
+  EDGE_SPEED,
+  edgeCursor,
+  edgePan,
+  getMapView,
+  MAP_DISTANCE,
+  MAP_POLAR_ANGLE,
+  MAP_ZOOM,
+  subscribeMapView,
+  setMapView,
+  toggleMapView,
+  useMapView,
+} from "./mapView";
 import { sceneNow, useSeek } from "./clock";
 import { attachInspector, showStats, Stats, switchedOff } from "./stats";
 
@@ -254,14 +282,20 @@ interface ViewFlight {
   duration: number;
   /** Height of the arc flown, m. */
   arc: number;
-  /** Bounds to put on the orbit once it's there (flying in from outside them). */
-  bound?: boolean;
+  /**
+   * Once it's there, or stopped on the way: putting the orbit's bounds and
+   * limits back, say, flying in from outside them.
+   */
+  arrive?: () => void;
 }
 
 const flown: [Vector3, Vector3] = [new Vector3(), new Vector3()];
 
 /** Where the pivot's going, looking around a vehicle, and by how much. */
 const carried: [Vector3, Vector3] = [new Vector3(), new Vector3()];
+
+/** What the map view's aimed at. */
+const onGround = new Vector3();
 
 /** Which way's ahead and to the right, walking. */
 const walked: [Vector3, Vector3] = [new Vector3(), new Vector3()];
@@ -292,11 +326,67 @@ const { ACTION } = CameraControlsImpl;
  * Looking around a vehicle every drag turns about it: panning off it would
  * only be pulled back onto it.
  */
+/** Where the scope has the camera. */
+const posed = pose();
+
+/** The controls' limits and gestures, to put back as they were. */
+function limitsOf(c: Controller) {
+  return {
+    minDistance: c.minDistance,
+    maxDistance: c.maxDistance,
+    maxPolarAngle: c.maxPolarAngle,
+    boundaryEnclosesCamera: c.boundaryEnclosesCamera,
+    mouseButtons: { ...c.mouseButtons },
+    touches: { ...c.touches },
+  };
+}
+
 function turnAbout(c: Controller, around: boolean) {
   c.mouseButtons.right = around ? ACTION.ROTATE : ACTION.TRUCK;
   c.touches.two = around ? ACTION.TOUCH_DOLLY_ROTATE : ACTION.TOUCH_DOLLY_TRUCK;
   c.touches.three = around ? ACTION.TOUCH_ROTATE : ACTION.TOUCH_TRUCK;
 }
+
+/**
+ * In map view every drag slides the map across the ground, up the view going
+ * north, and nothing turns it; the bounds hold what it's aimed at, not the
+ * camera, which is far above their ceiling.
+ */
+function panOnly(c: Controller, map: boolean) {
+  c.mouseButtons.left = map ? ACTION.TRUCK : ACTION.ROTATE;
+  c.touches.one = map ? ACTION.TOUCH_TRUCK : ACTION.TOUCH_ROTATE;
+  c.verticalDragToForward = map;
+  c.boundaryEnclosesCamera = !map;
+  // Zooming in on what's under the mouse, to look at it closely.
+  c.dollyToCursor = map;
+}
+
+/** Where the camera is for the map view of the ground at `aim`, and that. */
+function mapView(aim: Vector3): [Vector3, Vector3] {
+  const target = aim.clone();
+
+  return [
+    new Vector3(
+      target.x,
+      target.y + MAP_DISTANCE * Math.cos(MAP_POLAR_ANGLE),
+      target.z + MAP_DISTANCE * Math.sin(MAP_POLAR_ANGLE)
+    ),
+    target,
+  ];
+}
+
+/**
+ * Coming down from the map view: this far from the ground it was aimed at,
+ * m, looking north, this far from straight down.
+ */
+const LEAVE_MAP_DISTANCE = 3000;
+const LEAVE_MAP_POLAR_ANGLE = (66 * Math.PI) / 180;
+
+/** In map view the keys walk this fraction as fast: it's far above the ground. */
+const MAP_WALK = 0.15;
+
+/** Seconds to get most of the way up to the edge's panning speed, or to stop. */
+const EDGE_EASE = 0.12;
 
 /**
  * Keeps the orbit target well inside the terrain so the edge fade stays
@@ -487,7 +577,7 @@ function Controls({
       to: [to, target],
       time: 0,
       ...flightFor(from.distanceTo(to)),
-      bound: true,
+      arrive: () => c.setBoundary(boundary),
     };
   }, [boundary, inside, orbit, heightAt]);
 
@@ -496,9 +586,8 @@ function Controls({
   const land = useCallback(() => {
     const f = flight.current;
     flight.current = null;
-
-    if (f?.bound) controls.current?.setBoundary(boundary);
-  }, [boundary]);
+    f?.arrive?.();
+  }, []);
 
   // Turning about the followed vehicle by hand, from where the rig had the
   // camera, the pivot sliding over onto the vehicle from what it aimed at.
@@ -547,6 +636,83 @@ function Controls({
     turnAbout(c, false);
   }, []);
 
+  // Up to the map view, or back down from it, as it's switched: flown there
+  // (or cut), free of the orbit's limits on the way and under the view's
+  // own once it's there. The ground aimed at stays in the middle.
+  const switchView = useCallback(
+    (map: boolean, fly = true) => {
+      const c = controls.current;
+
+      if (!c) return;
+      touched.current = true;
+
+      if (map) {
+        stopFollowing();
+        handBack();
+      }
+
+      land();
+      panOnly(c, map);
+
+      // Clicking a vehicle on the map: the rig has the camera now.
+      if (!map && getSnapshot().following) return;
+
+      const aim = c.getTarget(new Vector3());
+      const target = inside.clampPoint(aim, new Vector3());
+      target.y = Math.max(heightAt.current?.(target.x, target.z) ?? 0, 0);
+
+      const to: [Vector3, Vector3] = map
+        ? mapView(target)
+        : [
+            new Vector3(
+              0,
+              Math.cos(LEAVE_MAP_POLAR_ANGLE),
+              Math.sin(LEAVE_MAP_POLAR_ANGLE)
+            )
+              .multiplyScalar(LEAVE_MAP_DISTANCE)
+              .add(target),
+            target,
+          ];
+
+      const settle = () => {
+        c.minDistance = map ? MAP_ZOOM[0] : MIN_DISTANCE;
+        c.maxDistance = map ? MAP_ZOOM[1] : MAX_DISTANCE;
+        c.setBoundary(boundary);
+      };
+
+      c.setBoundary();
+      c.minDistance = 0;
+      c.maxDistance = Infinity;
+      const [p, t] = to;
+
+      if (!fly || getSnapshot().cut) {
+        c.setLookAt(p.x, p.y, p.z, t.x, t.y, t.z, false);
+        settle();
+
+        return;
+      }
+
+      const from = c.camera.position.clone();
+      flight.current = {
+        from: [from, aim],
+        to,
+        time: 0,
+        ...flightFor(from.distanceTo(p)),
+        arrive: settle,
+      };
+    },
+    [boundary, inside, heightAt, handBack, land]
+  );
+
+  useEffect(
+    () => subscribeMapView(() => switchView(getMapView())),
+    [switchView]
+  );
+
+  /** The mouse at the edge of the view in map view: which way it's panning. */
+  const edge = useRef({ right: 0, up: 0 });
+  const edgeMoving = useRef({ right: 0, up: 0 });
+
   // Touching the map while following looks around the vehicle, and carries
   // on as that drag or zoom: this runs before the controls see the event.
   useEffect(() => {
@@ -571,11 +737,19 @@ function Controls({
         e.ctrlKey ||
         e.altKey ||
         typing(e.target) ||
-        !sceneShown() ||
-        !walk.press(e.code)
+        !sceneShown()
       ) {
         return;
       }
+
+      // M in and out of the map view.
+      if (e.code === "KeyM") {
+        if (!e.repeat) toggleMapView();
+
+        return;
+      }
+
+      if (!walk.press(e.code)) return;
 
       e.preventDefault();
       touched.current = true;
@@ -584,7 +758,15 @@ function Controls({
     };
 
     const keyUp = (e: KeyboardEvent) => walk.release(e.code);
-    const blur = () => walk.clear();
+
+    const still = () => {
+      edge.current = { right: 0, up: 0 };
+    };
+
+    const blur = () => {
+      walk.clear();
+      still();
+    };
 
     // Clicking a vehicle (not dragging, and with one finger) follows it.
     // Presses end on the window: they may be let go off the map.
@@ -603,7 +785,8 @@ function Controls({
     const vehicleUnder = async (e: PointerEvent) => {
       const camera = controls.current?.camera;
 
-      if (!(camera instanceof PerspectiveCamera)) return null;
+      // Nothing on the map to pick while it's looking through the telescope.
+      if (!(camera instanceof PerspectiveCamera) || scope.active) return null;
       const rect = element.getBoundingClientRect();
 
       const sightings = vehiclesAt(
@@ -628,6 +811,7 @@ function Controls({
 
     const down = (e: PointerEvent) => {
       pointers.add(e.pointerId);
+      still();
       const took = take();
       press =
         pointers.size === 1 && e.button === 0
@@ -669,6 +853,28 @@ function Controls({
     const hover = (e: PointerEvent) => {
       if (e.pointerType !== "mouse" || pointers.size || disposed) return;
 
+      // At the edge in map view, the mouse pans: the cursor points the way.
+      if (getMapView() && sceneShown()) {
+        const rect = element.getBoundingClientRect();
+
+        edge.current = edgePan(
+          e.clientX - rect.left,
+          e.clientY - rect.top,
+          rect.width,
+          rect.height
+        );
+
+        const cursor = edgeCursor(edge.current);
+
+        if (cursor) {
+          element.style.cursor = cursor;
+
+          return;
+        }
+      } else {
+        still();
+      }
+
       if (looking) {
         waiting = e;
 
@@ -678,7 +884,7 @@ function Controls({
       looking = true;
       vehicleUnder(e)
         .then((vehicle) => {
-          if (pointers.size || disposed) return;
+          if (pointers.size || disposed || edgeCursor(edge.current)) return;
           element.style.cursor = vehicle ? "pointer" : "";
         }, console.error)
         .finally(() => {
@@ -694,6 +900,7 @@ function Controls({
     window.addEventListener("pointerup", up, { capture: true });
     window.addEventListener("pointercancel", cancel, { capture: true });
     element.addEventListener("pointermove", hover);
+    element.addEventListener("pointerleave", still);
     element.addEventListener("wheel", take, { capture: true });
     window.addEventListener("keydown", keys);
     window.addEventListener("keyup", keyUp);
@@ -704,11 +911,13 @@ function Controls({
       window.removeEventListener("pointerup", up, { capture: true });
       window.removeEventListener("pointercancel", cancel, { capture: true });
       element.removeEventListener("pointermove", hover);
+      element.removeEventListener("pointerleave", still);
       element.removeEventListener("wheel", take, { capture: true });
       window.removeEventListener("keydown", keys);
       window.removeEventListener("keyup", keyUp);
       window.removeEventListener("blur", blur);
       walk.clear();
+      still();
       disposed = true;
       element.style.cursor = "";
     };
@@ -734,6 +943,7 @@ function Controls({
           if (!c) return;
           touched.current = true;
           stopFollowing();
+          setMapView(false);
           handBack();
           land();
           const [px, pz] = nztmToWorld(manifest, pe, pn);
@@ -771,15 +981,14 @@ function Controls({
     c.setBoundary(boundary);
 
     if (touched.current || followingRef.current) return;
-    c.setLookAt(
-      position.x,
-      position.y,
-      position.z,
-      target.x,
-      target.y,
-      target.z,
-      placed.current
-    );
+
+    // ?map starts in the map view, over the same ground.
+    const map = getMapView();
+    panOnly(c, map);
+    c.minDistance = map ? MAP_ZOOM[0] : MIN_DISTANCE;
+    c.maxDistance = map ? MAP_ZOOM[1] : MAX_DISTANCE;
+    const [p, t] = map ? mapView(target) : [position, target];
+    c.setLookAt(p.x, p.y, p.z, t.x, t.y, t.z, placed.current);
     placed.current = true;
   }, [boundary, position, target]);
 
@@ -796,7 +1005,8 @@ function Controls({
   }, [epoch]);
 
   // Walked across the ground the way it faces, before the controls place the
-  // camera this frame. Once the rig's let go, if it had the camera.
+  // camera this frame. Once the rig's let go, if it had the camera. In map
+  // view, slower, and panned by the mouse at the edge too.
   useFrame((_, delta) => {
     const c = controls.current;
 
@@ -804,9 +1014,52 @@ function Controls({
     const { camera } = c;
     const ground = heightAt.current?.(camera.position.x, camera.position.z);
     const height = camera.position.y - Math.max(ground ?? 0, seaFloor.current);
-    const step = walk.step(delta, height);
+    const map = getMapView();
+
+    // In map view what it's aimed at rides over the ground: zoomed in close,
+    // the camera keeps clear of the hills, and zooming to the mouse (which
+    // slides the aim across the view, up or down too) leaves it on the land.
+    // Eased there by the controls.
+    if (map && !flight.current && !followingRef.current) {
+      const t = c.getTarget(onGround);
+      const under = Math.max(heightAt.current?.(t.x, t.z) ?? 0, 0);
+
+      if (Math.abs(under - t.y) > 0.5) c.moveTo(t.x, under, t.z, true);
+    }
+
+    const walking = walk.step(delta, map ? height * MAP_WALK : height);
+
+    // Not while flying up to it: the mouse may be resting at the edge.
+    const want = map && !flight.current ? edge.current : { right: 0, up: 0 };
+    const pan = edgeMoving.current;
+    const ease = 1 - Math.exp(-delta / EDGE_EASE);
+    pan.right += (want.right - pan.right) * ease;
+    pan.up += (want.up - pan.up) * ease;
+
+    if (!want.right && Math.abs(pan.right) < 0.01) pan.right = 0;
+
+    if (!want.up && Math.abs(pan.up) < 0.01) pan.up = 0;
+
+    const panning = pan.right || pan.up;
+    const reach = EDGE_SPEED * c.distance * delta;
+
+    const step =
+      walking || panning
+        ? {
+            forward: (walking?.forward ?? 0) + pan.up * reach,
+            right: (walking?.right ?? 0) + pan.right * reach,
+            // It faces north, always.
+            turn: map ? 0 : (walking?.turn ?? 0),
+          }
+        : null;
 
     if (!step || followingRef.current) return;
+
+    if (panning) {
+      touched.current = true;
+      land();
+    }
+
     const ahead = walked[0].set(0, 0, -1).applyQuaternion(camera.quaternion);
     ahead.y = 0;
 
@@ -823,10 +1076,133 @@ function Controls({
       .addScaledVector(ahead, step.forward)
       .addScaledVector(right, step.right);
 
+    // Over the ground at the height it's eased to so far, in map view, so it
+    // keeps easing rather than jumping with every bump.
+    if (map) to.y = c.getTarget(onGround, false).y;
+
     c.moveTo(to.x, to.y, to.z, false);
 
     if (step.turn) c.rotate(step.turn, 0, false);
   }, WALK_PRIORITY);
+
+  /**
+   * As the scope found the controls: whether the follow rig had the camera,
+   * and if not, the limits it was under (the map view's, say).
+   */
+  const scopeFrom = useRef<{
+    rig: boolean;
+    limits: ReturnType<typeof limitsOf>;
+  } | null>(null);
+
+  // Following a satellite, through a telescope: the camera comes down off
+  // its view to the ground, turns up to the satellite and zooms in on it,
+  // and back out and up onto the view when it's let go. Whether the scope
+  // had the camera this frame.
+  const scopeTo = useCallback(
+    (c: Controller, camera: PerspectiveCamera, delta: number) => {
+      const { following } = getSnapshot();
+      const now = sceneNow();
+
+      const satellite =
+        following?.category === "satellite" ? satelliteFor(following.id) : null;
+
+      // Down behind the hills, or its orbit's gone: back to the view.
+      const up =
+        satellite !== null && (sight(satellite, now)?.elevation ?? -1) > LOWEST;
+
+      if (following?.category === "satellite" && !up) stopFollowing();
+
+      if (!up && !scope.active) return false;
+
+      if (!scope.active) {
+        scopeFrom.current = { rig: followingRef.current, limits: limitsOf(c) };
+        followingRef.current = true;
+        touched.current = true;
+        lookingAround.current = null;
+        land();
+        c.setBoundary();
+        c.boundaryEnclosesCamera = false;
+        c.minDistance = 0;
+        c.maxDistance = Infinity;
+        c.maxPolarAngle = Math.PI;
+        c.enabled = false;
+        const { x, z } = camera.position;
+        const ground = heightAt.current?.(x, z) ?? 0;
+
+        scope.begin(
+          camera.position,
+          c.getTarget(orbit),
+          camera.fov,
+          Math.max(ground + GROUND_CLEARANCE, seaFloor.current)
+        );
+      }
+
+      rig.release();
+      scope.step(delta, up ? satellite : null, now);
+      announce();
+      drawVignette();
+      cloudsSeen.value = scope.clouds;
+      clearRadius.value = 0;
+      clearAround.value.set(0, -1e7, 0);
+
+      const {
+        position: p,
+        quaternion,
+        fov,
+        aim,
+      } = scope.active
+        ? scope.pose(now, delta, posed)
+        : { ...posed, position: scope.position, aim: scope.target };
+
+      camera.position.copy(p);
+
+      if (scope.active) {
+        camera.quaternion.copy(quaternion);
+        // Low down, near in, as the controls have it.
+        const height = p.y - scope.floor + GROUND_CLEARANCE;
+        camera.near = Math.min(
+          Math.max(height * NEAR_FRACTION, NEAR_MIN),
+          NEAR_MAX
+        );
+        camera.fov = fov;
+      } else {
+        camera.lookAt(aim);
+        camera.fov = scope.fov;
+      }
+
+      camera.updateProjectionMatrix();
+      c.setLookAt(p.x, p.y, p.z, aim.x, aim.y, aim.z, false);
+      updateLens(renderer, camera, aim, delta);
+
+      const from = scopeFrom.current;
+
+      if (scope.active || !from) return true;
+      scopeFrom.current = null;
+
+      // Back on the view it left. On to a vehicle, the rig flies there from
+      // here; the rig's before, handed back as from it.
+      if (getSnapshot().following) return true;
+
+      if (from.rig) {
+        handBack();
+
+        return true;
+      }
+
+      // Free before: as it was.
+      followingRef.current = false;
+      const { mouseButtons, touches, ...limits } = from.limits;
+      Object.assign(c, limits);
+      Object.assign(c.mouseButtons, mouseButtons);
+      Object.assign(c.touches, touches);
+      c.enabled = true;
+      c.setBoundary(boundary);
+      c.setLookAt(p.x, p.y, p.z, aim.x, aim.y, aim.z, false);
+
+      return true;
+    },
+    [rig, orbit, handBack, land, boundary, heightAt, renderer]
+  );
 
   // Every PROBE seconds, whether what's followed is hidden behind something,
   // from the depth the scene was drawn with: its middle and ends, two of
@@ -888,6 +1264,8 @@ function Controls({
     // The Canvas's camera, which is a perspective one.
     if (!(camera instanceof PerspectiveCamera)) return;
 
+    if (scopeTo(c, camera, delta)) return;
+
     const shot = rig.update(camera, delta);
     const { following } = getSnapshot();
 
@@ -914,6 +1292,8 @@ function Controls({
       camera.position.add(move);
     } else if (shot) {
       if (!followingRef.current) {
+        // Picked from the map view: down out of it, after the vehicle.
+        setMapView(false);
         // Out of the orbit's limits: landings are watched from the ground,
         // looking up, and aircraft fly off the edge of the map.
         followingRef.current = true;
@@ -1296,6 +1676,10 @@ export function Scene({
   }, [scene]);
 
   const shown = useLayers();
+  const watching = useSyncExternalStore(subscribeActive, getActive, getActive);
+
+  // Looking down on the map, through where the clouds would be.
+  const map = useMapView();
 
   return (
     <>
@@ -1308,6 +1692,7 @@ export function Scene({
         position={sun}
       />
       {shown("sky") && <Sky time={time} sunAltitude={sun.altitude} />}
+      {watching && <Telescope />}
       {!switchedOff("terrain") && (
         <Terrain
           onHeightQuery={setHeightQuery}
@@ -1370,6 +1755,7 @@ export function Scene({
         conditions={conditions}
         quality={mobile ? CLOUDS_MOBILE : CLOUDS_DESKTOP}
         night={lights}
+        hidden={map}
       />
       <Controls index={index} heightAt={heightAt} sea={sea} deck={deck} />
     </>
@@ -1471,6 +1857,19 @@ export const WellingtonScene: React.FC<{
         {stats && <Stats />}
         {hidden && inView && <Ticker fps={HIDDEN_FPS} />}
       </Canvas>
+      {/* The long lens's dark edges, zoomed in on a satellite. */}
+      <div
+        ref={setVignette}
+        aria-hidden
+        style={{
+          position: "absolute",
+          inset: 0,
+          background:
+            "radial-gradient(ellipse at center, transparent 45%, rgba(0, 0, 0, 0.6) 100%)",
+          opacity: 0,
+          pointerEvents: "none",
+        }}
+      />
       <SceneLoading
         started={index !== null}
         hidden={hidden}

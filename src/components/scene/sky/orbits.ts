@@ -78,6 +78,10 @@ export interface Sighting {
   elevation: number;
   /** As it looks: 10 or more fainter in the Earth's shadow. */
   magnitude: number;
+  /** In the Earth's shadow: 0 sunlit, 1 in the umbra. */
+  shade: number;
+  /** How far off, km. */
+  range: number;
 }
 
 /** Where `satellite` is in Wellington's sky at `time` (epoch ms); null if SGP4 fails. */
@@ -103,6 +107,8 @@ export function sight(satellite: Satellite, time: number): Sighting | null {
       -cosEl * Math.cos(azimuth),
     ],
     elevation: elevation / RAD,
+    shade,
+    range: rangeSat,
     magnitude:
       satellite.standard +
       5 * Math.log10(rangeSat / 1000) -

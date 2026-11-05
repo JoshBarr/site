@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import {
   Color,
@@ -19,6 +19,12 @@ import {
 import { LineSegments2 } from "three/examples/jsm/lines/webgpu/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeometry.js";
 import { sceneNow, useSeek } from "../clock";
+import {
+  type Candidate,
+  useFollowCandidates,
+  useFollowSpots,
+} from "../follow/store";
+import { LOWEST, scope, setSatellites } from "../scope/scope";
 import { TrailMaterial } from "../trailMaterial";
 import { type Satellite, type Sighting, sight } from "./orbits";
 import {
@@ -55,8 +61,29 @@ const TRAIL_OPACITY = 0.35;
 /** Floats per segment: start and end xyz, times, magnitudes. */
 const STRIDE = 10;
 
+/**
+ * Drawn down to half as bright as the eye could pick out (0.75 magnitudes
+ * fainter), and that much brighter: the scene's haze dims them as it is.
+ */
+const SLACK = 2.5 * Math.log10(2);
+
+/**
+ * The magnitude written for the watched satellite's trail: drawn whatever
+ * its brightness, the daylight or the cloud.
+ */
+const WATCHED = -99;
+
 /** Below this many degrees, the ground or the sea hides them. */
 const HORIZON = -2;
+
+/** How often the list of those up to follow is made again, ms. */
+const LIST_EVERY = 5000;
+
+/**
+ * Clicked, they're picked out this far off, m: past the sky's sprites but
+ * inside the far plane, so only where the scene shows sky is it clear.
+ */
+const PICK_DISTANCE = 60_000;
 
 /** Seconds since the trails' epoch, as their points' times are. */
 const trailNow = uniform(0);
@@ -111,7 +138,13 @@ function createTrails() {
     fade
       .mul(fade)
       .mul(TRAIL_OPACITY)
-      .mul(visibility(end("float", "Magnitude")))
+      .mul(
+        select(
+          end("float", "Magnitude").lessThan(WATCHED + 1),
+          float(1),
+          visibility(end("float", "Magnitude"))
+        )
+      )
       .mul(smoothstep(-0.01, 0.04, up))
   );
 
@@ -120,6 +153,48 @@ function createTrails() {
   lines.renderOrder = -1;
 
   return { lines, segments, array };
+}
+
+/**
+ * Those high enough over Wellington's hills now to watch through the
+ * telescope: the sunlit first, by name, then those in the Earth's shadow.
+ */
+function useCandidates(satellites: Satellite[]) {
+  const [list, setList] = useState<Candidate[]>([]);
+
+  useEffect(() => {
+    setSatellites(satellites);
+
+    const make = () => {
+      const now = sceneNow();
+
+      setList(
+        satellites.flatMap((satellite) => {
+          const at = sight(satellite, now);
+
+          if (!at || at.elevation <= LOWEST) return [];
+
+          return [
+            {
+              id: String(satellite.id),
+              label: satellite.name,
+              moving: at.shade < 1,
+              detail: `${Math.round(at.elevation)}° up`,
+              drawn: () =>
+                (sight(satellite, sceneNow())?.elevation ?? -1) > LOWEST,
+            },
+          ];
+        })
+      );
+    };
+
+    make();
+    const id = setInterval(make, LIST_EVERY);
+
+    return () => clearInterval(id);
+  }, [satellites]);
+
+  useFollowCandidates("satellite", list);
 }
 
 /** A satellite being drawn: its trail's points, by time (ms). */
@@ -132,6 +207,9 @@ interface Tracked {
 export function Satellites() {
   const satellites = useSatellites();
   const seek = useSeek();
+  const spots = useFollowSpots("satellite", true);
+
+  useCandidates(satellites);
 
   const { group, sprite, points, lines, segments, array } = useMemo(() => {
     const group = createSkyGroup();
@@ -164,44 +242,85 @@ export function Satellites() {
     group.matrix.makeTranslation(camera.position);
     group.updateMatrixWorld(true);
 
-    const now = sceneNow();
+    // Through the telescope, at the time it was aimed by, or the trail's
+    // head drifts off the satellite as the clock ticks within the frame.
+    const now = scope.active ? scope.now : sceneNow();
     const limit = limitingMagnitude.value;
     let shown = 0;
     let n = 0;
 
     trailNow.value = (now - seek.epoch) / 1000;
+    spots.begin();
 
-    if (limit < -3) {
-      tracked.current.clear();
-    } else {
-      for (const satellite of satellites) {
-        if (shown >= MAX_SHOWN) break;
+    // Through the telescope, close up: its trail, but not a point of light
+    // over the model.
+    const closeUp = scope.craftShown ? scope.satellite?.id : undefined;
 
-        const at = sight(satellite, now);
+    // The one through the telescope keeps its trail however faint it is, in
+    // the Earth's shadow or by day; by day, it's the only one.
+    const watched = scope.active ? scope.satellite?.id : undefined;
+    const day = limit < -3;
 
-        if (!at || at.elevation < HORIZON) {
-          tracked.current.delete(satellite.id);
-          continue;
-        }
+    for (const satellite of satellites) {
+      if (shown >= MAX_SHOWN) break;
 
-        let track = tracked.current.get(satellite.id);
-
-        if (at.magnitude < limit) {
-          track ??= { points: new Map(), seen: now };
-          track.seen = now;
-          tracked.current.set(satellite.id, track);
-        }
-
-        if (!track) continue;
-
-        if (now - track.seen > TRAIL * 1000) {
-          tracked.current.delete(satellite.id);
-          continue;
-        }
-
-        points.setXYZW(shown++, ...at.direction, at.magnitude);
-        n = layTrail(satellite, track, at, now, seek.epoch, array, n);
+      if (day && satellite.id !== watched) {
+        tracked.current.delete(satellite.id);
+        continue;
       }
+
+      const at = sight(satellite, now);
+
+      if (!at || at.elevation < HORIZON) {
+        tracked.current.delete(satellite.id);
+        continue;
+      }
+
+      let track = tracked.current.get(satellite.id);
+
+      // As bright as it's drawn, with the slack.
+      const magnitude = at.magnitude - SLACK;
+
+      if (magnitude < limit || satellite.id === watched) {
+        track ??= { points: new Map(), seen: now };
+        track.seen = now;
+        tracked.current.set(satellite.id, track);
+      }
+
+      if (!track) continue;
+
+      if (now - track.seen > TRAIL * 1000) {
+        tracked.current.delete(satellite.id);
+        continue;
+      }
+
+      if (satellite.id !== closeUp) {
+        points.setXYZW(shown++, ...at.direction, magnitude);
+      }
+
+      // Picked out by a click while it's bright enough to see.
+      if (magnitude < limit && at.elevation > LOWEST) {
+        const [x, y, z] = at.direction;
+        const { position: p } = camera;
+        spots.add(
+          String(satellite.id),
+          p.x + x * PICK_DISTANCE,
+          p.y + y * PICK_DISTANCE,
+          p.z + z * PICK_DISTANCE,
+          1
+        );
+      }
+
+      n = layTrail(
+        satellite,
+        track,
+        at,
+        now,
+        seek.epoch,
+        array,
+        n,
+        satellite.id === watched
+      );
     }
 
     // Uploaded only while there's something to draw, or to clear.
@@ -219,7 +338,7 @@ export function Satellites() {
 /**
  * Writes `satellite`'s trail into `out` from segment `n`, from where it is
  * now back a minute along whole STEPs, sighting the ones it hasn't yet;
- * the next free segment.
+ * the next free segment. A `watched` one's drawn however faint it is.
  */
 function layTrail(
   satellite: Satellite,
@@ -228,7 +347,8 @@ function layTrail(
   now: number,
   epoch: number,
   out: Float32Array,
-  n: number
+  n: number,
+  watched: boolean
 ) {
   const step = STEP * 1000;
   const newest = Math.floor(now / step) * step;
@@ -260,8 +380,8 @@ function layTrail(
     for (let i = 0; i < 6; i++) out[o + i] *= SKY_RADIUS;
     out[o + 6] = (fromTime - epoch) / 1000;
     out[o + 7] = (time - epoch) / 1000;
-    out[o + 8] = from.magnitude;
-    out[o + 9] = to.magnitude;
+    out[o + 8] = watched ? WATCHED : from.magnitude - SLACK;
+    out[o + 9] = watched ? WATCHED : to.magnitude - SLACK;
     from = to;
     fromTime = time;
   }

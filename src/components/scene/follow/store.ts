@@ -5,9 +5,15 @@ import { PerspectiveCamera, Vector3 } from "three/webgpu";
 // the ones that can be followed and, each frame, publish where the followed
 // one is; the camera rig frames it, and the controls pick which.
 
-export type Category = "bus" | "train" | "ship" | "plane";
+export type Category = "bus" | "train" | "ship" | "plane" | "satellite";
 
-export const CATEGORIES: Category[] = ["bus", "train", "ship", "plane"];
+export const CATEGORIES: Category[] = [
+  "bus",
+  "train",
+  "ship",
+  "plane",
+  "satellite",
+];
 
 export interface Candidate {
   id: string;
@@ -81,6 +87,12 @@ const candidates = new Map<Category, Candidate[]>();
  * each car.
  */
 class Spots {
+  /**
+   * In the sky, not on the map: never out of reach or lost in the haze,
+   * only hidden behind what's drawn in front of them.
+   */
+  constructor(readonly sky = false) {}
+
   ids: string[] = [];
   /** x, y, z, and length, for each. */
   at = new Float32Array(4 * 256);
@@ -127,6 +139,8 @@ function inReach(category: Category, id: string) {
   const drawn = spots.get(category);
   let placed = false;
 
+  if (drawn?.sky) return true;
+
   for (let i = 0; drawn && i < drawn.count; i++) {
     if (drawn.ids[i] !== id) continue;
 
@@ -165,6 +179,7 @@ const countsOf = (): Record<Category, number> => {
     train: count("train"),
     ship: count("ship"),
     plane: count("plane"),
+    satellite: count("satellite"),
   };
 };
 
@@ -276,7 +291,7 @@ export function vehiclesAt(
   const scale = height / 2 / Math.tan((camera.fov * Math.PI) / 360);
   const near = new Map<string, Sighting & { off: number }>();
 
-  for (const [category, { ids, at, count }] of spots) {
+  for (const [category, { ids, at, count, sky }] of spots) {
     for (let i = 0; i < count; i++) {
       const o = i * 4;
       spot.set(at[o], at[o + 1], at[o + 2]);
@@ -285,8 +300,7 @@ export function vehiclesAt(
       if (
         projected.z < -1 ||
         projected.z > 1 ||
-        !reachable(spot.x, spot.z) ||
-        !visible(spot)
+        (!sky && (!reachable(spot.x, spot.z) || !visible(spot)))
       ) {
         continue;
       }
@@ -392,9 +406,12 @@ export function useFollowCandidates(category: Category, list: Candidate[]) {
   );
 }
 
-/** Spots for where `category` is drawn, to fill each frame while mounted. */
-export function useFollowSpots(category: Category) {
-  const drawn = useMemo(() => new Spots(), []);
+/**
+ * Spots for where `category` is drawn, to fill each frame while mounted;
+ * in the `sky`, they can be anywhere.
+ */
+export function useFollowSpots(category: Category, sky = false) {
+  const drawn = useMemo(() => new Spots(sky), [sky]);
 
   useEffect(() => {
     spots.set(category, drawn);
