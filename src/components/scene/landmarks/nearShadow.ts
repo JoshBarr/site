@@ -22,6 +22,14 @@ const EXTENT_STEP = 2 ** 0.25;
  */
 const REFRESH = 0.1;
 
+/**
+ * Coarser than this, m a texel, a rotor's blades are a texel or two wide in
+ * the map and their shadows on screen a pixel, so a restless caster no longer
+ * needs a render every frame: REFRESH does. From afar the map takes in West
+ * Wind or Mill Creek, and re-rendering it each frame cost about 0.5 ms.
+ */
+const RESTLESS_TEXEL = 1.5;
+
 /** How far a restless caster's parts reach from its base point, m. */
 const RESTLESS_REACH = 200;
 
@@ -96,8 +104,9 @@ function orbits(controls: RootState["controls"]): controls is NonNullable<
 /**
  * Fits the near shadow map around what the camera is looking at, sized to
  * how far away that is (closer, finer), and aimed along the sun. It's
- * re-rendered when the fit changes, every frame while a turbine is in it,
- * and otherwise every REFRESH seconds.
+ * re-rendered when the fit changes, every frame while a turbine is in it
+ * and the map is fine enough to show its blades, and otherwise every REFRESH
+ * seconds.
  */
 export function useNearShadow(mapSize: number) {
   const controls = useThree((state) => state.controls);
@@ -145,7 +154,9 @@ export function useNearShadow(mapSize: number) {
       !centre.equals(lastCentre) ||
       !toward.equals(lastSun);
 
-    if (!refit && last.sinceRender < REFRESH && !restlessIn(half)) return;
+    const turning = texel < RESTLESS_TEXEL && restlessIn(half);
+
+    if (!refit && last.sinceRender < REFRESH && !turning) return;
 
     last.extent = extent;
     last.sinceRender = 0;

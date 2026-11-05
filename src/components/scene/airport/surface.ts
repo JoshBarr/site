@@ -1,6 +1,10 @@
 import {
+  Box3,
+  Camera,
   CanvasTexture,
   DataTexture,
+  Frustum,
+  Matrix4,
   LinearFilter,
   LinearMipmapLinearFilter,
   NoColorSpace,
@@ -12,14 +16,18 @@ import {
   clamp,
   float,
   floor,
+  Fn,
   fwidth,
+  If,
   max,
   min,
   mix,
   sin,
   smoothstep,
   texture,
+  uniform,
   vec2,
+  vec4,
 } from "three/tsl";
 import type { TerrainManifest } from "../terrain/manifest";
 import { AIRFIELD_TEXTURES, RUNWAY } from "./airfield";
@@ -83,7 +91,11 @@ export interface AirfieldMaps {
   bounds: [number, number, number, number];
   /** World x/z of the runway's south end. */
   runwayStart: [number, number];
+  /** 1 while the aerodrome's in view (see showAirfieldFor). */
+  shown: ReturnType<typeof createShown>;
 }
+
+const createShown = () => uniform(1);
 
 function loadTexture(name: string, mipmaps = true) {
   const map = new TextureLoader().load(`${AIRFIELD_URL}/${name}`);
@@ -157,7 +169,35 @@ export function createAirfieldMaps(manifest: TerrainManifest): AirfieldMaps {
     designators: createDesignators(),
     bounds: [west - originE, -(north - originN), east - west, north - south],
     runwayStart: [RUNWAY.south[0] - originE, -(RUNWAY.south[1] - originN)],
+    shown: createShown(),
   };
+}
+
+/** Past the textures' edges, the runway's stopways and paint, m. */
+const MARGIN = 300;
+
+const aerodrome = new Box3();
+const frustum = new Frustum();
+const viewProjection = new Matrix4();
+
+/**
+ * Turns the airfield's shading on while its box is in `camera`'s view. Off,
+ * the terrain skips it: every pixel of ground otherwise paid for its
+ * textures and runway markings, wherever it was.
+ */
+export function showAirfieldFor(maps: AirfieldMaps, camera: Camera) {
+  const [x0, z0, width, height] = maps.bounds;
+
+  aerodrome.min.set(x0 - MARGIN, -100, z0 - MARGIN);
+  aerodrome.max.set(x0 + width + MARGIN, 200, z0 + height + MARGIN);
+  // From matrixWorld, which the controls have just set; matrixWorldInverse
+  // is last frame's until the render.
+  viewProjection
+    .copy(camera.matrixWorld)
+    .invert()
+    .premultiply(camera.projectionMatrix);
+  frustum.setFromProjectionMatrix(viewProjection, camera.coordinateSystem);
+  maps.shown.value = frustum.intersectsBox(aerodrome) ? 1 : 0;
 }
 
 export function disposeAirfieldMaps(maps: AirfieldMaps) {
@@ -299,6 +339,35 @@ function endMarkings(
  * markings, and a tone for the grass (mowing stripes).
  */
 export function shadeAirfield(
+  maps: AirfieldMaps,
+  { world, detail }: { world: any; detail: Texture }
+) {
+  // Field, paved, albedo and mowing; none of it out of view. The branch is
+  // on a uniform, so the derivatives inside are allowed.
+  const shaded = Fn(() => {
+    const out = vec4(0, 0, 0, 1).toVar();
+
+    If(maps.shown.greaterThan(0), () => {
+      const { field, paved, albedo, mowing } = shadeInView(maps, {
+        world,
+        detail,
+      });
+
+      out.assign(vec4(field, paved, albedo, mowing));
+    });
+
+    return out;
+  })();
+
+  return {
+    field: shaded.x,
+    paved: shaded.y,
+    albedo: shaded.z,
+    mowing: shaded.w,
+  };
+}
+
+function shadeInView(
   maps: AirfieldMaps,
   { world, detail }: { world: any; detail: Texture }
 ) {

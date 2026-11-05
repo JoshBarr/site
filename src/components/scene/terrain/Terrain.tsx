@@ -31,6 +31,7 @@ import {
   normalize,
   positionGeometry,
   smoothstep,
+  texture,
   textureLoad,
   transformNormalToView,
   uniform,
@@ -49,8 +50,13 @@ import {
   createLandcoverBounds,
   shadeSurface,
 } from "./surface";
-import { createAirfieldMaps, disposeAirfieldMaps } from "../airport/surface";
+import {
+  createAirfieldMaps,
+  disposeAirfieldMaps,
+  showAirfieldFor,
+} from "../airport/surface";
 import { quakeGlow } from "../quakes/glow";
+import { switchedOff } from "../stats";
 
 /** Must match ROAD_ZERO and ROAD_UNIT in build_tiles.py. */
 const ROAD_ZERO = 128;
@@ -330,35 +336,19 @@ function createMaterial(
     return material;
   }
 
-  // Relief and buildings, bilinear: smooth enough at the data's spacing.
-  const loadGround = (t) =>
-    textureLoad(surface.ground, ivec2(clamp(t, vec2(0), vec2(last)))).depth(
-      slot
-    ).xy;
+  // Bilinear, filtered by the GPU (they're 8-bit, so filterable): the
+  // texel coordinate is in samples, the sampler's uv in texels, so the
+  // samples sit at texel centres. Edges clamp, as the loads did.
+  const groundUV = texel.add(0.5).div(index.samples);
 
-  const base = floor(texel);
-  const f = texel.sub(base);
+  // Relief and buildings: smooth enough at the data's spacing.
+  const ground = texture(surface.ground, groundUV).depth(slot).xy;
 
-  const ground = mix(
-    mix(loadGround(base), loadGround(base.add(vec2(1, 0))), f.x),
-    mix(
-      loadGround(base.add(vec2(0, 1))),
-      loadGround(base.add(vec2(1, 1))),
-      f.x
-    ),
-    f.y
-  );
-
-  // Distance from the kerb, bilinear: a straight edge between samples.
-  const loadRoad = (t) =>
-    textureLoad(surface.roads, ivec2(clamp(t, vec2(0), vec2(last)))).depth(slot)
-      .r;
-
-  const roadCode = mix(
-    mix(loadRoad(base), loadRoad(base.add(vec2(1, 0))), f.x),
-    mix(loadRoad(base.add(vec2(0, 1))), loadRoad(base.add(vec2(1, 1))), f.x),
-    f.y
-  );
+  // Distance from the kerb: a straight edge between samples. Far from any
+  // street when switched off, to measure what they cost.
+  const roadCode = switchedOff("streets")
+    ? float(1)
+    : texture(surface.roads, groundUV).depth(slot).r;
 
   const world = vec2(
     tileA.x.add(local.x.mul(size)),
@@ -611,6 +601,7 @@ export function Terrain({
   );
 
   useFrame(() => {
+    showAirfieldFor(surface.airfield, camera);
     mainOptions.verticalScale = verticalScale.value;
     reflectionOptions.verticalScale = verticalScale.value;
     main.update((out) => selectNodes(index, cache, camera, mainOptions, out));

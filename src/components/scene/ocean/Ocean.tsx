@@ -30,6 +30,7 @@ import {
   smoothstep,
   texture,
   vec2,
+  varying,
   vec3,
   viewportLinearDepth,
 } from "three/tsl";
@@ -176,6 +177,10 @@ function createMaterial(
     );
   });
 
+  // The vertex's rise, for the shore foam. Passed down: used as is in the
+  // fragment stage, each pixel would sample the three cascades again.
+  const heave: any = varying(displacement.y);
+
   const material = new MeshBasicNodeMaterial({ transparent: true });
   material.positionNode = vec3(world.x, seaLevel, world.y).add(
     displacement.mul(shoaling)
@@ -270,9 +275,7 @@ function createMaterial(
   // A continuous band that swells and recedes with the waves.
   const shoreFoam = float(1)
     .sub(smoothstep(0, 1.2, thickness))
-    .mul(
-      mix(0.45, 1, smoothstep(-0.3, 0.6, displacement.y.add(slope.x.mul(2))))
-    );
+    .mul(mix(0.45, 1, smoothstep(-0.3, 0.6, heave.add(slope.x.mul(2)))));
 
   const foam = max(whitecaps, shoreFoam.mul(0.8));
 

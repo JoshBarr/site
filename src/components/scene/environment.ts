@@ -1,5 +1,12 @@
 import { Color, DirectionalLight, Vector3 } from "three/webgpu";
-import { float, mix, positionWorld, shadow, uniform } from "three/tsl";
+import {
+  BasicShadowFilter,
+  float,
+  mix,
+  positionWorld,
+  shadow,
+  uniform,
+} from "three/tsl";
 import { createCloudShadowMap } from "./clouds/shadow";
 
 // Scene-wide lighting state, shared by materials that shade themselves
@@ -77,6 +84,24 @@ export const sunLight = new DirectionalLight();
 export const sunShadow = shadow(sunLight, sunLight.shadow);
 
 /**
+ * Filters a light's shadow with one hardware-filtered tap (the depth compare
+ * samples bilinearly), not three's default five: the same edges in
+ * screenshots, and about 2 ms less at 2160x1350 on an M1, since the terrain
+ * and the water look both maps up at every pixel.
+ */
+function filterOnce(light: DirectionalLight) {
+  // SAFETY: three's WebGPU ShadowNode reads shadow.filterNode before its
+  // default filter (ShadowNode.js setupShadow); the types leave it out.
+  const lightShadow = light.shadow as typeof light.shadow & {
+    filterNode: typeof BasicShadowFilter;
+  };
+
+  lightShadow.filterNode = BasicShadowFilter;
+}
+
+filterOnce(sunLight);
+
+/**
  * Stands in for the sun to cast the near shadow map. Never added to the
  * scene, so it lights nothing; whoever owns the casters aims and fits it.
  */
@@ -91,6 +116,8 @@ nearShadowLight.shadow.needsUpdate = true;
 
 /** The near map's shadow factor, for lit and self-shaded materials alike. */
 export const nearShadow = shadow(nearShadowLight, nearShadowLight.shadow);
+
+filterOnce(nearShadowLight);
 
 /**
  * The sun let through the clouds at a surface (1 clear, 0 shadowed). Under

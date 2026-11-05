@@ -1,5 +1,6 @@
 import {
   DataArrayTexture,
+  LinearFilter,
   FloatType,
   NearestFilter,
   RedFormat,
@@ -103,8 +104,9 @@ export class TileCache {
     this.ground = new DataArrayTexture(this.grounds, size, size, slots);
     this.ground.format = RGFormat;
     this.ground.type = UnsignedByteType;
-    this.ground.magFilter = NearestFilter;
-    this.ground.minFilter = NearestFilter;
+    // Filtered by the GPU: one bilinear sample instead of four loads.
+    this.ground.magFilter = LinearFilter;
+    this.ground.minFilter = LinearFilter;
     this.ground.generateMipmaps = false;
     this.ground.needsUpdate = true;
 
@@ -113,8 +115,8 @@ export class TileCache {
     this.roads = new DataArrayTexture(this.roadFields, size, size, slots);
     this.roads.format = RedFormat;
     this.roads.type = UnsignedByteType;
-    this.roads.magFilter = NearestFilter;
-    this.roads.minFilter = NearestFilter;
+    this.roads.magFilter = LinearFilter;
+    this.roads.minFilter = LinearFilter;
     this.roads.generateMipmaps = false;
     this.roads.needsUpdate = true;
 

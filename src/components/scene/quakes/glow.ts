@@ -58,24 +58,33 @@ const CRESTS = 1.6;
  * day, held back at night, when the ground's dark.
  */
 export function quakeGlow(world) {
-  let glow: any = float(0);
+  return Fn(() => {
+    const glow = float(0).toVar();
 
-  for (let i = 0; i < SLOTS; i++) {
-    const mark = marks[i];
-    const d = world.sub(rings[i].xy).length();
-    // Never thinner than a pixel or two, so far circles don't shimmer.
-    const pixel = fwidth(d);
-    const line = max(mark.x.mul(0.03), pixel.mul(1.5));
-    const outline = float(1).sub(smoothstep(0, line, abs(d.sub(mark.x))));
+    for (let i = 0; i < SLOTS; i++) {
+      const mark = marks[i];
 
-    const fill = float(1)
-      .sub(smoothstep(mark.x.mul(0.9), mark.x, d))
-      .mul(0.07);
+      // Skipped where the slot's empty, as it most often is: otherwise every
+      // pixel of the land and the sea pays for six circles (about 1.6 ms at
+      // 2160x1350 on an M1). The branch is on a uniform, so fwidth may sit
+      // inside it.
+      If(mark.y.greaterThan(0), () => {
+        const d = world.sub(rings[i].xy).length();
+        // Never thinner than a pixel or two, so far circles don't shimmer.
+        const pixel = fwidth(d);
+        const line = max(mark.x.mul(0.03), pixel.mul(1.5));
+        const outline = float(1).sub(smoothstep(0, line, abs(d.sub(mark.x))));
 
-    glow = glow.add(outline.add(fill).mul(mark.y));
-  }
+        const fill = float(1)
+          .sub(smoothstep(mark.x.mul(0.9), mark.x, d))
+          .mul(0.07);
 
-  return COLOUR.mul(glow).mul(sunIntensity.mul(0.35).add(0.04));
+        glow.addAssign(outline.add(fill).mul(mark.y));
+      });
+    }
+
+    return COLOUR.mul(glow).mul(sunIntensity.mul(0.35).add(0.04));
+  })();
 }
 
 /**
