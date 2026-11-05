@@ -1,4 +1,4 @@
-import { isStale as busGone } from "./buses";
+import { fresh as busesShown } from "./buses";
 import type { Poll } from "./fold";
 import type {
   buses,
@@ -12,7 +12,7 @@ import type {
   weather,
 } from "./liveRecords";
 import { STALE as SPEEDS_STALE } from "./traffic";
-import { isStale as trainGone } from "./trains";
+import { fresh as trainsShown } from "./trains";
 import { isStale as shipGone, UNDER_WAY } from "./vessels";
 
 // The scene's day in numbers, for the time-travel timeline: once a minute
@@ -154,12 +154,8 @@ export function sample(latest: Latest, now: number): Sample {
           (ship) => ship.speed > UNDER_WAY && !shipGone(ship, now)
         ).length
       : null,
-    trains: trains
-      ? trains.data.trains.filter((train) => !trainGone(train, now)).length
-      : null,
-    buses: buses
-      ? buses.data.buses.filter((bus) => !busGone(bus, now)).length
-      : null,
+    trains: trains ? trainsShown(trains.data.trains, now).length : null,
+    buses: buses ? busesShown(buses.data.buses, now).length : null,
     roads:
       traffic && now - traffic.sk < SPEEDS_STALE
         ? meanSpeed(traffic.data.links)

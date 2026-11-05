@@ -221,7 +221,28 @@ describe.each([
 });
 
 describe("the buses layer, as buses go quiet", () => {
-  it("drops one not heard from in five minutes", async () => {
+  it("drops one not heard from in five minutes while the rest carry on", async () => {
+    // One that stopped reporting a while ago, and one heard from now and
+    // again since.
+    let heard = NOW;
+
+    route("/api/buses", () =>
+      HttpResponse.json({
+        time: Date.now(),
+        buses: [moving("2158", NOW), moving("2777", heard)],
+      })
+    );
+
+    const { result } = renderHook(() => useBuses());
+    await wait(0);
+    expect(result.current).toHaveLength(2);
+
+    heard = NOW + 6 * MINUTE;
+    await wait(6 * MINUTE);
+    expect(result.current.map(({ id }) => id)).toEqual(["2777"]);
+  });
+
+  it("keeps them all where they were while the feed's quiet, then drops them", async () => {
     route("/api/buses", () =>
       HttpResponse.json({ time: Date.now(), buses: [moving("2158", NOW)] })
     );
@@ -230,10 +251,10 @@ describe("the buses layer, as buses go quiet", () => {
     await wait(0);
 
     route("/api/buses", () => new HttpResponse(null, { status: 503 }));
-    await wait(5 * MINUTE - 10 * SECOND);
+    await wait(10 * MINUTE);
     expect(result.current).toHaveLength(1);
 
-    await wait(20 * SECOND);
+    await wait(11 * MINUTE);
     expect(result.current).toEqual([]);
   });
 });

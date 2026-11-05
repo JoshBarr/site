@@ -1,6 +1,6 @@
 import { foldTrails, type Poll } from "./fold";
 import type { LiveData, trains } from "./liveRecords";
-import { isStale, Train, TRAIL } from "./trains";
+import { fresh, Train, TRAIL } from "./trains";
 
 // Trains as the scene draws them, from the AWS poller's log of Metlink's
 // answers (see plans/dynamo.md).
@@ -13,8 +13,11 @@ export function foldTrains(
   polls: Poll<LiveData<typeof trains>>[],
   now = Date.now()
 ): Train[] {
-  return foldTrails(
-    polls.map(({ data }) => data.trains),
-    now - TRAIL
-  ).filter((train) => !isStale(train, now));
+  return fresh(
+    foldTrails(
+      polls.map(({ data }) => data.trains),
+      now - TRAIL
+    ),
+    now
+  );
 }

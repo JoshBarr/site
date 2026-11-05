@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { loadTrains } from "../../lib/live";
 import { cacheFor, replayTime } from "../../lib/replay";
-import { isStale, type TrainsResponse } from "../../lib/trains";
+import { fresh, type TrainsResponse } from "../../lib/trains";
 
 /**
  * Trains on the Wellington network for the homepage scene, from Metlink, as
@@ -30,7 +30,7 @@ export default async function handler(
     );
     res.status(200).json({
       time,
-      trains: trains.filter((train) => !isStale(train, time)),
+      trains: fresh(trains, time),
     });
   } catch (e) {
     console.error("[trains] load failed:", e);

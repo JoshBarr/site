@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { type BusesResponse, isStale } from "../../lib/buses";
+import { type BusesResponse, fresh } from "../../lib/buses";
 import { loadBuses } from "../../lib/live";
 import { cacheFor, replayTime } from "../../lib/replay";
 
@@ -32,7 +32,7 @@ export default async function handler(
     );
     res.status(200).json({
       time,
-      buses: buses.filter((bus) => !isStale(bus, time)),
+      buses: fresh(buses, time),
     });
   } catch (e) {
     console.error("[buses] load failed:", e);

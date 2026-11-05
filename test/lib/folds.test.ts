@@ -58,10 +58,31 @@ describe("folding the logs", () => {
     it("draws only those in the newest poll, and not those gone quiet", () => {
       const folded = foldTrains([
         { sk: ago(60), data: { trains: [{ ...train(PETONE, 60), id: "A" }] } },
-        { sk: ago(5), data: { trains: [train(STATION, 6 * 60)] } },
+        {
+          sk: ago(5),
+          data: {
+            trains: [
+              { ...train(STATION, 6 * 60), id: "B" },
+              { ...train(PETONE, 10), id: "C" },
+            ],
+          },
+        },
       ]);
 
-      expect(folded).toEqual([]);
+      expect(folded.map(({ id }) => id)).toEqual(["C"]);
+    });
+
+    it("keeps them where they were while the whole feed's quiet, for a while", () => {
+      const quiet = (minutes: number) =>
+        foldTrains([
+          {
+            sk: ago(minutes * 60),
+            data: { trains: [train(STATION, minutes * 60)] },
+          },
+        ]);
+
+      expect(quiet(8)).toHaveLength(1);
+      expect(quiet(21)).toEqual([]);
     });
 
     it("trails back three minutes", () => {

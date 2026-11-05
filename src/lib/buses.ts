@@ -1,4 +1,5 @@
 // Live buses around Wellington: shared by /api/buses and the scene.
+import { current } from "./fold";
 
 /** A bus's latest fix. Units: metres, degrees from true north. */
 export interface Bus {
@@ -36,7 +37,11 @@ export const TRAIL = 3 * 60_000;
 /** A bus not heard from in this long has finished its trip, or gone dark. */
 const STALE = 5 * 60_000;
 
-/** Whether a fix is too old to show at `now`. */
-export function isStale({ time }: Pick<Bus, "time">, now = Date.now()) {
-  return now - time > STALE;
-}
+/** The whole feed quiet this long, and what it last said goes too. */
+const QUIET = 20 * 60_000;
+
+/** Those of `buss` recent enough to show at `now` (see `current`). */
+export const fresh = <T extends Pick<Bus, "time">>(
+  buss: T[],
+  now = Date.now()
+) => current(buss, now, STALE, QUIET);

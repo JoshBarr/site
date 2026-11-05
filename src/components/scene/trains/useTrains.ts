@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { layerUrl, sceneNow, type Seek, skewFrom, useSeek } from "../clock";
 import { sceneShown } from "../visibility";
-import { isStale } from "../../../lib/trains";
+import { fresh } from "../../../lib/trains";
 import type { Train, TrainsResponse } from "../../../lib/trains";
 import { arrive } from "../time/jump";
 
@@ -52,7 +52,7 @@ export function useTrains() {
           console.error("[trains]", e);
         }
 
-        known = known.filter((train) => !isStale(train, sceneNow()));
+        known = fresh(known, sceneNow());
 
         if (stopped) return;
         setShown({ seek, trains: known });

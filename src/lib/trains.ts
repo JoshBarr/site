@@ -1,4 +1,5 @@
 // Live trains around Wellington: shared by /api/trains and the scene.
+import { current } from "./fold";
 
 /** Metlink's rail lines, by their short names. */
 export type Line = "KPL" | "HVL" | "MEL" | "WRL" | "JVL";
@@ -50,7 +51,11 @@ const [WEST, SOUTH, EAST, NORTH] = MAP_BOUNDS;
 export const onMap = ({ position: [e, n] }: { position: [number, number] }) =>
   e > WEST && e < EAST && n > SOUTH && n < NORTH;
 
-/** Whether a fix is too old to show at `now`. */
-export function isStale({ time }: Pick<Train, "time">, now = Date.now()) {
-  return now - time > STALE;
-}
+/** The whole feed quiet this long, and what it last said goes too. */
+const QUIET = 20 * 60_000;
+
+/** Those of `trains` recent enough to show at `now` (see `current`). */
+export const fresh = <T extends Pick<Train, "time">>(
+  trains: T[],
+  now = Date.now()
+) => current(trains, now, STALE, QUIET);

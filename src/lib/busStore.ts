@@ -1,5 +1,5 @@
 import type { Bus } from "./buses";
-import { isStale, TRAIL } from "./buses";
+import { fresh, TRAIL } from "./buses";
 import { foldTrails, type Poll } from "./fold";
 import type { buses, LiveData } from "./liveRecords";
 
@@ -15,10 +15,13 @@ export function foldBuses(
   polls: Poll<LiveData<typeof buses>>[],
   now = Date.now()
 ): Bus[] {
-  return foldTrails(
-    polls.map(({ data }) => data.buses),
-    now - TRAIL,
-    (fix, latest) =>
-      fix.route === latest.route && fix.direction === latest.direction
-  ).filter((bus) => !isStale(bus, now));
+  return fresh(
+    foldTrails(
+      polls.map(({ data }) => data.buses),
+      now - TRAIL,
+      (fix, latest) =>
+        fix.route === latest.route && fix.direction === latest.direction
+    ),
+    now
+  );
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { layerUrl, sceneNow, type Seek, skewFrom, useSeek } from "../clock";
 import { sceneShown } from "../visibility";
-import { isStale } from "../../../lib/buses";
+import { fresh } from "../../../lib/buses";
 import type { Bus, BusesResponse } from "../../../lib/buses";
 import { arrive } from "../time/jump";
 
@@ -52,7 +52,7 @@ export function useBuses() {
           console.error("[buses]", e);
         }
 
-        known = known.filter((bus) => !isStale(bus, sceneNow()));
+        known = fresh(known, sceneNow());
 
         if (stopped) return;
         setShown({ seek, buses: known });

@@ -18,6 +18,28 @@ interface Fixed {
   time: number;
 }
 
+/**
+ * Those of `fixes` still worth showing at `now`: heard from within `stale`
+ * of the newest of them, so one that's finished its trip goes while the rest
+ * carry on. Measured from the newest rather than from now, a feed that stops
+ * for a while (Metlink's has, for minutes) leaves everything where it was
+ * last heard instead of emptying the map; after `quiet` with no word, they go.
+ */
+export function current<T extends { time: number }>(
+  fixes: T[],
+  now: number,
+  stale: number,
+  quiet: number
+): T[] {
+  let newest = -Infinity;
+
+  for (const { time } of fixes) newest = Math.max(newest, time);
+
+  return fixes.filter(
+    ({ time }) => newest - time <= stale && now - time <= quiet
+  );
+}
+
 /** `points` in time order, each time once. */
 export function byTime(points: TrailPoint[]) {
   const sorted = [...points].sort((a, b) => a[2] - b[2]);
