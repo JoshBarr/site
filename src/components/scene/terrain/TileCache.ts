@@ -43,6 +43,8 @@ export class TileCache {
    * building cover (G).
    */
   readonly ground: DataArrayTexture;
+  /** In the same layers: distance from the nearest street's kerb, encoded. */
+  readonly roads: DataArrayTexture;
   readonly slots: number;
   /** Bumped whenever a tile finishes loading. */
   version = 0;
@@ -50,6 +52,7 @@ export class TileCache {
   /** What `texture` and `ground` hold, slot after slot. */
   private heights: Float32Array;
   private grounds: Uint8Array;
+  private roadFields: Uint8Array;
 
   private index: TileIndex;
   private slotByKey = new Map<string, number>();
@@ -72,6 +75,7 @@ export class TileCache {
     (result: {
       heights?: Float32Array;
       ground?: Uint8Array;
+      roads?: Uint8Array;
       error?: string;
     }) => void
   >();
@@ -103,6 +107,16 @@ export class TileCache {
     this.ground.minFilter = NearestFilter;
     this.ground.generateMipmaps = false;
     this.ground.needsUpdate = true;
+
+    this.roadFields = new Uint8Array(size * size * slots);
+
+    this.roads = new DataArrayTexture(this.roadFields, size, size, slots);
+    this.roads.format = RedFormat;
+    this.roads.type = UnsignedByteType;
+    this.roads.magFilter = NearestFilter;
+    this.roads.minFilter = NearestFilter;
+    this.roads.generateMipmaps = false;
+    this.roads.needsUpdate = true;
 
     for (let i = 0; i < workers; i++) {
       const worker = new Worker(new URL("./tileWorker.ts", import.meta.url));
@@ -243,6 +257,7 @@ export class TileCache {
     for (const worker of this.workers) worker.terminate();
     this.texture.dispose();
     this.ground.dispose();
+    this.roads.dispose();
   }
 
   private load(tile: TileInfo) {
@@ -256,18 +271,18 @@ export class TileCache {
     ).href;
 
     this.inFlight.add(key);
-    this.callbacks.set(id, ({ heights, ground, error }) => {
+    this.callbacks.set(id, ({ heights, ground, roads, error }) => {
       this.inFlight.delete(key);
       countLoaded();
 
-      if (error || !heights || !ground) {
+      if (error || !heights || !ground || !roads) {
         console.warn("[terrain]", error);
         this.failed.add(key);
 
         return;
       }
 
-      this.store(key, tile.level, heights, ground);
+      this.store(key, tile.level, heights, ground, roads);
     });
 
     const worker = this.workers[this.nextWorker];
@@ -279,7 +294,8 @@ export class TileCache {
     key: string,
     level: number,
     heights: Float32Array,
-    ground: Uint8Array
+    ground: Uint8Array,
+    roads: Uint8Array
   ) {
     const slot = this.freeSlot();
 
@@ -300,6 +316,9 @@ export class TileCache {
     this.grounds.set(ground, slot * ground.length);
     this.ground.addLayerUpdate(slot);
     this.ground.needsUpdate = true;
+    this.roadFields.set(roads, slot * roads.length);
+    this.roads.addLayerUpdate(slot);
+    this.roads.needsUpdate = true;
     this.version++;
   }
 

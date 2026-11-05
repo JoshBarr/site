@@ -2,6 +2,8 @@ import { DataTexture, Texture, Vector4 } from "three/webgpu";
 import {
   clamp,
   float,
+  fwidth,
+  length,
   max,
   mix,
   normalize,
@@ -15,7 +17,8 @@ import { AirfieldMaps, shadeAirfield } from "../airport/surface";
 
 // Ground cover for the terrain, in greys: what grows there from the land
 // cover map, its texture from a tiling detail map, ridges lit and gullies
-// shaded from the tiles' relief channel, and the airport's paving.
+// shaded from the tiles' relief channel, streets from their road rows, and
+// the airport's paving.
 
 /** Must match SLOPE_SCALE in detailWorker. */
 const DETAIL_SLOPE_SCALE = 4;
@@ -36,6 +39,11 @@ const FOREST = 0.04;
 const URBAN = 0.1;
 const ROCK = 0.2;
 const SAND = 0.26;
+const ASPHALT = 0.065;
+const CONCRETE = 0.2;
+
+/** Footpath beside town streets, metres. */
+const FOOTPATH = 1.8;
 
 /** Roofs range from black iron to white membrane around this. */
 const ROOF = 0.12;
@@ -65,11 +73,12 @@ function canopySlope(sample, period: number, height: number) {
  * Colour, normal and ambient occlusion for ground at world x/z `world`.
  * `height` is in metres (unscaled), `normal` the world-space terrain normal,
  * `relief` 0..1 with 0.5 for level ground, `building` 0..1 cover by
- * building footprints.
+ * building footprints, `kerb` metres from the nearest street's kerb
+ * (negative on it) and `cell` the metres between the tile's samples.
  */
 export function shadeSurface(
   { landcover, landcoverBounds, detail, airfield }: SurfaceMaps,
-  { world, height, normal, relief, building }
+  { world, height, normal, relief, building, kerb, cell }
 ) {
   // The aerodrome is grass and paving, whatever the land cover map says.
   const airport = shadeAirfield(airfield, { world, detail });
@@ -120,6 +129,23 @@ export function shadeSurface(
 
   const shore = smoothstep(1.5, 0.5, height).mul(float(1).sub(urban));
 
+  // Streets. The kerb distance is exact only at the samples, so edges are
+  // softened by the sample spacing as well as the pixel's footprint: far
+  // off, a street thinner than either fades rather than breaking up.
+  const pixel = length(fwidth(world));
+
+  const blur = max(pixel.mul(0.6), cell.mul(0.35));
+
+  const road = smoothstep(blur, blur.negate(), kerb).mul(open);
+
+  // Footpaths in town, while they're wider than the blur.
+  const footpath = smoothstep(blur.negate(), blur, kerb)
+    .mul(smoothstep(blur, blur.negate(), kerb.sub(FOOTPATH)))
+    .mul(urban)
+    .mul(smoothstep(FOOTPATH, FOOTPATH * 0.5, blur));
+
+  const paved = road.add(footpath);
+
   // Crowns: small shrubs, and trees on a larger, turned grid.
   const shrubs = texture(detail, world.div(SHRUB_PERIOD));
   const treeUV = vec2(world.y, world.x.negate()).div(TREE_PERIOD);
@@ -134,9 +160,13 @@ export function shadeSurface(
     .mul(float(1).sub(forest))
     .mul(float(1).sub(steep.mul(0.6)))
     .mul(float(1).sub(building))
-    .mul(float(1).sub(airport.paved));
+    .mul(float(1).sub(airport.paved))
+    .mul(float(1).sub(paved));
 
-  const slope = shrubSlope.mul(bushiness).add(treeWorld.mul(forest));
+  const slope = shrubSlope
+    .mul(bushiness)
+    .add(treeWorld.mul(forest).mul(float(1).sub(paved)));
+
   const detailed = normalize(vec3(normal).sub(vec3(slope.x, 0, slope.y)));
 
   // Tone: grass, overgrown by scrub and forest, built over, bared on cliffs
@@ -157,6 +187,8 @@ export function shadeSurface(
   albedo = mix(albedo, float(SAND), shore);
   albedo = mix(albedo, albedo.mul(airport.mowing), airport.field);
   albedo = mix(albedo, airport.albedo, airport.paved);
+  albedo = mix(albedo, float(CONCRETE).mul(mix(0.85, 1.1, fine)), footpath);
+  albedo = mix(albedo, float(ASPHALT).mul(mix(0.8, 1.15, broad)), road);
 
   // Roofs, each its own shade (near enough: the blotches are roof-sized),
   // outlined where the footprint's edge is filtered.

@@ -32,6 +32,11 @@ height's difference to its surroundings at a few scales; computed over the
 whole level, so it's seamless. Building is 1 where an OpenStreetMap footprint
 covers the sample (levels BUILDINGS_MIN_LEVEL and up).
 
+Streets (levels ROADS_MIN_LEVEL and up): the image is twice as tall, and the
+second block of 259 rows holds, in grey, each sample's distance from the
+nearest kerb of an OpenStreetMap street (see ROAD_ZERO). Coarser levels have
+no such rows.
+
 World frame: NZTM2000 (EPSG:2193) metres, origin at ORIGIN. In three.js,
 x = E - E0, z = -(N - N0), y = height. Tile x increases east, tile y increases
 south (row 0 is the northern edge of the root).
@@ -40,6 +45,7 @@ Usage:
   .venv-terrain/bin/python -I scripts/terrain/build_tiles.py [levels...]
   .venv-terrain/bin/python -I scripts/terrain/build_tiles.py fetch <levels...>
   .venv-terrain/bin/python -I scripts/terrain/build_tiles.py landcover
+  .venv-terrain/bin/python -I scripts/terrain/build_tiles.py roads
   .venv-terrain/bin/python -I scripts/terrain/build_tiles.py shore
   (each with BATHYMETRY=~/Downloads/nzbathy2016/nzbathy_2016.tif or similar)
 """
@@ -388,7 +394,7 @@ def relief(heights, res):
     return np.clip(0.5 + 0.5 * total, 0, 1)
 
 
-def encode(tile, relief_tile, building_tile):
+def encode(tile, relief_tile, building_tile, road_tile):
     q = np.clip(np.round((tile + OFFSET) * SCALE), 0, 65535).astype(np.uint16)
     rgb = np.dstack(
         [
@@ -397,6 +403,13 @@ def encode(tile, relief_tile, building_tile):
             (np.round(relief_tile * 127).astype(np.uint8) << 1) | building_tile,
         ]
     )
+    return save_tile(rgb, road_tile)
+
+
+def save_tile(rgb, road_tile):
+    """WebP bytes: the RGB samples, with the road rows under them if any."""
+    if road_tile is not None:
+        rgb = np.vstack([rgb, np.dstack([road_tile] * 3)])
     buf = io.BytesIO()
     # Higher effort settings take 50x longer for no size gain on height data.
     Image.fromarray(rgb, "RGB").save(buf, "WEBP", lossless=True, quality=100, method=2)
@@ -407,6 +420,7 @@ def build_level(level, sources):
     heights, (x0, x1, y0, y1) = read_mosaic(level, sources)
     shading = relief(heights, resolution(level))
     built = buildings(level)
+    streets = roads(level)
     tiles = []
     total = 0
     for ty in range(y0, y1):
@@ -418,7 +432,12 @@ def build_level(level, sources):
             if tile.max() <= -SEABED_VISIBLE:
                 continue
             window = (slice(r, r + TILE_SAMPLES), slice(c, c + TILE_SAMPLES))
-            data = encode(tile, shading[window], built[window])
+            data = encode(
+                tile,
+                shading[window],
+                built[window],
+                None if streets is None else streets[window],
+            )
             path = OUT_DIR / str(level) / str(tx) / f"{ty}.webp"
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(data)
@@ -674,6 +693,155 @@ def buildings(level):
     return rasterize(footprints, out_shape=shape, transform=transform, dtype=np.uint8)
 
 
+# Streets: OpenStreetMap carriageways, as distance from the kerb in a second
+# block of rows under each tile's heights. Alpha would be tidier, but the
+# client decodes through a 2D canvas, which premultiplies it into the height
+# bytes. At 8m a street is still a line; coarser it's nothing.
+ROADS_MIN_LEVEL = 5
+OSM_ROADS_QUERY = """
+[out:json][timeout:300][bbox:{s},{w},{n},{e}];
+way["highway"~"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|service|motorway_link|trunk_link|primary_link|secondary_link|tertiary_link|busway|pedestrian)$"];
+out tags geom qt;
+"""
+# Encoded as ROAD_ZERO + metres * ROAD_UNIT, negative on the road, so 255 is
+# 16m or more from one: two samples at 8m, enough to filter between.
+ROAD_ZERO = 128
+ROAD_UNIT = 8.0
+ROAD_REACH = (255 - ROAD_ZERO) / ROAD_UNIT
+
+# Kerb to kerb, metres, when OpenStreetMap has no width (it rarely does).
+# Guesses for Wellington: narrow hill streets, arterials with parking.
+# Motorways and trunk roads are mapped a carriageway at a time.
+ROAD_WIDTHS = {
+    "motorway": 9.0,
+    "trunk": 8.5,
+    "primary": 11.0,
+    "secondary": 10.0,
+    "tertiary": 9.0,
+    "unclassified": 6.0,
+    "residential": 7.0,
+    "living_street": 5.0,
+    "busway": 7.0,
+    "pedestrian": 6.0,
+    "service": 4.0,
+}
+LINK_WIDTH = 5.5
+LANE_WIDTH = 3.3
+# Driveways and car park aisles would scribble over the suburbs.
+SKIPPED_SERVICE = {"driveway", "parking_aisle", "drive-through"}
+# The DEM is bare earth, so a long bridge's road would be painted down the
+# gully under it. Short ones carry the street over a creek.
+MAX_BRIDGE = 40.0
+
+
+def road_width(tags):
+    highway = tags["highway"]
+    try:
+        width = float(tags.get("width", "").replace("m", "").strip())
+        if 2 <= width <= 40:
+            return width
+    except ValueError:
+        pass
+    shoulders = 2.0 if highway in ("motorway", "trunk") else 1.5
+    try:
+        lanes = int(tags.get("lanes", ""))
+        if 1 <= lanes <= 8:
+            return lanes * LANE_WIDTH + shoulders
+    except ValueError:
+        pass
+    if highway.endswith("_link"):
+        return LINK_WIDTH
+    width = ROAD_WIDTHS[highway]
+    if tags.get("oneway") == "yes" and highway not in ("motorway", "trunk"):
+        width *= 0.65
+    return width
+
+
+_road_lines = None
+
+
+def road_lines():
+    """(points in NZTM, half width) for every street painted on the ground."""
+    global _road_lines
+    if _road_lines is not None:
+        return _road_lines
+    lines = []
+    for element in osm_elements("osm_roads", OSM_ROADS_QUERY):
+        tags = element.get("tags", {})
+        if element["type"] != "way" or len(element.get("geometry", [])) < 2:
+            continue
+        if tags.get("tunnel", "no") != "no" or tags.get("covered") == "yes":
+            continue
+        if tags.get("area") == "yes" or tags.get("location") == "underground":
+            continue
+        if tags.get("service") in SKIPPED_SERVICE:
+            continue
+        points = to_nztm([(p["lon"], p["lat"]) for p in element["geometry"]])
+        if tags.get("bridge", "no") != "no":
+            length = sum(np.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(points, points[1:]))
+            if length > MAX_BRIDGE:
+                continue
+        lines.append((points, road_width(tags) / 2))
+    print(f"  {len(lines)} streets")
+    _road_lines = lines
+    return lines
+
+
+def roads(level):
+    """
+    Encoded distance from each sample to the nearest kerb (see ROAD_ZERO), or
+    None below ROADS_MIN_LEVEL. Exact to the centre line, segment by segment.
+    """
+    if level < ROADS_MIN_LEVEL:
+        return None
+    transform, shape = level_grid(level)
+    res = transform.a
+    # Sample centres: column i at west + i * res, row j at north - j * res.
+    west = transform.c + res / 2
+    north = transform.f - res / 2
+    field = np.full(shape, 255, dtype=np.uint8)
+    for points, half in road_lines():
+        reach = half + ROAD_REACH
+        for (ax, ay), (bx, by) in zip(points, points[1:]):
+            c0 = max(int(np.floor((min(ax, bx) - reach - west) / res)), 0)
+            c1 = min(int(np.ceil((max(ax, bx) + reach - west) / res)) + 1, shape[1])
+            r0 = max(int(np.floor((north - max(ay, by) - reach) / res)), 0)
+            r1 = min(int(np.ceil((north - min(ay, by) + reach) / res)) + 1, shape[0])
+            if c0 >= c1 or r0 >= r1:
+                continue
+            px = (west + np.arange(c0, c1) * res - ax)[None, :]
+            py = (north - np.arange(r0, r1) * res - ay)[:, None]
+            dx, dy = bx - ax, by - ay
+            length2 = dx * dx + dy * dy
+            t = np.clip((px * dx + py * dy) / length2, 0, 1) if length2 > 0 else 0.0
+            distance = np.hypot(px - t * dx, py - t * dy) - half
+            encoded = np.clip(np.round(ROAD_ZERO + distance * ROAD_UNIT), 0, 255).astype(np.uint8)
+            window = field[r0:r1, c0:c1]
+            np.minimum(window, encoded, out=window)
+    return field
+
+
+def build_roads():
+    """Restack the published tiles' road rows without rebuilding heights."""
+    manifest = json.loads((OUT_DIR / "manifest.json").read_text())
+    for entry in manifest["levels"]:
+        level = entry["level"]
+        streets = roads(level)
+        if streets is None:
+            continue
+        x0, _, y0, _ = level_tile_range(level)
+        total = 0
+        for tx, ty, *_ in entry["tiles"]:
+            path = OUT_DIR / str(level) / str(tx) / f"{ty}.webp"
+            rgb = np.asarray(Image.open(path).convert("RGB"))[:TILE_SAMPLES]
+            r = (ty - y0) * TILE_CELLS
+            c = (tx - x0) * TILE_CELLS
+            data = save_tile(rgb, streets[r : r + TILE_SAMPLES, c : c + TILE_SAMPLES])
+            path.write_bytes(data)
+            total += len(data)
+        print(f"  level {level}: {len(entry['tiles'])} tiles, {total / 1e6:.1f}MB")
+
+
 def build_landcover():
     """
     Fractions of forest, scrub and urban cover (R, G, B) over the level 5
@@ -741,6 +909,10 @@ def main():
 
     if sys.argv[1:] == ["landcover"]:
         update_manifest(landcover=build_landcover())
+        return
+
+    if sys.argv[1:] == ["roads"]:
+        build_roads()
         return
 
     if sys.argv[1:] == ["shore"]:

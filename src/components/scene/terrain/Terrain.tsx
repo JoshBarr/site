@@ -52,6 +52,10 @@ import {
 import { createAirfieldMaps, disposeAirfieldMaps } from "../airport/surface";
 import { quakeGlow } from "../quakes/glow";
 
+/** Must match ROAD_ZERO and ROAD_UNIT in build_tiles.py. */
+const ROAD_ZERO = 128;
+const ROAD_UNIT = 8;
+
 export interface TerrainQuality {
   /** Quads per patch side. */
   gridSize: number;
@@ -210,7 +214,10 @@ function createMaterial(
     gridSize: number;
     sink?: number;
     /** Ground cover; stand-ins without it get flat tones. */
-    surface?: SurfaceMaps & { ground: DataArrayTexture };
+    surface?: SurfaceMaps & {
+      ground: DataArrayTexture;
+      roads: DataArrayTexture;
+    };
   }
 ) {
   const { tileCells, apron } = index.manifest;
@@ -342,6 +349,17 @@ function createMaterial(
     f.y
   );
 
+  // Distance from the kerb, bilinear: a straight edge between samples.
+  const loadRoad = (t) =>
+    textureLoad(surface.roads, ivec2(clamp(t, vec2(0), vec2(last)))).depth(slot)
+      .r;
+
+  const roadCode = mix(
+    mix(loadRoad(base), loadRoad(base.add(vec2(1, 0))), f.x),
+    mix(loadRoad(base.add(vec2(0, 1))), loadRoad(base.add(vec2(1, 1))), f.x),
+    f.y
+  );
+
   const world = vec2(
     tileA.x.add(local.x.mul(size)),
     tileA.y.add(local.y.mul(size))
@@ -353,6 +371,8 @@ function createMaterial(
     normal,
     relief: ground.x,
     building: ground.y,
+    kerb: roadCode.mul(255).sub(ROAD_ZERO).div(ROAD_UNIT),
+    cell,
   });
 
   material.normalNode = transformNormalToView(
@@ -512,7 +532,7 @@ export function Terrain({
       createMaterial(cache.texture, index, {
         smooth: true,
         gridSize: quality.gridSize,
-        surface: { ...surface, ground: cache.ground },
+        surface: { ...surface, ground: cache.ground, roads: cache.roads },
       })
     );
 
