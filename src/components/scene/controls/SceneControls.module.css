@@ -120,7 +120,7 @@
 
   &[data-popup-open],
   &[aria-expanded="true"],
-  &[aria-pressed="true"] {
+  &[aria-pressed="true"]:not([data-quiet]) {
     background: var(--surface-active);
     color: var(--ink);
   }
@@ -434,12 +434,6 @@
   }
 }
 
-.Centered {
-  justify-content: center;
-  gap: 6px;
-  color: var(--ink);
-}
-
 /* A kind of vehicle to follow, its icon in its trails' colour. */
 .Vehicle {
   padding-left: 9px;
@@ -586,53 +580,6 @@
   color: var(--ink);
 }
 
-/* Switch */
-
-.Switch {
-  position: relative;
-  display: inline-block;
-  flex: none;
-  width: 36px;
-  height: 20px;
-  margin: 0;
-  padding: 0;
-  border: none;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.14);
-  cursor: pointer;
-  transition: background-color 200ms var(--ease);
-
-  &[data-checked] {
-    background: #4c9dff;
-  }
-}
-
-.Thumb {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 16px;
-  height: 16px;
-  border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
-  transition: transform 260ms var(--ease);
-
-  &[data-checked] {
-    transform: translateX(16px);
-  }
-}
-
-/* A row that toggles as a whole: the label is part of the switch. */
-.SwitchRow {
-  cursor: pointer;
-
-  & svg {
-    flex: none;
-    color: var(--muted);
-  }
-}
-
 /* Segmented */
 
 .Segments {
@@ -666,6 +613,73 @@
   &[data-pressed] {
     background: var(--surface-active);
     color: var(--ink);
+  }
+}
+
+/* Slider: a label and value over the track, its ends named under it. */
+
+.SliderRow {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 9px 12px 8px;
+}
+
+.SliderHead,
+.SliderEnds {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.SliderEnds {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.SliderControl {
+  display: flex;
+  align-items: center;
+  height: 20px;
+  touch-action: none;
+  cursor: pointer;
+}
+
+.Track {
+  position: relative;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-active);
+
+  /* Autofocus, in the middle. */
+  &::before {
+    content: "";
+    position: absolute;
+    top: -3px;
+    left: calc(50% - 1px);
+    width: 2px;
+    height: 10px;
+    border-radius: 1px;
+    background: var(--muted);
+  }
+}
+
+.Thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--ink);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  transition: transform 150ms var(--ease);
+
+  &[data-dragging] {
+    transform: scale(1.15);
+  }
+
+  &:has(:focus-visible) {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
   }
 }
 
@@ -703,7 +717,6 @@
 
 .ToolButton,
 .Row,
-.Switch,
 .Segment {
   &:focus-visible {
     outline: 2px solid var(--focus);
@@ -715,8 +728,7 @@
   .Positioner,
   .Popup,
   .Viewport [data-previous],
-  .Viewport [data-current],
-  .Thumb {
+  .Viewport [data-current] {
     transition: none;
   }
 
@@ -748,12 +760,24 @@
 
 .Tinted {
   display: grid;
+  /* No text, so a baseline row would sit the icon's foot on the
+     title's baseline; centre it on the row instead. */
+  align-self: center;
   color: var(--tint);
 }
 
 /* Fingers: buttons at least 44px square, and the small segments (the
    drawer's zoom, Fly/Cut) taller to tap than they look. */
 @media (pointer: coarse) {
+  .SliderControl {
+    height: 32px;
+  }
+
+  .Thumb {
+    width: 20px;
+    height: 20px;
+  }
+
   .ToolButton {
     width: 44px;
     height: 44px;

@@ -89,9 +89,9 @@ function restlessIn(half: number) {
 }
 
 /** Whether the default controls orbit a target, as CameraControls do. */
-function orbits(controls: RootState["controls"]): controls is NonNullable<
-  RootState["controls"]
-> & {
+export function orbits(
+  controls: RootState["controls"]
+): controls is NonNullable<RootState["controls"]> & {
   getTarget(out: Vector3): Vector3;
 } {
   return (

@@ -18,6 +18,7 @@ import {
   trains,
   vessels,
   weather,
+  windStations,
 } from "./liveRecords";
 import { canRead, readNewest, readOldest, readSince } from "./liveTable";
 import { loadPositions, type Positions } from "./positions";
@@ -32,6 +33,7 @@ import { foldTrains } from "./trainStore";
 import { TRAIL as VESSEL_TRAIL, type Vessel } from "./vessels";
 import { foldVessels } from "./vesselStore";
 import type { Conditions } from "./weather";
+import type { WindReadings } from "./windStations";
 
 // Each live layer as its API route serves it: folded from the poller's logs
 // in the table (see plans/dynamo.md), or when the table can't be read, from
@@ -298,6 +300,15 @@ export const loadRain = (at?: number): Promise<Rainfall | null> =>
     "rain",
     async () => (await readNewest(rain, "", at))?.data ?? null,
     (positions) => positions.rain,
+    at
+  );
+
+/** The weather stations' newest winds at `at` (or now); null if there are none. */
+export const loadWind = (at?: number): Promise<WindReadings | null> =>
+  fromTable(
+    "wind",
+    async () => (await readNewest(windStations, "", at))?.data ?? null,
+    (positions) => positions.wind,
     at
   );
 

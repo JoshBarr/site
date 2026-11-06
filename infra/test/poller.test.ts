@@ -18,6 +18,7 @@ import {
   trains,
   vessels,
   weather,
+  windStations,
 } from "../../src/lib/liveRecords";
 import { toNztm } from "../../src/lib/nztm";
 import { HOUR, hourOf } from "../../src/lib/timeline";
@@ -1224,6 +1225,78 @@ describe("the poller", () => {
       expect(asked).toEqual([]);
     });
   });
+
+  describe("wind", () => {
+    const SERVER = "https://hilltop.gw.govt.nz/data.hts";
+
+    let asked: number;
+
+    beforeEach(() => {
+      asked = 0;
+
+      // Karori's westerly at 4 m/s a minute ago; the rest say nothing.
+      server.use(
+        http.get(SERVER, ({ request }) => {
+          const params = new URL(request.url).searchParams;
+          const measurement = params.get("Measurement");
+          const site = params.get("Site");
+
+          const nzst = new Date(Date.now() - 60_000 + 12 * 3600_000)
+            .toISOString()
+            .slice(0, 19);
+
+          asked++;
+
+          return new HttpResponse(
+            site === "Karori Stream at Samuel Marsden School"
+              ? `<Hilltop><Measurement SiteName="${site}"><Data><E><T>${nzst}</T><I1>${measurement === "Wind Speed" ? 4 : 270}</I1></E></Data></Measurement></Hilltop>`
+              : `<Hilltop><Error>No data</Error></Hilltop>`
+          );
+        })
+      );
+    });
+
+    it("logs each station's wind every five minutes", async () => {
+      const feed = await coldFeed("wind");
+
+      await run(feed.poll);
+
+      expect(table.records(windStations)[0].data).toEqual({
+        time: NOW,
+        stations: [
+          {
+            site: "Karori Stream at Samuel Marsden School",
+            speed: 4,
+            direction: 270,
+            at: Math.floor((NOW - 60_000) / 1000) * 1000,
+          },
+        ],
+      });
+
+      const once = asked;
+
+      freezeTime(NOW + 4 * 60_000);
+      await run(feed.poll);
+      expect(asked).toBe(once);
+
+      freezeTime(NOW + 5 * 60_000);
+      await run(feed.poll);
+      expect(table.records(windStations)).toHaveLength(2);
+    });
+
+    it("goes by the last poll stored when it starts", async () => {
+      table.seed(
+        windStations,
+        ago(60),
+        { time: ago(60), stations: [] },
+        ago(60)
+      );
+
+      await run((await coldFeed("wind")).poll);
+
+      expect(asked).toBe(0);
+    });
+  });
 });
 
 describe("publishing the positions", () => {
@@ -1280,6 +1353,7 @@ describe("publishing the positions", () => {
       quakes: [],
       tide: null,
       rain: null,
+      wind: null,
     });
   });
 

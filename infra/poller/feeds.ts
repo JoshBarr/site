@@ -19,6 +19,7 @@ import {
   trains,
   vessels,
   weather,
+  windStations,
 } from "../../src/lib/liveRecords";
 import { fetchBuses, fetchTrains } from "../../src/lib/metlink";
 import { fetchTraffic } from "../../src/lib/nzta";
@@ -33,6 +34,7 @@ import {
   type Vessel,
 } from "../../src/lib/vessels";
 import { getConditions } from "../../src/lib/weather";
+import { fetchWind } from "../../src/lib/windStations";
 import type { LiveBucket } from "./positions";
 import { all, LiveTable, newest, put } from "./table";
 
@@ -51,7 +53,8 @@ type LogCollection =
   | typeof weather
   | typeof quakes
   | typeof tide
-  | typeof rain;
+  | typeof rain
+  | typeof windStations;
 
 interface Spec<L extends LogCollection> {
   log: L;
@@ -465,6 +468,12 @@ const rainFeed = Effect.gen(function* () {
   });
 });
 
+/**
+ * How often the weather stations are asked, ms: most send every ten
+ * minutes, Karori's every minute.
+ */
+const WIND_EVERY = 5 * 60_000;
+
 /** Every feed, made once per container, and what they know of routes. */
 export const makeFeeds = Effect.gen(function* () {
   const routeMemory: Routes = { known: new Map(), due: new Map() };
@@ -569,6 +578,21 @@ export const makeFeeds = Effect.gen(function* () {
     tide: tideFeed,
 
     rain: rainFeed,
+
+    wind: feed({
+      log: windStations,
+      every: 60_000,
+      offset: 40_000,
+      window: 0,
+      poll: (previous) =>
+        Effect.gen(function* () {
+          const now = yield* Clock.currentTimeMillis;
+
+          if (previous && now - previous.sk < WIND_EVERY) return null;
+
+          return yield* Effect.tryPromise(() => fetchWind(now));
+        }),
+    }),
   });
 
   return { logs, routes: routeMemory.known };

@@ -22,9 +22,14 @@ import {
 } from "../../src/components/scene/follow/store";
 import { connectCamera, SHOTS } from "../../src/components/scene/shots/shots";
 import { getMapView, setMapView } from "../../src/components/scene/mapView";
+import {
+  FOCUS_SHIFT_MAX,
+  getFocusShift,
+  setFocusShift,
+} from "../../src/components/scene/lens";
 
 // The scene's controls: the toolbar's panels for places, following and
-// settings, the time-travel button, the pills while following or
+// the camera, the time-travel button, the pills while following or
 // replaying, and where the data's from.
 
 /** What a layer lists to follow, as it would while it's drawn. */
@@ -43,10 +48,13 @@ const bus = (id: string): Candidate => ({
 /** The controls over a scene with two buses and a train, clouds on. */
 function Controls({
   onClouds = () => {},
+  onWind = () => {},
 }: {
   onClouds?: (on: boolean) => void;
+  onWind?: (on: boolean) => void;
 }) {
   const [clouds, setClouds] = useState(true);
+  const [wind, setWind] = useState(false);
 
   return (
     <>
@@ -60,6 +68,11 @@ function Controls({
         onCloudsChange={(on) => {
           setClouds(on);
           onClouds(on);
+        }}
+        wind={wind}
+        onWindChange={(on) => {
+          setWind(on);
+          onWind(on);
         }}
       />
     </>
@@ -94,10 +107,11 @@ afterEach(() => {
   setCut(false);
   setSceneTime(null);
   setMapView(false);
+  setFocusShift(0);
 });
 
 describe("the scene's controls", () => {
-  it("have a toolbar of map view, places, following, settings and time travel", () => {
+  it("have a toolbar of map view, clouds, wind, places, following, camera and time travel", () => {
     setup();
 
     const toolbar = screen.getByRole("toolbar", { name: "Map" });
@@ -108,11 +122,48 @@ describe("the scene's controls", () => {
         .map((b) => b.getAttribute("aria-label"))
     ).toEqual([
       "Map view",
+      "Clouds and rain",
+      "Wind",
       "Places",
       "Follow transport",
-      "Settings",
+      "Camera",
       "Time travel",
     ]);
+  });
+
+  it("turn the clouds and rain off and on from the toolbar", async () => {
+    const onClouds = vi.fn();
+    const { user } = setup(<Controls onClouds={onClouds} />);
+    const toolbar = screen.getByRole("toolbar", { name: "Map" });
+
+    const clouds = within(toolbar).getByRole("button", {
+      name: "Clouds and rain",
+    });
+
+    expect(clouds.getAttribute("aria-pressed")).toBe("true");
+    await user.click(clouds);
+    expect(onClouds).toHaveBeenLastCalledWith(false);
+    expect(clouds.getAttribute("aria-pressed")).toBe("false");
+
+    await user.click(clouds);
+    expect(onClouds).toHaveBeenLastCalledWith(true);
+    expect(clouds.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("show the wind and hide it again from the toolbar, off to begin with", async () => {
+    const onWind = vi.fn();
+    const { user } = setup(<Controls onWind={onWind} />);
+    const toolbar = screen.getByRole("toolbar", { name: "Map" });
+    const wind = within(toolbar).getByRole("button", { name: "Wind" });
+
+    expect(wind.getAttribute("aria-pressed")).toBe("false");
+    await user.click(wind);
+    expect(onWind).toHaveBeenLastCalledWith(true);
+    expect(wind.getAttribute("aria-pressed")).toBe("true");
+
+    await user.click(wind);
+    expect(onWind).toHaveBeenLastCalledWith(false);
+    expect(wind.getAttribute("aria-pressed")).toBe("false");
   });
 
   it("switch the map view on and off, showing which it's in", async () => {
@@ -130,29 +181,10 @@ describe("the scene's controls", () => {
     expect(map.getAttribute("aria-pressed")).toBe("false");
   });
 
-  describe("settings", () => {
-    it("turn the clouds and rain off and on", async () => {
-      const onClouds = vi.fn();
-      const { user } = setup(<Controls onClouds={onClouds} />);
-      const panel = await open(user, "Settings");
-
-      expect(
-        within(panel).getByRole("heading", { name: "Settings" })
-      ).toBeTruthy();
-      const clouds = within(panel).getByRole("switch");
-
-      expect(clouds.getAttribute("aria-checked")).toBe("true");
-      await user.click(clouds);
-      expect(onClouds).toHaveBeenLastCalledWith(false);
-      expect(clouds.getAttribute("aria-checked")).toBe("false");
-
-      await user.click(clouds);
-      expect(onClouds).toHaveBeenLastCalledWith(true);
-    });
-
+  describe("camera", () => {
     it("pick whether the camera flies or cuts, one or the other", async () => {
       const { user } = setup();
-      const panel = await open(user, "Settings");
+      const panel = await open(user, "Camera");
       const moves = within(panel).getByRole("group", { name: "Camera moves" });
       const cut = within(moves).getByRole("button", { name: "Cut" });
       const fly = within(moves).getByRole("button", { name: "Fly" });
@@ -169,6 +201,34 @@ describe("the scene's controls", () => {
 
       await user.click(fly);
       expect(getSnapshot().cut).toBe(false);
+    });
+
+    it("bring the focus nearer or farther than autofocus has it", async () => {
+      const { user } = setup();
+      let panel = await open(user, "Camera");
+      const focus = within(panel).getByRole("slider", { name: "Focus" });
+
+      expect(getFocusShift()).toBe(0);
+      expect(panel.textContent).toContain("Auto");
+
+      focus.focus();
+      await user.keyboard("{ArrowRight}{ArrowRight}");
+      expect(getFocusShift()).toBeCloseTo(0.2);
+      await user.keyboard("{End}");
+      expect(getFocusShift()).toBe(FOCUS_SHIFT_MAX);
+      expect(panel.textContent).toContain("×4.0");
+
+      // Shut and opened again, it shows where focus is.
+      await user.keyboard("{Escape}");
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      panel = await open(user, "Camera");
+      expect(
+        within(panel).getByRole("slider", { name: "Focus" })
+      ).toHaveProperty("value", String(FOCUS_SHIFT_MAX));
+
+      within(panel).getByRole("slider", { name: "Focus" }).focus();
+      await user.keyboard("{Home}");
+      expect(getFocusShift()).toBe(-FOCUS_SHIFT_MAX);
     });
   });
 
@@ -273,65 +333,6 @@ describe("the scene's controls", () => {
       } finally {
         disconnect();
       }
-    });
-
-    it("copy a link to the view as it is, for a while saying so", async () => {
-      history.replaceState(
-        null,
-        "",
-        "/scene?shot=airport&t=2026-11-01T07:00:00Z"
-      );
-
-      const disconnect = connectCamera(
-        () => [1750000.4, 5428000.6, 300.2, 1749000, 5427000, 0],
-        () => {}
-      );
-
-      const { user } = setup();
-
-      try {
-        const panel = await open(user, "Places");
-
-        const copy = within(panel).getByRole("button", {
-          name: "Copy link to this view",
-        });
-
-        await user.click(copy);
-
-        const copied = new URL(await navigator.clipboard.readText());
-
-        expect(copied.pathname).toBe("/scene");
-        expect(copied.searchParams.get("shot")).toBeNull();
-        expect(copied.searchParams.get("t")).toBe("2026-11-01T07:00:00Z");
-        expect(copied.searchParams.get("cam")).toBe(
-          "1750000,5428001,300,1749000,5427000,0"
-        );
-        expect(copy.textContent).toBe("Copied");
-
-        await waitFor(
-          () => expect(copy.textContent).toBe("Copy link to this view"),
-          {
-            timeout: 2500,
-          }
-        );
-      } finally {
-        disconnect();
-      }
-    });
-
-    it("copy nothing without a camera", async () => {
-      const { user } = setup();
-      const panel = await open(user, "Places");
-
-      const copy = within(panel).getByRole("button", {
-        name: "Copy link to this view",
-      });
-
-      await navigator.clipboard.writeText("as it was");
-      await user.click(copy);
-
-      expect(await navigator.clipboard.readText()).toBe("as it was");
-      expect(copy.textContent).toBe("Copy link to this view");
     });
   });
 

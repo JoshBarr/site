@@ -9,6 +9,10 @@
 #   terrain    public/terrain: height tiles, water, shore (LINZ DEM + OSM)
 #   trees      public/trees: lidar-found trees (needs terrain's caches)
 #   landcover  public/terrain/landcover.png, with the trees' canopy folded in
+#   wind-stations public/wind/stations.json: GWRC's wind stations against
+#              the wind at sea (Hilltop, Open-Meteo); tune_wind.py fits the
+#              field to it
+#   wind       public/wind/field.png: how the land turns and slows the wind
 #   footprints .cache/buildings/footprints.json: OSM footprints with lidar
 #              heights, for past the city (needs the trees' caches)
 #   cablecar   public/rail/cablecar.json: the cable car's track (OSM)
@@ -33,7 +37,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-ALL=(terrain trees landcover footprints cablecar buildings heroes airport buses landmarks port traffic trains stars)
+ALL=(terrain trees landcover wind-stations wind footprints cablecar buildings heroes airport buses landmarks port traffic trains stars)
 VENV=.venv-terrain
 PY="$VENV/bin/python"
 
@@ -67,13 +71,15 @@ run() {
   echo "=== $step done in $((SECONDS - start))s"
 }
 
-if wants terrain || wants trees || wants landcover || wants footprints; then
+if wants terrain || wants trees || wants landcover || wants wind-stations || wants wind || wants footprints; then
   python_env
 fi
 
 wants terrain && run terrain "$PY" -I scripts/terrain/build_tiles.py
 wants trees && run trees "$PY" -I scripts/trees/build_trees.py
 wants landcover && run landcover "$PY" -I scripts/terrain/build_tiles.py landcover
+wants wind-stations && run wind-stations "$PY" -I scripts/wind/build_stations.py
+wants wind && run wind "$PY" -I scripts/wind/build_wind.py
 wants footprints && run footprints "$PY" -I scripts/buildings/build_footprints.py
 wants cablecar && run cablecar node scripts/trains/build_cablecar.mjs
 wants buildings && run buildings node scripts/buildings/build_tiles.mjs

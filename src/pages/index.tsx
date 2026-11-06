@@ -25,6 +25,7 @@ const IndexPage: React.FC = () => {
   const [loaded, setLoaded] = useState(false);
   const [returned, setReturned] = useState(false);
   const [clouds, setClouds] = useState(true);
+  const [wind, setWind] = useState(false);
   const onLoaded = useCallback(() => setLoaded(true), []);
   // The intro's shown while the scene loads, then gives way to it.
   const revealed = returned || loaded;
@@ -50,6 +51,7 @@ const IndexPage: React.FC = () => {
       <div className="hero__scene">
         <WellingtonScene
           clouds={clouds}
+          wind={wind}
           hidden={!revealed}
           onSettled={onLoaded}
         />
@@ -58,7 +60,12 @@ const IndexPage: React.FC = () => {
         <Intro hidden={revealed || skipIntro} />
         {/* Once the scene's shown, not over the intro. */}
         {revealed && (
-          <SceneControls clouds={clouds} onCloudsChange={setClouds} />
+          <SceneControls
+            clouds={clouds}
+            onCloudsChange={setClouds}
+            wind={wind}
+            onWindChange={setWind}
+          />
         )}
       </div>
     </Layout>

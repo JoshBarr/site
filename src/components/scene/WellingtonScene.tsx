@@ -61,6 +61,9 @@ import { type Gauge, useRainGauges } from "./rainGauges";
 import { Quakes } from "./quakes/Quakes";
 import { OceanConditions, significantHeight } from "./ocean/spectrum";
 import { Clouds } from "./clouds/Clouds";
+import { useMeasuredWind } from "./wind/stations";
+import { Wind, WIND_DESKTOP, WIND_MOBILE } from "./wind/Wind";
+import type { TileCache } from "./terrain/TileCache";
 import { CLOUDS_DESKTOP, CLOUDS_MOBILE } from "./clouds/cloudNode";
 import { Landmarks } from "./landmarks/Landmarks";
 import {
@@ -80,6 +83,7 @@ import { AirfieldLights } from "./airport/AirfieldLights";
 import { Sky } from "./sky/Sky";
 import { sight } from "./sky/orbits";
 import { Telescope } from "./scope/Telescope";
+import { vantage } from "./scope/vantage";
 import {
   announce,
   drawVignette,
@@ -345,6 +349,9 @@ const { ACTION } = CameraControlsImpl;
  */
 /** Where the scope has the camera. */
 const posed = pose();
+
+/** Up at the satellite followed. */
+const toSatellite = new Vector3();
 
 /** The controls' limits and gestures, to put back as they were. */
 function limitsOf(c: Controller) {
@@ -1172,12 +1179,27 @@ function Controls({
         following?.category === "satellite" ? satelliteFor(following.id) : null;
 
       // Down behind the hills, or its orbit's gone: back to the view.
-      const up =
-        satellite !== null && (sight(satellite, now)?.elevation ?? -1) > LOWEST;
+      const seen = satellite && sight(satellite, now);
+      const up = satellite !== null && (seen?.elevation ?? -1) > LOWEST;
 
       if (following?.category === "satellite" && !up) stopFollowing();
 
       if (!up && !scope.active) return false;
+
+      // Where it can stand and see it, over the roofs and the hills between.
+      const stand = () => {
+        const { x, z } = scope.active ? scope.position : camera.position;
+
+        return seen
+          ? vantage(
+              x,
+              z,
+              toSatellite.set(...seen.direction),
+              heightAt.current ?? (() => 0),
+              seaFloor.current
+            )
+          : scope.floor;
+      };
 
       if (!scope.active) {
         scopeFrom.current = { rig: followingRef.current, limits: limitsOf(c) };
@@ -1191,15 +1213,9 @@ function Controls({
         c.maxDistance = Infinity;
         c.maxPolarAngle = Math.PI;
         c.enabled = false;
-        const { x, z } = camera.position;
-        const ground = heightAt.current?.(x, z) ?? 0;
-
-        scope.begin(
-          camera.position,
-          c.getTarget(orbit),
-          camera.fov,
-          Math.max(ground + GROUND_CLEARANCE, seaFloor.current)
-        );
+        scope.begin(camera.position, c.getTarget(orbit), camera.fov, stand());
+      } else if (up) {
+        scope.settle(stand(), delta);
       }
 
       rig.release();
@@ -1224,7 +1240,7 @@ function Controls({
       if (scope.active) {
         camera.quaternion.copy(quaternion);
         // Low down, near in, as the controls have it.
-        const height = p.y - scope.floor + GROUND_CLEARANCE;
+        const height = p.y - Math.max(heightAt.current?.(p.x, p.z) ?? 0, 0);
         camera.near = Math.min(
           Math.max(height * NEAR_FRACTION, NEAR_MIN),
           NEAR_MAX
@@ -1710,6 +1726,7 @@ export function Scene({
   gauges = null,
   time,
   mobile,
+  wind = false,
 }: {
   index: TileIndex;
   conditions: Conditions;
@@ -1717,8 +1734,18 @@ export function Scene({
   gauges?: Gauge[] | null;
   time: Date;
   mobile: boolean;
+  /** Trails of the wind blowing over the land and sea. */
+  wind?: boolean;
 }) {
   const heightAt = useRef<HeightQuery | null>(null);
+  const [cache, setCache] = useState<TileCache | null>(null);
+  // Switched off, the wind stays until its trails have faded.
+  const [windShown, setWindShown] = useState(wind);
+  const windFaded = useCallback(() => setWindShown(false), []);
+
+  useEffect(() => {
+    if (wind) setWindShown(true);
+  }, [wind]);
   const sun = useMemo(() => sunPosition(time), [time]);
   const sea = useMemo(() => seaConditions(conditions), [conditions]);
   const lights = nightFor(sun.altitude);
@@ -1775,6 +1802,7 @@ export function Scene({
       {!switchedOff("terrain") && (
         <Terrain
           onHeightQuery={setHeightQuery}
+          onCache={setCache}
           index={index}
           quality={mobile ? TERRAIN_MOBILE : TERRAIN_DESKTOP}
         />
@@ -1830,6 +1858,17 @@ export function Scene({
           windFrom={conditions.wind.direction}
         />
       )}
+      {(wind || windShown) && cache && (
+        <Wind
+          index={index}
+          cache={cache}
+          wind={conditions.wind}
+          night={lights}
+          quality={mobile ? WIND_MOBILE : WIND_DESKTOP}
+          on={wind}
+          onFaded={windFaded}
+        />
+      )}
       <Clouds
         conditions={conditions}
         gauges={placed}
@@ -1868,23 +1907,27 @@ export const CAMERA = { fov: DEFAULT_FOV, near: 5, far: 80000 };
 export const WellingtonScene: React.FC<{
   /** False clears the sky (and its rain) whatever the forecast says. */
   clouds?: boolean;
+  /** Trails of the wind over the land and sea. */
+  wind?: boolean;
   /** Kept out of sight, still loading; it fades up when this turns false. */
   hidden?: boolean;
   /** Called once the first view has loaded. */
   onSettled?: () => void;
-}> = ({ clouds = true, hidden = false, onSettled }) => {
+}> = ({ clouds = true, wind = false, hidden = false, onSettled }) => {
   const [index, setIndex] = useState<TileIndex | null>(null);
   const mobile = useIsMobile();
   const forecast = useConditions();
   const measured = useRainGauges();
   // No clouds, no rain.
   const gauges = clouds ? measured : null;
+  // The wind at sea, as the weather stations have it.
+  const blowing = useMeasuredWind(forecast.wind);
 
-  const conditions = useMemo(
-    () =>
-      clouds ? forecast : { ...forecast, cloudCover: 0, precipitation: 0 },
-    [forecast, clouds]
-  );
+  const conditions = useMemo(() => {
+    const now = { ...forecast, wind: blowing };
+
+    return clouds ? now : { ...now, cloudCover: 0, precipitation: 0 };
+  }, [forecast, blowing, clouds]);
 
   const time = useSceneTime();
   const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
@@ -1937,6 +1980,7 @@ export const WellingtonScene: React.FC<{
             gauges={gauges}
             time={time}
             mobile={mobile}
+            wind={wind}
           />
         )}
         {stats && <Stats />}

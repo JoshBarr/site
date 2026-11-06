@@ -12,6 +12,7 @@ const WellingtonScene = dynamic(
 
 const ScenePage: React.FC = () => {
   const [clouds, setClouds] = useState(true);
+  const [wind, setWind] = useState(false);
 
   return (
     // The large viewport, running on under iOS Safari's toolbar; the controls
@@ -28,8 +29,13 @@ const ScenePage: React.FC = () => {
       }}
     >
       <SEO title="Scene" thumbnail={undefined} />
-      <WellingtonScene clouds={clouds} />
-      <SceneControls clouds={clouds} onCloudsChange={setClouds} />
+      <WellingtonScene clouds={clouds} wind={wind} />
+      <SceneControls
+        clouds={clouds}
+        onCloudsChange={setClouds}
+        wind={wind}
+        onWindChange={setWind}
+      />
     </div>
   );
 };

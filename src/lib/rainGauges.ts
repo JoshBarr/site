@@ -1,15 +1,12 @@
+import { hilltop, readings as series, unescape } from "./hilltop";
 import { toNztm } from "./nztm";
 
 // Rain as it's measured, from Greater Wellington Regional Council's rain
-// gauges through their Hilltop server (https://hilltop.gw.govt.nz), no key
-// needed: forty-odd on the map, telemetered every ten or fifteen minutes.
-// Each is a tipping bucket, 0.2 or 0.5 mm a tip, logged as the tips come
-// with a nil reading every ten minutes between, so a rate is what fell over
-// the last half hour each gauge reported. Its times are NZST all year.
-
-const SERVER = "https://hilltop.gw.govt.nz/data.hts";
-
-const TIMEOUT = 15_000;
+// gauges through their Hilltop server (./hilltop.ts): forty-odd on the map,
+// telemetered every ten or fifteen minutes. Each is a tipping bucket, 0.2
+// or 0.5 mm a tip, logged as the tips come with a nil reading every ten
+// minutes between, so a rate is what fell over the last half hour each
+// gauge reported.
 
 /** Gauges this far from the map's centre are kept, m: a little past its edge. */
 const REACH = 40_000;
@@ -35,34 +32,6 @@ export interface Rainfall {
   /** Those on the map heard from lately; empty if none were. */
   gauges: Gauge[];
 }
-
-/** Hilltop's query string, spaces as %20: it reads a + as a plus. */
-const url = (params: Record<string, string>) =>
-  `${SERVER}?${new URLSearchParams(params).toString().replaceAll("+", "%20")}`;
-
-async function hilltop(params: Record<string, string>) {
-  const response = await fetch(url({ Service: "Hilltop", ...params }), {
-    signal: AbortSignal.timeout(TIMEOUT),
-  });
-
-  if (!response.ok) throw new Error(`hilltop: HTTP ${response.status}`);
-
-  const body = await response.text();
-  const error = /<Error>([^<]*)<\/Error>/.exec(body);
-
-  if (error) throw new Error(`hilltop: ${error[1]}`);
-
-  return body;
-}
-
-/** XML's escapes in an attribute, as written. */
-const unescape = (text: string) =>
-  text
-    .replaceAll("&lt;", "<")
-    .replaceAll("&gt;", ">")
-    .replaceAll("&quot;", '"')
-    .replaceAll("&apos;", "'")
-    .replaceAll("&amp;", "&");
 
 /**
  * Where each rain gauge on the map is, by site name: those further off,
@@ -100,9 +69,6 @@ export async function fetchGaugeSites(): Promise<
   return sites;
 }
 
-/** A Hilltop time, NZST without saying so, as epoch ms. */
-const nzst = (time: string) => Date.parse(`${time}+12:00`);
-
 /**
  * How hard it's raining at each of `sites` (fetchGaugeSites), at `now`
  * (epoch ms).
@@ -131,16 +97,10 @@ export async function fetchRainfall(
     // "Rainfall Backup".
     if (!position || !/<DataSource Name="Rainfall"/.test(inside)) continue;
 
-    const readings = [
-      ...inside.matchAll(/<E><T>([^<]*)<\/T><I1>([^<]*)<\/I1><\/E>/g),
-    ].flatMap(([, time, mm]) => {
-      const at = nzst(time);
-      const amount = Number(mm);
-
-      return Number.isFinite(at) && Number.isFinite(amount)
-        ? [{ at, amount }]
-        : [];
-    });
+    const readings = series(inside).map(({ at, value }) => ({
+      at,
+      amount: value,
+    }));
 
     const newest = Math.max(...readings.map(({ at }) => at));
 

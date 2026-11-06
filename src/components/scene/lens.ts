@@ -30,13 +30,22 @@ import { switchedOff } from "./stats";
 // A, focal length f, focus distance s and depth d. A real lens focused
 // hundreds of metres away is sharp to the horizon, so the aperture here is
 // miniature-scale, and grows with s so that A·f/s holds steady: every shot
-// gets the same softness behind the subject, zoomed in or out.
+// gets the same softness behind the subject, zoomed in or out. It grows with
+// where autofocus would focus, though, not with the focus shift: focusing
+// nearer than that softens the distance, and farther sharpens it, as on a
+// real lens.
 
 /** Blur at the horizon, as a fraction of the largest blur. */
 const backgroundBlur = uniform(0.3);
 
 /** Distance to the plane of focus, metres. */
 const focusDistance = uniform(1000);
+
+/**
+ * Autofocus's distance over the focus distance: how much more blur the focus
+ * shift leaves behind the subject, 1 for none.
+ */
+const shiftBlur = uniform(1);
 
 /** Largest blur radius, pixels. Set as a fraction of the frame height. */
 const maxRadius = uniform(7);
@@ -79,6 +88,22 @@ const FOCUS_TIME = 0.3;
  * height, takes the focus: thin towers far off are hard to aim at exactly.
  */
 const FOCUS_SLOP = 0.01;
+
+/**
+ * The most focus can be moved from where autofocus puts it, in stops: each
+ * one doubles its distance, or halves it.
+ */
+export const FOCUS_SHIFT_MAX = 2;
+
+/** Focus moved from where autofocus puts it, in stops; 0 leaves it there. */
+let focusShift = 0;
+
+export const getFocusShift = () => focusShift;
+
+/** Moves focus beyond (more) or in front of (less) where autofocus puts it. */
+export function setFocusShift(stops: number) {
+  focusShift = Math.min(Math.max(stops, -FOCUS_SHIFT_MAX), FOCUS_SHIFT_MAX);
+}
 
 /** Something standing on the ground that autofocus can land on. */
 export type FocusSubject =
@@ -169,7 +194,8 @@ function landmarkDistance(slop: number) {
 /**
  * Focus on what the camera orbits around, `target`, racking smoothly as it
  * moves, and size the blur to the frame. A landmark in the middle of the
- * frame, in front of the target, gets the focus to itself.
+ * frame, in front of the target, gets the focus to itself. The focus shift
+ * moves it nearer or farther from there.
  */
 export function updateLens(
   renderer: WebGPURenderer,
@@ -193,20 +219,36 @@ export function updateLens(
   // Along the view axis, as depth is.
   const subject = Math.max(toTarget.subVectors(target, origin).dot(axis), 10);
   const landmark = landmarkDistance(slop);
+
   // Landmarks are the subject themselves: no pull toward the camera.
-  const focus = landmark < subject ? landmark : subject * FOCUS_PULL;
+  // Then moved in or out as the viewer asks.
+  const focus =
+    (landmark < subject ? landmark : subject * FOCUS_PULL) * 2 ** focusShift;
+
   // Ease by ratio, so racking 200 m → 2 km takes as long as 2 km → 20 km.
   const ease = 1 - Math.exp(-delta / FOCUS_TIME);
   focusDistance.value *= Math.pow(focus / focusDistance.value, ease);
+  shiftBlur.value *= Math.pow(2 ** -focusShift / shiftBlur.value, ease);
 }
 
 /** Signed blur at a scene depth (negative in front of focus), -1..1. */
 const blurAt = (viewZ) =>
   clamp(
-    backgroundBlur.mul(float(1).sub(focusDistance.div(viewZ.negate()))),
+    backgroundBlur
+      .mul(shiftBlur)
+      .mul(float(1).sub(focusDistance.div(viewZ.negate()))),
     -1,
     1
   );
+
+/**
+ * How blurred something `distance` m along the view axis is, 0..1 of the
+ * largest blur: for what blurs into bright blots, to fade it instead.
+ */
+export const lensBlur = (distance) =>
+  switchedOff("dof")
+    ? float(0)
+    : smoothstep(0, 1, abs(blurAt(distance.negate())));
 
 /**
  * Blurs `color` by the scene's `depth` texture, as three's dof node does but

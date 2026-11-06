@@ -58,6 +58,7 @@ export class TileCache {
   private index: TileIndex;
   private slotByKey = new Map<string, number>();
   private keyBySlot: (string | null)[];
+  private tileBySlot: (TileInfo | null)[];
   private lastUsed: Int32Array;
   private frame = 0;
 
@@ -85,6 +86,7 @@ export class TileCache {
     this.index = index;
     this.slots = slots;
     this.keyBySlot = Array.from({ length: slots }, () => null);
+    this.tileBySlot = Array.from({ length: slots }, () => null);
     this.lastUsed = new Int32Array(slots).fill(-1);
     this.maxInFlight = workers * 2;
 
@@ -175,6 +177,16 @@ export class TileCache {
     }
 
     return undefined;
+  }
+
+  /**
+   * Every tile loaded and the layer it's in, for drawing heights from the
+   * cache elsewhere. Changes when `version` does.
+   */
+  loaded(): { tile: TileInfo; slot: number }[] {
+    return this.tileBySlot.flatMap((tile, slot) =>
+      tile ? [{ tile, slot }] : []
+    );
   }
 
   /** Layer holding this tile, or undefined. Marks the tile as in use. */
@@ -284,7 +296,7 @@ export class TileCache {
         return;
       }
 
-      this.store(key, tile.level, heights, ground, roads);
+      this.store(key, tile, heights, ground, roads);
     });
 
     const worker = this.workers[this.nextWorker];
@@ -294,7 +306,7 @@ export class TileCache {
 
   private store(
     key: string,
-    level: number,
+    tile: TileInfo,
     heights: Float32Array,
     ground: Uint8Array,
     roads: Uint8Array
@@ -308,9 +320,10 @@ export class TileCache {
     if (previous) this.slotByKey.delete(previous);
 
     this.keyBySlot[slot] = key;
+    this.tileBySlot[slot] = tile;
     this.slotByKey.set(key, slot);
     // Count as used now so it survives until the next selection pass.
-    this.lastUsed[slot] = level <= PINNED_LEVEL ? 0x7fffffff : this.frame;
+    this.lastUsed[slot] = tile.level <= PINNED_LEVEL ? 0x7fffffff : this.frame;
 
     this.heights.set(heights, slot * heights.length);
     this.texture.addLayerUpdate(slot);

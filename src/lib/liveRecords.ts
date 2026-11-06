@@ -14,6 +14,7 @@ import { METRICS, SLOTS, type TimelineHour } from "./timeline";
 import type { Train } from "./trains";
 import type { Vessel } from "./vessels";
 import type { Conditions } from "./weather";
+import type { StationReading, WindReadings } from "./windStations";
 
 // The live table's items (see plans/dynamo.md), as the AWS poller writes
 // them and the site reads them. Each collection's schema is a codec between
@@ -258,6 +259,18 @@ export const gauges = z.object({
   gauges: z.array(gauge),
 }) satisfies z.ZodType<Rainfall>;
 
+const stationReading = z.object({
+  site: z.string(),
+  speed: z.number(),
+  direction: z.number(),
+  at: z.number(),
+}) satisfies z.ZodType<StationReading>;
+
+export const windReadings = z.object({
+  time: z.number(),
+  stations: z.array(stationReading),
+}) satisfies z.ZodType<WindReadings>;
+
 /** NZTA's speeds. */
 export const traffic = log("traffic", speeds);
 
@@ -275,6 +288,9 @@ export const tide = log("tide", seaLevel);
 
 /** How hard it's raining at each of GWRC's gauges, every five minutes. */
 export const rain = log("rain", gauges);
+
+/** The wind at each of GWRC's weather stations, every five minutes. */
+export const windStations = log("wind", windReadings);
 
 /** Every airport on a callsign's route, or null if adsb.im doesn't know it. */
 export const routes = collection("routes", 1, {

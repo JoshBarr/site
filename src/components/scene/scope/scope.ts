@@ -26,6 +26,10 @@ export const ZOOM_OUT = 2;
 /** Seconds to turn from one satellite onto the next. */
 export const SWING = 2;
 
+/** How fast where it stands eases up, and down, to where it's clear, /s. */
+const SETTLE_UP = 3;
+const SETTLE_DOWN = 0.5;
+
 /** Lower than this many degrees, the hills are in the way: it's let go. */
 export const LOWEST = 10;
 
@@ -144,7 +148,7 @@ export class Scope {
   readonly position = new Vector3();
   readonly target = new Vector3();
   fov = 50;
-  /** Where the camera stands, m up. */
+  /** Where the camera stands, m up: over the roofs, seeing over the hills. */
   floor = 0;
 
   /** Toward it last seen, its range then, m, and where the swing's from. */
@@ -204,13 +208,13 @@ export class Scope {
 
   /**
    * Starting from the view at `position` toward `target` through `fov`,
-   * down to `floor` m below it.
+   * down (or up) to stand `floor` m up.
    */
   begin(position: Vector3, target: Vector3, fov: number, floor: number) {
     this.position.copy(position);
     this.target.copy(target);
     this.fov = fov;
-    this.floor = Math.min(floor, position.y);
+    this.floor = floor;
     this.up.copy(Y);
     this.time = 0;
     this.slip.set(0, 0);
@@ -218,6 +222,15 @@ export class Scope {
     this.focus = 0;
     this.hunting = null;
     this.arrived = false;
+  }
+
+  /**
+   * Over `delta` seconds, toward standing `floor` m up: as the satellite
+   * goes across the sky, the hills in the way change. Up quicker than down.
+   */
+  settle(floor: number, delta: number) {
+    const rate = floor > this.floor ? SETTLE_UP : SETTLE_DOWN;
+    this.floor += (floor - this.floor) * (1 - Math.exp(-rate * delta));
   }
 
   /** On by `delta` seconds, toward `wanted` at `now`, or back to the view. */
@@ -334,10 +347,14 @@ export class Scope {
     const direction = this.direction(now);
     const down = smootherstep(this.lower);
 
-    // Straight down, by ratio, so it's not all spent high up.
-    const height = Math.max(this.position.y - this.floor, 0);
+    // Straight down, by ratio, so it's not all spent high up; or, from
+    // under where it stands, straight up.
+    const height = this.position.y - this.floor;
     out.position.copy(this.position);
-    out.position.y = this.floor + (height + 1) ** (1 - down) - 1;
+    out.position.y =
+      height >= 0
+        ? this.floor + (height + 1) ** (1 - down) - 1
+        : this.position.y - height * down;
 
     // Up the frame: level with the horizon, but turning no faster than
     // ROLL as it passes overhead, where there's no level to be had.

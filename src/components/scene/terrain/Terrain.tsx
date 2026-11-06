@@ -504,10 +504,13 @@ export function Terrain({
   index,
   quality,
   onHeightQuery,
+  onCache,
 }: {
   index: TileIndex;
   quality: TerrainQuality;
   onHeightQuery?: (query: HeightQuery | null) => void;
+  /** The tiles' heights, for others to draw on the ground with. */
+  onCache?: (cache: TileCache | null) => void;
 }) {
   const camera = useThree((state) => state.camera);
 
@@ -566,6 +569,12 @@ export function Terrain({
 
     return () => onHeightQuery?.(null);
   }, [cache, onHeightQuery]);
+
+  useEffect(() => {
+    onCache?.(cache);
+
+    return () => onCache?.(null);
+  }, [cache, onCache]);
 
   useEffect(
     () =>

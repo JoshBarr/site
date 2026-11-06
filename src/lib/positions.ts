@@ -12,6 +12,7 @@ import {
   speeds,
   trainFix,
   vessel,
+  windReadings,
 } from "./liveRecords";
 import { readJson, trailPoint } from "./schemas";
 
@@ -47,6 +48,8 @@ export const positions = z.object({
   tide: seaLevel.nullable().default(null),
   /** Null until the rain gauges have been heard from. */
   rain: gauges.nullable().default(null),
+  /** Null until the weather stations have been heard from. */
+  wind: windReadings.nullable().default(null),
 });
 
 export type Positions = z.infer<typeof positions>;

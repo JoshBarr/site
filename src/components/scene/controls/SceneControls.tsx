@@ -5,7 +5,7 @@ import React, {
   useSyncExternalStore,
 } from "react";
 import { Popover } from "@base-ui/react/popover";
-import { Switch } from "@base-ui/react/switch";
+import { Slider } from "@base-ui/react/slider";
 import { Toggle } from "@base-ui/react/toggle";
 import { ToggleGroup } from "@base-ui/react/toggle-group";
 import { Tooltip } from "@base-ui/react/tooltip";
@@ -22,11 +22,12 @@ import {
   subscribe,
 } from "../follow/store";
 import { sceneNow, useSeek } from "../clock";
-import { currentView, goTo, SHOTS } from "../shots/shots";
+import { goTo, SHOTS } from "../shots/shots";
 import { jump } from "../time/jump";
 import { toggleMapView, useMapView } from "../mapView";
 import { TimeTravel } from "../time/TimeTravel";
 import { useVisibleHeight } from "../useVisibleHeight";
+import { FOCUS_SHIFT_MAX, getFocusShift, setFocusShift } from "../lens";
 import {
   Credit,
   LicenceLink,
@@ -37,13 +38,13 @@ import {
 import { Icon, IconName } from "./icons";
 import styles from "./SceneControls.module.css";
 
-// The scene's controls, bottom right: the map view switch; a button each for
-// places, following transport and settings, opening its panel in one popover
+// The scene's controls, bottom right: the map view, clouds and wind switches; a
+// button each for places, following transport and the camera, opening its panel in one popover
 // that moves and resizes from one to the next; and one for the time-travel
 // drawer, which they ride up on; and, while replaying or following, a pill saying when or
 // what, with the way back. Bottom left, Info: where the data's from.
 
-type PanelId = "places" | "transport" | "settings";
+type PanelId = "places" | "transport" | "camera";
 
 const panels = Popover.createHandle<PanelId>();
 
@@ -111,57 +112,33 @@ const Header: React.FC<{ title: string }> = ({ title }) => (
   </div>
 );
 
-/** Set views: pick one and the camera goes there; copy a link to this one. */
+/** Set views: pick one and the camera goes there. */
 const PlacesPanel: React.FC<{
   shot: string | null;
   onShot: (id: string) => void;
-}> = ({ shot, onShot }) => {
-  const [copied, setCopied] = useState(false);
-
-  const copy = async () => {
-    const view = currentView();
-
-    if (!view) return;
-    const url = new URL(location.href);
-    url.searchParams.delete("shot");
-    url.searchParams.set("cam", view.map(Math.round).join(","));
-    await navigator.clipboard.writeText(url.toString());
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
-
-  return (
-    <div className={styles.Panel}>
-      <Header title="Places" />
-      <ul className={styles.Choices} aria-label="Places">
-        {SHOTS.map((picked) => (
-          <li key={picked.id}>
-            <button
-              type="button"
-              className={cx(styles.Row, styles.Button, styles.Choice)}
-              aria-pressed={shot === picked.id}
-              // Picking the one already chosen goes there again.
-              onClick={() => {
-                onShot(picked.id);
-                goTo(picked);
-              }}
-            >
-              <span className={styles.RowLabel}>{picked.name}</span>
-            </button>
-          </li>
-        ))}
-      </ul>
-      <button
-        type="button"
-        className={cx(styles.Row, styles.Button, styles.Centered)}
-        onClick={copy}
-      >
-        <Icon name={copied ? "check" : "link"} size={18} />
-        {copied ? "Copied" : "Copy link to this view"}
-      </button>
-    </div>
-  );
-};
+}> = ({ shot, onShot }) => (
+  <div className={styles.Panel}>
+    <Header title="Places" />
+    <ul className={styles.Choices} aria-label="Places">
+      {SHOTS.map((picked) => (
+        <li key={picked.id}>
+          <button
+            type="button"
+            className={cx(styles.Row, styles.Button, styles.Choice)}
+            aria-pressed={shot === picked.id}
+            // Picking the one already chosen goes there again.
+            onClick={() => {
+              onShot(picked.id);
+              goTo(picked);
+            }}
+          >
+            <span className={styles.RowLabel}>{picked.name}</span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  </div>
+);
 
 /** What of each kind can be followed now, looked at again every so often. */
 function useAvailable() {
@@ -292,26 +269,18 @@ const TransportPanel: React.FC = () => {
   );
 };
 
-const SettingsPanel: React.FC<{
-  clouds: boolean;
-  onCloudsChange: (clouds: boolean) => void;
-}> = ({ clouds, onCloudsChange }) => {
+/** Focus's distance, as a multiple of where autofocus puts it. */
+const focusText = (stops: number) =>
+  stops === 0 ? "Auto" : `×${(2 ** stops).toPrecision(2)}`;
+
+/** How the camera moves to a place, and where it focuses. */
+const CameraPanel: React.FC = () => {
   const { cut } = useFollow();
+  const [shift, setShift] = useState(getFocusShift);
 
   return (
     <div className={styles.Panel}>
-      <Header title="Settings" />
-      <label className={cx(styles.Row, styles.Button, styles.SwitchRow)}>
-        <Icon name="cloud" size={18} />
-        <span className={styles.RowLabel}>Clouds and rain</span>
-        <Switch.Root
-          className={styles.Switch}
-          checked={clouds}
-          onCheckedChange={onCloudsChange}
-        >
-          <Switch.Thumb className={styles.Thumb} />
-        </Switch.Root>
-      </label>
+      <Header title="Camera" />
       <div className={styles.Row}>
         <span className={styles.RowLabel} id="camera-moves">
           Camera moves
@@ -331,6 +300,40 @@ const SettingsPanel: React.FC<{
           </Toggle>
         </ToggleGroup>
       </div>
+      <Slider.Root
+        className={cx(styles.Row, styles.SliderRow)}
+        value={shift}
+        min={-FOCUS_SHIFT_MAX}
+        max={FOCUS_SHIFT_MAX}
+        step={0.1}
+        onValueChange={(stops) => {
+          setShift(stops);
+          setFocusShift(stops);
+        }}
+      >
+        <div className={styles.SliderHead}>
+          <Slider.Label className={styles.RowLabel}>Focus</Slider.Label>
+          <Slider.Value className={styles.Value}>
+            {(_, [stops]) => focusText(stops)}
+          </Slider.Value>
+        </div>
+        <Slider.Control className={styles.SliderControl}>
+          <Slider.Track className={styles.Track}>
+            <Slider.Thumb
+              className={styles.Thumb}
+              getAriaValueText={(_, stops) =>
+                stops === 0
+                  ? "Autofocus"
+                  : `${(2 ** stops).toPrecision(2)} times as far as autofocus`
+              }
+            />
+          </Slider.Track>
+        </Slider.Control>
+        <div className={styles.SliderEnds} aria-hidden>
+          <span>Nearer</span>
+          <span>Farther</span>
+        </div>
+      </Slider.Root>
     </div>
   );
 };
@@ -440,7 +443,9 @@ const Replaying: React.FC = () => {
 export const SceneControls: React.FC<{
   clouds: boolean;
   onCloudsChange: (clouds: boolean) => void;
-}> = ({ clouds, onCloudsChange }) => {
+  wind: boolean;
+  onWindChange: (wind: boolean) => void;
+}> = ({ clouds, onCloudsChange, wind, onWindChange }) => {
   const { following } = useFollow();
   const map = useMapView();
   const [shot, setShot] = useState<string | null>(null);
@@ -520,17 +525,45 @@ export const SceneControls: React.FC<{
                     </button>
                   }
                 />
+                <Tip
+                  label={
+                    clouds ? "Hide clouds and rain" : "Show clouds and rain"
+                  }
+                  trigger={
+                    <button
+                      type="button"
+                      aria-label="Clouds and rain"
+                      aria-pressed={clouds}
+                      // On is the usual way: its icon says so, not a highlight.
+                      data-quiet
+                      className={styles.ToolButton}
+                      onClick={() => onCloudsChange(!clouds)}
+                    >
+                      <Icon name={clouds ? "cloud" : "cloudOff"} />
+                    </button>
+                  }
+                />
+                <Tip
+                  label={wind ? "Hide the wind" : "Show the wind"}
+                  trigger={
+                    <button
+                      type="button"
+                      aria-label="Wind"
+                      aria-pressed={wind}
+                      className={styles.ToolButton}
+                      onClick={() => onWindChange(!wind)}
+                    >
+                      <Icon name="air" />
+                    </button>
+                  }
+                />
                 <PanelButton panel="places" label="Places" icon="place" />
                 <PanelButton
                   panel="transport"
                   label="Follow transport"
                   icon="commute"
                 />
-                <PanelButton
-                  panel="settings"
-                  label="Settings"
-                  icon="settings"
-                />
+                <PanelButton panel="camera" label="Camera" icon="camera" />
                 <Tip
                   label="Time travel"
                   trigger={
@@ -580,12 +613,7 @@ export const SceneControls: React.FC<{
                     <PlacesPanel shot={shot} onShot={setShot} />
                   )}
                   {payload === "transport" && <TransportPanel />}
-                  {payload === "settings" && (
-                    <SettingsPanel
-                      clouds={clouds}
-                      onCloudsChange={onCloudsChange}
-                    />
-                  )}
+                  {payload === "camera" && <CameraPanel />}
                 </Popover.Viewport>
               </Popover.Popup>
             </Popover.Positioner>
