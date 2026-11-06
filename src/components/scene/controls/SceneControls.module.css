@@ -1,6 +1,5 @@
 /* The scene's controls: a toolbar of icon buttons at the bottom right, each
-   opening its panel in one popover that moves and resizes between them, and
-   Info at the bottom left.
+   opening its panel in one popover that moves and resizes between them.
    Dark glass after DialKit (dialkit.dev), translucent over the map. */
 
 .Theme {
@@ -56,35 +55,28 @@
   pointer-events: none;
 }
 
-/* The bar along the time-travel drawer's top edge: Info at the left, the
-   rest at the right. Only what's on it takes the pointer, not the gap. */
+/* The bar along the time-travel drawer's top edge, at the right. Only
+   what's on it takes the pointer, not the gap. */
 
 .Bar {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
+  /* Short of room, the pills go above the toolbar. */
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
   gap: 8px;
   width: 100%;
+  min-width: 0;
   pointer-events: none;
   user-select: none;
   -webkit-user-select: none;
 }
 
-.End {
-  display: flex;
-  /* Short of room, the pills go above the toolbar. */
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-  align-items: center;
-  min-width: 0;
-}
-
 .Toolbar {
   display: flex;
   flex: none;
-  gap: 2px;
-  padding: 3px;
+  gap: 0;
+  padding: 2px;
   border-radius: 14px;
   box-shadow: var(--shadow-small);
   pointer-events: auto;
@@ -133,7 +125,7 @@
   gap: 8px;
   height: 42px;
   box-sizing: border-box;
-  padding: 0 3px 0 12px;
+  padding: 0 2px 0 12px;
   border-radius: 14px;
   box-shadow: var(--shadow-small);
   pointer-events: auto;
@@ -330,7 +322,8 @@
 
 .InfoPanel {
   width: min(340px, calc(100vw - 32px));
-  max-height: min(var(--available-height), 560px);
+  /* The room above the toolbar, as for .Choices. */
+  max-height: min(var(--room, 560px), 560px);
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
@@ -806,5 +799,23 @@
       position: absolute;
       inset: -12px 0;
     }
+  }
+}
+
+/* A phone's width: the eight buttons a little smaller, so the toolbar fits
+   across a 360px screen. */
+@media (pointer: coarse) and (max-width: 480px) {
+  .ToolButton {
+    width: 40px;
+    height: 40px;
+    border-radius: 11px;
+  }
+
+  .Labelled {
+    width: auto;
+  }
+
+  .Following {
+    height: 46px;
   }
 }

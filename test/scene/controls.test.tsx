@@ -111,7 +111,7 @@ afterEach(() => {
 });
 
 describe("the scene's controls", () => {
-  it("have a toolbar of map view, clouds, wind, places, following, camera and time travel", () => {
+  it("have a toolbar of map view, clouds, wind, places, following, camera, time travel and info", () => {
     setup();
 
     const toolbar = screen.getByRole("toolbar", { name: "Map" });
@@ -128,6 +128,7 @@ describe("the scene's controls", () => {
       "Follow transport",
       "Camera",
       "Time travel",
+      "About the data",
     ]);
   });
 

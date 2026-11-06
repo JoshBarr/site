@@ -905,9 +905,10 @@ export const TimeTravel: React.FC<{
       <div
         style={{
           position: "absolute",
-          left: 16,
-          right: 16,
-          bottom: "calc(100% + 16px)",
+          // Narrower on a phone, for the controls' toolbar to fit across.
+          left: narrow ? 12 : 16,
+          right: narrow ? 12 : 16,
+          bottom: narrow ? "calc(100% + 12px)" : "calc(100% + 16px)",
           display: "flex",
           justifyContent: "flex-end",
           pointerEvents: "none",

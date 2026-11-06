@@ -40,11 +40,12 @@ import styles from "./SceneControls.module.css";
 
 // The scene's controls, bottom right: the map view, clouds and wind switches; a
 // button each for places, following transport and the camera, opening its panel in one popover
-// that moves and resizes from one to the next; and one for the time-travel
-// drawer, which they ride up on; and, while replaying or following, a pill saying when or
-// what, with the way back. Bottom left, Info: where the data's from.
+// that moves and resizes from one to the next; one for the time-travel
+// drawer, which they ride up on; and Info, where the data's from, in the same
+// popover. While replaying or following, a pill saying when or what, with the
+// way back.
 
-type PanelId = "places" | "transport" | "camera";
+type PanelId = "places" | "transport" | "camera" | "info";
 
 const panels = Popover.createHandle<PanelId>();
 
@@ -360,39 +361,12 @@ const CreditList: React.FC<{ title: string; credits: Credit[] }> = ({
 );
 
 /** Where the scene's data comes from, with the attribution each asks for. */
-const Info: React.FC = () => (
-  <Popover.Root>
-    <div className={cx(styles.Glass, styles.Toolbar)}>
-      <Tip
-        label="About the data"
-        trigger={
-          <Popover.Trigger
-            aria-label="About the data"
-            className={styles.ToolButton}
-          >
-            <Icon name="info" />
-          </Popover.Trigger>
-        }
-      />
-    </div>
-    <Popover.Portal>
-      <Popover.Positioner
-        side="top"
-        align="start"
-        sideOffset={8}
-        collisionPadding={16}
-        className={styles.Theme}
-      >
-        <Popover.Popup className={cx(styles.Glass, styles.Popup)}>
-          <div className={cx(styles.Panel, styles.InfoPanel)}>
-            <Header title="Data" />
-            <CreditList title="Map" credits={MAP_CREDITS} />
-            <CreditList title="Live" credits={LIVE_CREDITS} />
-          </div>
-        </Popover.Popup>
-      </Popover.Positioner>
-    </Popover.Portal>
-  </Popover.Root>
+const InfoPanel: React.FC = () => (
+  <div className={cx(styles.Panel, styles.InfoPanel)}>
+    <Header title="Data" />
+    <CreditList title="Map" credits={MAP_CREDITS} />
+    <CreditList title="Live" credits={LIVE_CREDITS} />
+  </div>
 );
 
 const replayed = new Intl.DateTimeFormat("en-NZ", {
@@ -464,121 +438,115 @@ export const SceneControls: React.FC<{
       <div className={styles.Frame} style={{ height }}>
         <TimeTravel open={travelling}>
           <div className={cx(styles.Theme, styles.Bar)}>
-            <Info />
-            <div className={styles.End}>
-              <Replaying />
-              {following && (
-                <div
-                  className={`${styles.Glass} ${styles.Following}`}
-                  data-tint={following.category}
-                >
-                  <span className={styles.Tinted}>
-                    <Icon name={VEHICLES[following.category].icon} size={18} />
-                  </span>
-                  <span className={styles.FollowingLabel}>
-                    {following.label}
-                  </span>
-                  <Tip
-                    label={
-                      <>
-                        Back to moving freely
-                        <span className={styles.Kbd}>Esc</span>
-                      </>
-                    }
-                    trigger={
-                      <button
-                        type="button"
-                        aria-label="Stop following"
-                        className={cx(styles.ToolButton, styles.Labelled)}
-                        onClick={stop}
-                      >
-                        <Icon name="close" size={18} />
-                        <span className={styles.Wide}>Stop following</span>
-                        <span className={styles.Narrow}>Stop</span>
-                      </button>
-                    }
-                  />
-                </div>
-              )}
+            <Replaying />
+            {following && (
               <div
-                ref={toolbar}
-                role="toolbar"
-                aria-label="Map"
-                className={`${styles.Glass} ${styles.Toolbar}`}
+                className={`${styles.Glass} ${styles.Following}`}
+                data-tint={following.category}
               >
+                <span className={styles.Tinted}>
+                  <Icon name={VEHICLES[following.category].icon} size={18} />
+                </span>
+                <span className={styles.FollowingLabel}>{following.label}</span>
                 <Tip
                   label={
                     <>
-                      {map ? "Leave map view" : "Map view"}
-                      <span className={styles.Kbd}>M</span>
+                      Back to moving freely
+                      <span className={styles.Kbd}>Esc</span>
                     </>
                   }
                   trigger={
                     <button
                       type="button"
-                      aria-label="Map view"
-                      aria-pressed={map}
-                      className={styles.ToolButton}
-                      onClick={toggleMapView}
+                      aria-label="Stop following"
+                      className={cx(styles.ToolButton, styles.Labelled)}
+                      onClick={stop}
                     >
-                      <Icon name="map" />
-                    </button>
-                  }
-                />
-                <Tip
-                  label={
-                    clouds ? "Hide clouds and rain" : "Show clouds and rain"
-                  }
-                  trigger={
-                    <button
-                      type="button"
-                      aria-label="Clouds and rain"
-                      aria-pressed={clouds}
-                      // On is the usual way: its icon says so, not a highlight.
-                      data-quiet
-                      className={styles.ToolButton}
-                      onClick={() => onCloudsChange(!clouds)}
-                    >
-                      <Icon name={clouds ? "cloud" : "cloudOff"} />
-                    </button>
-                  }
-                />
-                <Tip
-                  label={wind ? "Hide the wind" : "Show the wind"}
-                  trigger={
-                    <button
-                      type="button"
-                      aria-label="Wind"
-                      aria-pressed={wind}
-                      className={styles.ToolButton}
-                      onClick={() => onWindChange(!wind)}
-                    >
-                      <Icon name="air" />
-                    </button>
-                  }
-                />
-                <PanelButton panel="places" label="Places" icon="place" />
-                <PanelButton
-                  panel="transport"
-                  label="Follow transport"
-                  icon="commute"
-                />
-                <PanelButton panel="camera" label="Camera" icon="camera" />
-                <Tip
-                  label="Time travel"
-                  trigger={
-                    <button
-                      type="button"
-                      aria-label="Time travel"
-                      aria-expanded={travelling}
-                      className={styles.ToolButton}
-                      onClick={() => setTravelling((open) => !open)}
-                    >
-                      <Icon name={travelling ? "close" : "history"} />
+                      <Icon name="close" size={18} />
+                      <span className={styles.Wide}>Stop following</span>
+                      <span className={styles.Narrow}>Stop</span>
                     </button>
                   }
                 />
               </div>
+            )}
+            <div
+              ref={toolbar}
+              role="toolbar"
+              aria-label="Map"
+              className={`${styles.Glass} ${styles.Toolbar}`}
+            >
+              <Tip
+                label={
+                  <>
+                    {map ? "Leave map view" : "Map view"}
+                    <span className={styles.Kbd}>M</span>
+                  </>
+                }
+                trigger={
+                  <button
+                    type="button"
+                    aria-label="Map view"
+                    aria-pressed={map}
+                    className={styles.ToolButton}
+                    onClick={toggleMapView}
+                  >
+                    <Icon name="map" />
+                  </button>
+                }
+              />
+              <Tip
+                label={clouds ? "Hide clouds and rain" : "Show clouds and rain"}
+                trigger={
+                  <button
+                    type="button"
+                    aria-label="Clouds and rain"
+                    aria-pressed={clouds}
+                    // On is the usual way: its icon says so, not a highlight.
+                    data-quiet
+                    className={styles.ToolButton}
+                    onClick={() => onCloudsChange(!clouds)}
+                  >
+                    <Icon name={clouds ? "cloud" : "cloudOff"} />
+                  </button>
+                }
+              />
+              <Tip
+                label={wind ? "Hide the wind" : "Show the wind"}
+                trigger={
+                  <button
+                    type="button"
+                    aria-label="Wind"
+                    aria-pressed={wind}
+                    className={styles.ToolButton}
+                    onClick={() => onWindChange(!wind)}
+                  >
+                    <Icon name="air" />
+                  </button>
+                }
+              />
+              <PanelButton panel="places" label="Places" icon="place" />
+              <PanelButton
+                panel="transport"
+                label="Follow transport"
+                icon="commute"
+              />
+              <PanelButton panel="camera" label="Camera" icon="camera" />
+              <Tip
+                label="Time travel"
+                trigger={
+                  <button
+                    type="button"
+                    aria-label="Time travel"
+                    aria-expanded={travelling}
+                    className={styles.ToolButton}
+                    onClick={() => setTravelling((open) => !open)}
+                  >
+                    <Icon name={travelling ? "close" : "history"} />
+                  </button>
+                }
+              />
+              <PanelButton panel="info" label="About the data" icon="info" />
             </div>
           </div>
         </TimeTravel>
@@ -614,6 +582,7 @@ export const SceneControls: React.FC<{
                   )}
                   {payload === "transport" && <TransportPanel />}
                   {payload === "camera" && <CameraPanel />}
+                  {payload === "info" && <InfoPanel />}
                 </Popover.Viewport>
               </Popover.Popup>
             </Popover.Positioner>
