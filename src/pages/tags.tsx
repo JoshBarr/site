@@ -19,7 +19,7 @@ const Tags: React.FC<TagsPageProps> = ({ postsByTag }) => (
     <SEO title="Tags" thumbnail={undefined} />
     <div className="container generic-page ">
       <h1 className="section-top theme-text theme-display-weight space--large">
-        Articles by tag
+        Posts by tag
       </h1>
       <ul className="list-inline font-primary">
         {postsByTag.map((tag) => (

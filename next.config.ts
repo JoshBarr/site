@@ -19,6 +19,18 @@ const config: NextConfig = {
       "#wasm-multi-thread": NO_WASM,
     },
   },
+  /** Old addresses, from before the blog and about pages were renamed. */
+  async redirects() {
+    return [
+      { source: "/articles", destination: "/blog", permanent: true },
+      {
+        source: "/articles/:slug",
+        destination: "/blog/:slug",
+        permanent: true,
+      },
+      { source: "/work", destination: "/about", permanent: true },
+    ];
+  },
   async headers() {
     return [
       {

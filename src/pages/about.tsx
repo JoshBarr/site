@@ -10,29 +10,41 @@ import { LogoStedi } from "../components/logo-stedi";
 import { LogoXero } from "../components/logo-xero";
 import { LogoSpringload } from "../components/logo-springload";
 
-interface WorkPageProps {
+interface AboutPageProps {
   allPosts: PostMetaWithFrontMatter[];
 }
 
-const WorkPage: React.FC<WorkPageProps> = ({ allPosts }) => (
+const AboutPage: React.FC<AboutPageProps> = ({ allPosts }) => (
   <Layout theme="theme--hero">
-    <SEO title="Work" thumbnail={undefined} />
+    <SEO title="About" thumbnail={undefined} />
 
     <div className="hero theme-text relative">
       <div className="container grid relative">
         <h1 className="grid-span-12 grid-span-9@medium  hero__title font-display">
-          Event-driven systems, AWS architecture & API platforms.
-          <br />
+          Kia ora, I'm Josh.
         </h1>
         <p className="grid-span-12 grid-span-7@medium hero__subtitle font-display font-weight-normal">
-          I've built solutions for millions of users, and scaled systems to
-          billions of requests/month. I bring proven technical leadership and
-          left-field creativity to your organisation's most complex challenges.
+          It all started when I picked up a copy of Usborne's Build your own
+          Website in the school library. It blew my eleven-year-old mind that
+          you could build entire worlds with nothing more than notepad.exe. It
+          set me on a path of combining my love of the creative arts with
+          technology.
         </p>
         <p className="grid-span-12 grid-span-7@medium hero__subtitle font-display font-weight-normal">
-          Outside of work, you'll find me making music and exploring beautiful
-          natural environment of Aotearoa<span className="dim">/</span>New
-          Zealand.
+          Over the years, I've worked as a designer, educator, software
+          engineer, technical leader. I've built things for millions of users,
+          and scaled systems to billions of requests/month. Whatever the role,
+          it's always in service of making a great thing that people love to
+          use.
+        </p>
+        <p className="grid-span-12 grid-span-7@medium hero__subtitle font-display font-weight-normal">
+          Today, I work at{" "}
+          <a className="theme-link" href="https://www.stedi.com">
+            Stedi
+          </a>
+          , helping shape the future of healthcare. Outside of work, you'll find
+          me making music and exploring beautiful natural environment of
+          Aotearoa<span className="dim">/</span>New Zealand.
         </p>
         <ul className="list-inline hero__social grid-span-12">
           <li>
@@ -62,8 +74,20 @@ const WorkPage: React.FC<WorkPageProps> = ({ allPosts }) => (
           <div className="grid-span-12 hr"></div>
 
           <div className="grid-span-12 grid-span-3@medium theme-text">
+            <LogoStedi />
+            <p className="font-secondary tiny-caps mb0">2026 &ndash; Present</p>
+            <p className="font-secondary tiny-caps">stedi.com</p>
+          </div>
+          <p className="grid-span-9 grid-span-6@medium theme-text font-weight-normal">
+            Tech Lead, Accounts &amp; Identity Team.
+          </p>
+
+          <div className="grid-span-12 grid-span-3@medium theme-text"></div>
+          <div className="grid-span-12 hr"></div>
+
+          <div className="grid-span-12 grid-span-3@medium theme-text">
             <LogoVital />
-            <p className="font-secondary tiny-caps mb0">2023 &ndash; Present</p>
+            <p className="font-secondary tiny-caps mb0">2023 &ndash; 2026</p>
             <p className="font-secondary tiny-caps">vital.io</p>
           </div>
           <p className="grid-span-9 grid-span-6@medium theme-text font-weight-normal">
@@ -192,12 +216,8 @@ const WorkPage: React.FC<WorkPageProps> = ({ allPosts }) => (
               </div>
             );
           })}
-          <Link
-            className="theme-link tiny-caps"
-            href="/articles"
-            scroll={false}
-          >
-            All articles ⟶
+          <Link className="theme-link tiny-caps" href="/blog" scroll={false}>
+            All posts ⟶
           </Link>
         </div>
       </div>
@@ -205,7 +225,7 @@ const WorkPage: React.FC<WorkPageProps> = ({ allPosts }) => (
   </Layout>
 );
 
-export const getStaticProps: GetStaticProps<WorkPageProps> = async () => {
+export const getStaticProps: GetStaticProps<AboutPageProps> = async () => {
   const allPosts = (await getAllPosts()).slice(0, 1);
 
   return {
@@ -216,4 +236,4 @@ export const getStaticProps: GetStaticProps<WorkPageProps> = async () => {
   };
 };
 
-export default WorkPage;
+export default AboutPage;

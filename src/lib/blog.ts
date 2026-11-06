@@ -79,7 +79,7 @@ export async function getAllPosts(): Promise<PostMetaWithFrontMatter[]> {
     posts.push({
       ...frontMatter.parse(data),
       slug,
-      permalink: `/articles/${slug}`,
+      permalink: `/blog/${slug}`,
     });
   }
 

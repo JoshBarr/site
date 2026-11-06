@@ -117,21 +117,15 @@ const Header = ({ siteTitle, floating }: HeaderProps) => (
           {/* <Link className="theme-link" to="/services">Services</Link> */}
           <Link
             className="theme-link-selectable theme-link-secondary"
-            href="/work"
+            href="/about"
           >
-            Work
+            About
           </Link>
           <Link
             className="theme-link-selectable theme-link-secondary"
-            href="/articles"
+            href="/blog"
           >
-            Articles
-          </Link>
-          <Link
-            className="theme-link-selectable theme-link-secondary"
-            href="/bookmarks"
-          >
-            Bookmarks
+            Blog
           </Link>
         </nav>
       </div>

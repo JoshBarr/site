@@ -122,9 +122,7 @@ const Resume = () => (
         </li>
         <li>
           Shipping{" "}
-          <a href="https://joshbarr.com/articles/xero-navigation">
-            new navigation
-          </a>{" "}
+          <a href="https://joshbarr.com/blog/xero-navigation">new navigation</a>{" "}
           at Xero – "the biggest change to Xero in years"
         </li>
         <li>
@@ -160,23 +158,21 @@ const Resume = () => (
           Encouraging 30,000 young people to get out and vote, with{" "}
           <a
             target="_blank"
-            href="https://joshbarr.com/articles/getting-young-voters-off-the-fence"
+            href="https://joshbarr.com/blog/getting-young-voters-off-the-fence"
           >
             On The Fence
           </a>
         </li>
         <li>
           Designing in-flight touchscreen interfaces for{" "}
-          <a href="https://joshbarr.com/articles/air-new-zealand">
+          <a href="https://joshbarr.com/blog/air-new-zealand">
             Air New Zealand
           </a>
         </li>
         <li>
           Best Award – Outstanding, Student Graphic Design for{" "}
-          <a href="https://joshbarr.com/articles/akzidenz-baby">
-            Akzidenz Baby!
-          </a>
-          , 2009
+          <a href="https://joshbarr.com/blog/akzidenz-baby">Akzidenz Baby!</a>,
+          2009
         </li>
       </ul>
 
