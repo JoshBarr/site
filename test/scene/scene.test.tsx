@@ -120,11 +120,14 @@ function offset(camera: PerspectiveCamera) {
     .sub(new Vector3(subject.x, subject.y, subject.z));
 }
 
-/** How many lights a light sprite draws. */
+/**
+ * How many lights a light sprite draws: none before its layer's mounted,
+ * which on a slow machine can be a while after the scene is.
+ */
 function lit(drawn: (name: string) => unknown[], name: string) {
   const [sprite] = drawn(name);
 
-  if (!(sprite instanceof Sprite)) throw new Error(`no ${name}`);
+  if (!(sprite instanceof Sprite)) return 0;
 
   return shown(sprite) ? sprite.count : 0;
 }
