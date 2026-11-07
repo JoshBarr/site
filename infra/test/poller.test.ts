@@ -7,8 +7,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RouteEnd } from "../../src/lib/flights";
 import {
   buses,
+  clouds,
   flights,
   headings,
+  metar,
   routes,
   quakes,
   rain,
@@ -20,6 +22,7 @@ import {
   weather,
   windStations,
 } from "../../src/lib/liveRecords";
+import { parseMetar } from "../../src/lib/metar";
 import { toNztm } from "../../src/lib/nztm";
 import { HOUR, hourOf } from "../../src/lib/timeline";
 import { ago, freezeTime, NOW } from "../../test/clock";
@@ -33,6 +36,7 @@ import {
   TAXIING,
 } from "../../test/fixtures/adsb";
 import { answer, metlink, PLACES } from "../../test/fixtures/metlink";
+import { encodePng } from "../../test/fixtures/png";
 import { server } from "../../test/msw";
 import { Feed, makeFeeds } from "../poller/feeds";
 import { pollMinute } from "../poller/minute";
@@ -840,7 +844,7 @@ describe("the poller", () => {
 
       await run(feed.poll);
 
-      // For the start of the hour, with the key.
+      // For the hour nearest, with the key.
       expect(request?.headers.get("x-api-key")).toBe("metservice-key");
 
       expect(await request?.json()).toMatchObject({
@@ -865,12 +869,32 @@ describe("the poller", () => {
       expect(table.records(weather)).toHaveLength(2);
     });
 
+    it("asks again as soon as another hour's nearer, not half an hour on", async () => {
+      const feed = await coldFeed("weather");
+
+      freezeTime(NOW + 20 * 60_000);
+      await run(feed.poll);
+
+      freezeTime(NOW + 29 * 60_000);
+      await run(feed.poll);
+      expect(asked).toBe(1);
+
+      // 7:30: 8 o'clock's nearer.
+      freezeTime(NOW + 30 * 60_000);
+      await run(feed.poll);
+      expect(asked).toBe(2);
+
+      expect(await request?.json()).toMatchObject({
+        time: { from: "2026-11-02T08:00:00.000Z" },
+      });
+    });
+
     it("goes by the newest stored when it starts", async () => {
       table.seed(
         weather,
         ago(10 * 60),
         {
-          time: "2026-11-02T06:00:00.000Z",
+          time: "2026-11-02T07:00:00.000Z",
           cloudCover: 0,
           cloudBase: null,
           visibility: 30000,
@@ -1299,6 +1323,146 @@ describe("the poller", () => {
   });
 });
 
+describe("the poller's sky", () => {
+  beforeEach(() => {
+    table = makeTable();
+    bucket = makeBucket();
+    freezeTime();
+    vi.spyOn(console, "log").mockImplementation(() => {});
+  });
+
+  describe("metar", () => {
+    const LATEST = "https://aviationweather.gov/api/data/metar";
+
+    /** The newest report, observed `seconds` ago. */
+    let observed: number;
+    let asked: number;
+
+    beforeEach(() => {
+      observed = 20 * 60;
+      asked = 0;
+
+      server.use(
+        http.get(LATEST, () => {
+          asked++;
+
+          return HttpResponse.json([
+            {
+              obsTime: ago(observed) / 1000,
+              rawOb:
+                "METAR NZWN 020640Z AUTO 36017KT 9999 BKN015/// 18/14 Q1013",
+            },
+          ]);
+        })
+      );
+    });
+
+    it("logs each report once, asking every five minutes", async () => {
+      const feed = await coldFeed("metar");
+
+      await run(feed.poll);
+
+      expect(table.records(metar)[0].data).toMatchObject({
+        time: ago(20 * 60),
+        temperature: 18,
+        clouds: [{ cover: 0.75, base: 469 }],
+      });
+
+      freezeTime(NOW + 4 * 60_000);
+      await run(feed.poll);
+      expect(asked).toBe(1);
+
+      // Asked again, but it's the same report.
+      freezeTime(NOW + 5 * 60_000);
+      await run(feed.poll);
+      expect(asked).toBe(2);
+      expect(table.records(metar)).toHaveLength(1);
+
+      observed = -10 * 60;
+      freezeTime(NOW + 10 * 60_000);
+      await run(feed.poll);
+      expect(table.records(metar)).toHaveLength(2);
+    });
+
+    it("logs nothing when there's been no report", async () => {
+      server.use(
+        http.get(LATEST, () => new HttpResponse(null, { status: 204 }))
+      );
+
+      await run((await coldFeed("metar")).poll);
+
+      expect(table.records(metar)).toEqual([]);
+    });
+  });
+
+  describe("clouds", () => {
+    const SLIDER = "https://slider.cira.colostate.edu/data";
+
+    // 8 pm NZDT: the sun's low, so it's the cloud mask.
+    const PRODUCT = "cloud_mask_cira_clavr-x";
+
+    let scans: number[];
+    let tiles: number;
+
+    beforeEach(() => {
+      scans = [20261102064000];
+      tiles = 0;
+
+      const cloudy = encodePng(
+        688,
+        688,
+        new Uint8Array(688 * 688 * 4).fill(165),
+        {
+          type: 6,
+        }
+      );
+
+      server.use(
+        http.get(
+          `${SLIDER}/json/himawari/full_disk/${PRODUCT}/latest_times.json`,
+          () => HttpResponse.json({ timestamps_int: scans })
+        ),
+        http.get(`${SLIDER}/imagery/*`, () => {
+          tiles++;
+
+          return new HttpResponse(cloudy);
+        })
+      );
+    });
+
+    it("logs each scan once, looking every two minutes", async () => {
+      const feed = await coldFeed("clouds");
+
+      await run(feed.poll);
+
+      const [stored] = table.records(clouds);
+
+      expect(stored.data).toMatchObject({
+        time: Date.parse("2026-11-02T06:40:00Z"),
+        product: "mask",
+      });
+
+      expect(new Set(Buffer.from(stored.data.cells, "base64"))).toEqual(
+        new Set([255])
+      );
+
+      freezeTime(NOW + 60_000);
+      await run(feed.poll);
+
+      // Looked, but there's no newer scan.
+      freezeTime(NOW + 2 * 60_000);
+      await run(feed.poll);
+      expect(tiles).toBe(1);
+      expect(table.records(clouds)).toHaveLength(1);
+
+      scans = [20261102064000, 20261102065000];
+      freezeTime(NOW + 4 * 60_000);
+      await run(feed.poll);
+      expect(table.records(clouds)).toHaveLength(2);
+    });
+  });
+});
+
 describe("publishing the positions", () => {
   beforeEach(() => {
     table = makeTable();
@@ -1354,7 +1518,55 @@ describe("publishing the positions", () => {
       tide: null,
       rain: null,
       wind: null,
+      clouds: null,
     });
+  });
+
+  it("publishes the weather with the airport's METAR over it, and the cloud map", async () => {
+    table.seed(
+      weather,
+      ago(600),
+      {
+        time: "2026-11-02T07:00:00.000Z",
+        cloudCover: 0.3,
+        cloudBase: 900,
+        visibility: 30000,
+        humidity: 0.7,
+        precipitation: 0,
+        temperature: 14,
+        wind: { speed: 5, direction: 340 },
+        windAloft: { speed: 8, direction: 340 },
+      },
+      ago(600)
+    );
+
+    table.seed(
+      metar,
+      ago(900),
+      parseMetar(
+        "NZWN 020645Z AUTO 36010KT 9999 OVC010/// 16/12 Q1013",
+        ago(1100)
+      ),
+      ago(900)
+    );
+
+    const map = { time: ago(1200), product: "mask" as const, cells: "AAAA" };
+    table.seed(clouds, ago(300), map, ago(300));
+
+    const { publish } = await coldStart();
+
+    await run(publish.poll);
+
+    const published = bucket.published();
+
+    expect(published.weather).toMatchObject({
+      temperature: 16,
+      cloudCover: 1,
+      cloudBase: 317,
+      observed: ago(1100),
+    });
+
+    expect(published.clouds).toEqual(map);
   });
 
   it("publishes again only once something's new", async () => {

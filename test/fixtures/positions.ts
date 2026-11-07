@@ -22,6 +22,7 @@ const nothing: Positions = {
   tide: null,
   rain: null,
   wind: null,
+  clouds: null,
 };
 
 /** Answers for the positions with `respond`. */

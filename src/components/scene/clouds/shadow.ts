@@ -125,7 +125,7 @@ export function createCloudShadowMap(toSun) {
             cheap: true,
             erosion: EROSION,
             // The deck over measured rain shades what's under it.
-            lid: layer === low ? rainDeck(xz) : null,
+            lid: layer === low ? () => rainDeck(xz) : null,
           })
         );
       }

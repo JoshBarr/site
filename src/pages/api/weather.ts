@@ -4,9 +4,10 @@ import { cacheFor, replayTime } from "../../lib/replay";
 import type { Conditions } from "../../lib/weather";
 
 /**
- * Current Wellington weather for the homepage scene, from MetService, as
- * the AWS poller logged it (see lib/live.ts): it asks every half hour. Now,
- * or with `?at=<epoch ms>` then (lib/replay.ts).
+ * Current Wellington weather for the homepage scene: MetService's forecast,
+ * with Wellington Airport's METAR in its place while there's one lately, as
+ * the AWS poller logged them (see lib/live.ts). Now, or with
+ * `?at=<epoch ms>` then (lib/replay.ts).
  */
 export default async function handler(
   req: NextApiRequest,

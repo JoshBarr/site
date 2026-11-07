@@ -1,12 +1,15 @@
 import { foldBuses } from "./busStore";
 import type { Bus } from "./buses";
 import type { Timetable } from "./cablecar";
+import type { CloudMap } from "./cloudMap";
 import type { Aircraft, RouteEnd } from "./flights";
 import { foldFlights } from "./flightStore";
 import {
   buses,
   cableCar,
+  clouds,
   flights,
+  metar,
   quakes,
   rain,
   routePrefix,
@@ -21,6 +24,7 @@ import {
   windStations,
 } from "./liveRecords";
 import { canRead, readNewest, readOldest, readSince } from "./liveTable";
+import { withObserved } from "./metar";
 import { loadPositions, type Positions } from "./positions";
 import type { Quake } from "./quakes";
 import type { Rainfall } from "./rainGauges";
@@ -215,12 +219,35 @@ export const loadTraffic = (
     at
   );
 
-/** MetService's newest conditions at `at` (or now); null if there are none. */
+/**
+ * MetService's newest conditions at `at` (or now), with what the airport
+ * observed lately in their place (./metar.ts); null if there are none.
+ */
 export const loadWeather = (at?: number): Promise<Conditions | null> =>
   fromTable(
     "weather",
-    async () => (await readNewest(weather, "", at))?.data ?? null,
+    async () => {
+      const [forecast, observed] = await Promise.all([
+        readNewest(weather, "", at),
+        readNewest(metar, "", at),
+      ]);
+
+      return (
+        forecast &&
+        withObserved(forecast.data, observed?.data, at ?? Date.now())
+      );
+    },
+    // Published with it in.
     (positions) => positions.weather,
+    at
+  );
+
+/** Himawari's newest look at the cloud at `at` (or now); null if none. */
+export const loadClouds = (at?: number): Promise<CloudMap | null> =>
+  fromTable(
+    "clouds",
+    async () => (await readNewest(clouds, "", at))?.data ?? null,
+    (positions) => positions.clouds,
     at
   );
 

@@ -1,14 +1,17 @@
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Ref from "effect/Ref";
+import { fetchCloudMap } from "../../src/lib/cloudMap";
 import { HISTORY, type RouteEnd } from "../../src/lib/flights";
 import { fetchAirspace, LatLon, lookupRoutes } from "../../src/lib/flightStore";
 import {
   buses,
+  clouds,
   flights,
   headings,
   type LiveData,
   type LiveRecord,
+  metar,
   quakes,
   rain,
   routePrefix,
@@ -21,6 +24,7 @@ import {
   weather,
   windStations,
 } from "../../src/lib/liveRecords";
+import { fetchMetar } from "../../src/lib/metar";
 import { fetchBuses, fetchTrains } from "../../src/lib/metlink";
 import { fetchTraffic } from "../../src/lib/nzta";
 import { fetchQuakes } from "../../src/lib/quakes";
@@ -33,7 +37,7 @@ import {
   UNDER_WAY,
   type Vessel,
 } from "../../src/lib/vessels";
-import { getConditions } from "../../src/lib/weather";
+import { forecastHour, getConditions } from "../../src/lib/weather";
 import { fetchWind } from "../../src/lib/windStations";
 import type { LiveBucket } from "./positions";
 import { all, LiveTable, newest, put } from "./table";
@@ -54,7 +58,9 @@ type LogCollection =
   | typeof quakes
   | typeof tide
   | typeof rain
-  | typeof windStations;
+  | typeof windStations
+  | typeof metar
+  | typeof clouds;
 
 interface Spec<L extends LogCollection> {
   log: L;
@@ -384,7 +390,10 @@ const vesselsFeed = Effect.gen(function* () {
   });
 });
 
-/** How often MetService is asked, ms: its conditions are for the hour. */
+/**
+ * How often MetService is asked, ms, at least: its conditions are for the
+ * hour nearest, so they're asked for again as soon as that's another.
+ */
 const WEATHER_EVERY = 30 * 60_000;
 
 /** How often the tide gauge is asked, ms: the tide's carried on between. */
@@ -474,6 +483,15 @@ const rainFeed = Effect.gen(function* () {
  */
 const WIND_EVERY = 5 * 60_000;
 
+/**
+ * How often the airport's METAR is asked for, ms: it's sent on the hour and
+ * half hour, and reaches NOAA about four minutes later.
+ */
+const METAR_EVERY = 5 * 60_000;
+
+/** How often SLIDER's asked for a newer scan, ms: Himawari's every 10 min. */
+const CLOUDS_EVERY = 2 * 60_000;
+
 /** Every feed, made once per container, and what they know of routes. */
 export const makeFeeds = Effect.gen(function* () {
   const routeMemory: Routes = { known: new Map(), due: new Map() };
@@ -552,7 +570,13 @@ export const makeFeeds = Effect.gen(function* () {
         Effect.gen(function* () {
           const now = yield* Clock.currentTimeMillis;
 
-          if (previous && now - previous.sk < WEATHER_EVERY) return null;
+          if (
+            previous &&
+            now - previous.sk < WEATHER_EVERY &&
+            previous.data.time === forecastHour(now)
+          ) {
+            return null;
+          }
 
           return yield* Effect.tryPromise(getConditions);
         }),
@@ -591,6 +615,45 @@ export const makeFeeds = Effect.gen(function* () {
           if (previous && now - previous.sk < WIND_EVERY) return null;
 
           return yield* Effect.tryPromise(() => fetchWind(now));
+        }),
+    }),
+
+    // Written when there's a newer report: each one once.
+    metar: feed({
+      log: metar,
+      every: 60_000,
+      offset: 42_000,
+      window: 0,
+      poll: (previous) =>
+        Effect.gen(function* () {
+          const now = yield* Clock.currentTimeMillis;
+
+          if (previous && now - previous.sk < METAR_EVERY) return null;
+
+          const observed = yield* Effect.tryPromise(fetchMetar);
+
+          return observed && observed.time > (previous?.data.time ?? -1)
+            ? observed
+            : null;
+        }),
+    }),
+
+    // Written when there's a newer scan: each one once. Checking's a small
+    // JSON; a new one's a tile of 70–400 KB, about 3 s.
+    clouds: feed({
+      log: clouds,
+      every: 60_000,
+      offset: 44_000,
+      window: 0,
+      poll: (previous) =>
+        Effect.gen(function* () {
+          const now = yield* Clock.currentTimeMillis;
+
+          if (previous && now - previous.sk < CLOUDS_EVERY) return null;
+
+          return yield* Effect.tryPromise(() =>
+            fetchCloudMap(now, previous?.data.time)
+          );
         }),
     }),
   });

@@ -30,6 +30,7 @@ export const counter = ({ logs }: Feeds) =>
         vessels: logs.vessels.polls,
         traffic: logs.traffic.polls,
         weather: logs.weather.polls,
+        metar: logs.metar.polls,
         tide: logs.tide.polls,
         quakes: logs.quakes.polls,
       });
@@ -46,6 +47,7 @@ export const counter = ({ logs }: Feeds) =>
           vessels: polls.vessels.at(-1),
           traffic: polls.traffic.at(-1),
           weather: polls.weather.at(-1),
+          metar: polls.metar.at(-1),
           tide: polls.tide.at(-1),
         },
         now

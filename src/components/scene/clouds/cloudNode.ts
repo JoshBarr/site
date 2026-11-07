@@ -131,7 +131,8 @@ export function createCloudNode({
 }) {
   const density = (p, cheap = false) =>
     layerDensity(p, low, LOW_STYLE, {
-      lid: max(deckLid, rainDeck(p.xz)),
+      // An overcast deck closes where the satellite saw cloud.
+      lid: (share) => max(deckLid.mul(min(share, 1)), rainDeck(p.xz)),
       cheap,
     }).add(layerDensity(p, mid, MID_STYLE, { cheap }));
 

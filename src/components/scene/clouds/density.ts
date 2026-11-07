@@ -13,6 +13,7 @@ import {
   clamp,
   float,
   max,
+  min,
   mix,
   smoothstep,
   texture3D,
@@ -20,6 +21,7 @@ import {
   vec2,
   vec3,
 } from "three/tsl";
+import { cloudShare } from "./cloudField";
 import { coverageMap, LOW_ANGLE, MID_ANGLE } from "./coverage";
 
 // What the cloud layers are made of, shared by the cloud march and the
@@ -139,7 +141,8 @@ export const MID_STYLE: LayerStyle = {
  * reads the 3D noise where there can be cloud. `cheap` skips the detail
  * erosion, for samples toward the sun; `erosion` then takes off that much
  * evenly instead (the detail averages 0.5), for the cloud's outline from
- * afar. `lid` (0..1) closes the layer into an unbroken deck.
+ * afar. `lid` (0..1) closes the layer into an unbroken deck, given the
+ * share of the cover where the satellite saw cloud (./cloudField.ts).
  */
 export function layerDensity(
   p,
@@ -149,7 +152,11 @@ export function layerDensity(
     lid = null,
     cheap = false,
     erosion = 0,
-  }: { lid?: any; cheap?: boolean; erosion?: number } = {}
+  }: {
+    lid?: ((share: any) => any) | null;
+    cheap?: boolean;
+    erosion?: number;
+  } = {}
 ) {
   const { shape, offset } = layer;
   const { shape: shapeNoise, weather } = cloudNoise;
@@ -171,8 +178,10 @@ export function layerDensity(
     // cover is a few large clouds, not a scatter of small ones. Regions
     // narrow with height for rounded tops rather than columns. The soft
     // edge would still let the map's peaks through at no cover, so the last
-    // few percent fade out to clear sky.
-    const coverage = shape.z;
+    // few percent fade out to clear sky. Shared out to where the satellite
+    // saw cloud.
+    const share = cloudShare(p.xz);
+    const coverage = min(shape.z.mul(share), 1);
 
     const region = smoothstep(
       float(1).sub(coverage).sub(0.12),
@@ -184,7 +193,7 @@ export function layerDensity(
       .mul(mix(0.55, 0.9, coverage))
       .mul(float(1).sub(h.mul(0.45)));
 
-    const closing = lid ?? float(0);
+    const closing = lid ? lid(share) : float(0);
 
     If(cloudiness.greaterThan(0.01).or(closing.greaterThan(0.01)), () => {
       // Warp the bodies by the coverage map too, breaking up the cells.

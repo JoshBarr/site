@@ -56,6 +56,9 @@ function withOverrides(conditions: Conditions): Conditions {
   const base = number("base");
 
   if (base !== undefined) next.cloudBase = base;
+
+  // Tried out, the sky's the one asked for, not the one observed.
+  if (cloud !== undefined || base !== undefined) next.layers = null;
   const visibility = number("vis");
 
   if (visibility !== undefined) next.visibility = visibility;
@@ -86,13 +89,16 @@ function withOverrides(conditions: Conditions): Conditions {
 
 /**
  * How often the conditions are asked for again, ms. MetService's are
- * fetched every half hour; replaying, a step of this is close enough.
+ * fetched every half hour, the airport's METAR comes each half hour;
+ * replaying, a step of this is close enough.
  */
 const POLL = 10 * 60_000;
 
 /**
- * MetService's conditions at the scene's time (./clock.ts), asked for again
- * as it runs on and when it's set; the defaults until they arrive.
+ * MetService's conditions at the scene's time (./clock.ts), with the
+ * airport's observations in their place while it has some lately, asked
+ * for again as it runs on and when it's set; the defaults until they
+ * arrive.
  */
 export function useConditions(): Conditions {
   const seek = useSeek();
@@ -106,7 +112,8 @@ export function useConditions(): Conditions {
     let timer: ReturnType<typeof setTimeout>;
     let stopped = false;
     let asked = false;
-    // MetService's time for the conditions shown: the same again isn't news.
+    // The forecast's hour and the observation's time for the conditions
+    // shown: the same again isn't news.
     let shown: string | null = null;
 
     const poll = async () => {
@@ -122,8 +129,12 @@ export function useConditions(): Conditions {
             ? await response.json()
             : null;
 
-          if (latest && latest.time !== shown && !stopped) {
-            shown = latest.time;
+          const news = latest
+            ? `${latest.time}|${latest.observed ?? ""}`
+            : null;
+
+          if (latest && news !== shown && !stopped) {
+            shown = news;
             setConditions(withOverrides(withoutTrace(latest)));
           }
         } catch (e) {

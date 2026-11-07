@@ -4,6 +4,7 @@ import type {
   buses,
   flights,
   LiveData,
+  metar,
   quakes,
   tide,
   traffic,
@@ -11,6 +12,7 @@ import type {
   vessels,
   weather,
 } from "./liveRecords";
+import { withObserved } from "./metar";
 import { STALE as SPEEDS_STALE } from "./traffic";
 import { fresh as trainsShown } from "./trains";
 import { isStale as shipGone, UNDER_WAY } from "./vessels";
@@ -110,6 +112,7 @@ export interface Latest {
   vessels?: Poll<LiveData<typeof vessels>>;
   traffic?: Poll<LiveData<typeof traffic>>;
   weather?: Poll<LiveData<typeof weather>>;
+  metar?: Poll<LiveData<typeof metar>>;
   tide?: Poll<LiveData<typeof tide>>;
 }
 
@@ -138,10 +141,14 @@ function meanSpeed(links: Record<string, number>) {
  * aren't written overnight, when there's nothing new.
  */
 export function sample(latest: Latest, now: number): Sample {
-  const { trains, buses, flights, vessels, traffic, weather, tide } = latest;
+  const { trains, buses, flights, vessels, traffic, weather, metar, tide } =
+    latest;
 
+  // As the scene has them: the airport's observations over the forecast.
   const conditions =
-    weather && now - weather.sk < WEATHER_KEPT ? weather.data : null;
+    weather && now - weather.sk < WEATHER_KEPT
+      ? withObserved(weather.data, metar?.data, now)
+      : null;
 
   return {
     flights: flights

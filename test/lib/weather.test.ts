@@ -42,7 +42,7 @@ describe("MetService's conditions", () => {
     errors = vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
-  it("asks for the start of the hour over the CBD, with the key", async () => {
+  it("asks for the hour nearest over the CBD, with the key", async () => {
     const requests = metservice({});
 
     await getConditions();
@@ -53,7 +53,7 @@ describe("MetService's conditions", () => {
 
     expect(await request.json()).toMatchObject({
       points: [{ lon: 174.7787, lat: -41.276825 }],
-      time: { from: "2026-11-02T07:00:00.000Z", interval: "1h", repeat: 0 },
+      time: { from: "2026-11-02T08:00:00.000Z", interval: "1h", repeat: 0 },
       variables: expect.arrayContaining([
         "cloud.cover",
         "air.temperature.at-2m",
@@ -77,7 +77,7 @@ describe("MetService's conditions", () => {
     });
 
     expect(await getConditions()).toEqual({
-      time: "2026-11-02T07:00:00.000Z",
+      time: "2026-11-02T08:00:00.000Z",
       cloudCover: 0.625,
       cloudBase: 840,
       visibility: 12000,
@@ -93,7 +93,7 @@ describe("MetService's conditions", () => {
     metservice({ "cloud.cover": null, "air.temperature.at-2m": null });
 
     expect(await getConditions()).toEqual({
-      time: "2026-11-02T07:00:00.000Z",
+      time: "2026-11-02T08:00:00.000Z",
       cloudCover: 0,
       cloudBase: null,
       visibility: 30000,

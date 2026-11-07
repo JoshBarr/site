@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Fix } from "../../src/lib/flights";
+import { parseMetar } from "../../src/lib/metar";
 import {
   addSample,
   HOUR,
@@ -163,6 +164,41 @@ describe("the timeline", () => {
         rain: 1.5,
         cloud: 0.4,
         wind: 9,
+      });
+    });
+    it("goes by the airport's METAR for the temperature and cloud, while it's fresh", () => {
+      const weather = {
+        sk: ago(20 * 60),
+        data: {
+          time: "2026-11-02T07:00:00.000Z",
+          cloudCover: 0.4,
+          cloudBase: 900,
+          visibility: 30000,
+          humidity: 0.8,
+          precipitation: 1.5,
+          temperature: 14.2,
+          wind: { speed: 9, direction: 340 },
+          windAloft: { speed: 12, direction: 340 },
+        },
+      };
+
+      const observed = (seconds: number) => ({
+        sk: ago(seconds - 240),
+        data: parseMetar(
+          "NZWN 020630Z AUTO 36017KT 9999 OVC012/// 17/12 Q1013",
+          ago(seconds)
+        ),
+      });
+
+      expect(sample({ weather, metar: observed(30 * 60) }, NOW)).toMatchObject({
+        temperature: 17,
+        cloud: 1,
+        rain: 1.5,
+      });
+
+      expect(sample({ weather, metar: observed(80 * 60) }, NOW)).toMatchObject({
+        temperature: 14.2,
+        cloud: 0.4,
       });
     });
   });

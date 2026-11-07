@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Fix, RouteEnd } from "../../src/lib/flights";
 import {
+  clouds,
   flights,
+  metar,
   quakes,
   routes,
   sortTime,
@@ -14,6 +16,8 @@ import {
 } from "../../src/lib/liveRecords";
 import { HOUR, nzMidnight } from "../../src/lib/timeline";
 import type { Vessel } from "../../src/lib/vessels";
+import { parseMetar } from "../../src/lib/metar";
+import * as cloudsRoute from "../../src/pages/api/clouds";
 import * as flightsRoute from "../../src/pages/api/flights";
 import * as quakesRoute from "../../src/pages/api/quakes";
 import * as tideRoute from "../../src/pages/api/tide";
@@ -176,6 +180,61 @@ describe("the live API routes, from the table", () => {
     expect(await weatherResponse.json()).toEqual(conditions);
   });
 
+  it("serve the weather with the airport's newest METAR over it, while fresh", async () => {
+    const conditions = {
+      time: "2026-11-02T07:00:00.000Z",
+      cloudCover: 0.68,
+      cloudBase: 339,
+      visibility: 30000,
+      humidity: 0.87,
+      precipitation: 0,
+      temperature: 16.4,
+      wind: { speed: 10.2, direction: 329 },
+      windAloft: { speed: 15.4, direction: 327.1 },
+    };
+
+    table.seed(weather, ago(600), conditions);
+
+    table.seed(
+      metar,
+      ago(3000),
+      parseMetar("NZWN 020600Z AUTO 36017KT 9999 NCD 15/10 Q1013", ago(3300))
+    );
+
+    table.seed(
+      metar,
+      ago(1200),
+      parseMetar(
+        "NZWN 020630Z AUTO 36017KT 9999 BKN015/// 18/14 Q1013",
+        ago(1500)
+      )
+    );
+
+    const response = await call(weatherRoute);
+
+    expect(await response.json()).toMatchObject({
+      ...conditions,
+      temperature: 18,
+      humidity: expect.closeTo(0.77, 2),
+      cloudCover: 0.75,
+      cloudBase: 469,
+      layers: [{ cover: 0.75, base: 469 }],
+      observed: ago(1500),
+    });
+  });
+
+  it("serve the satellite's newest cloud map", async () => {
+    const map = { time: ago(900), product: "visible" as const, cells: "AAAA" };
+
+    table.seed(clouds, ago(1500), { ...map, time: ago(1800) });
+    table.seed(clouds, ago(600), map);
+
+    const response = await call(cloudsRoute);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(map);
+  });
+
   it("leave out polls written in a format they don't read", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     table.seed(trains, ago(10), { trains: [train(STATION, 12)] });
@@ -312,6 +371,37 @@ describe("the live API routes, from the table", () => {
       const weatherResponse = await call(weatherRoute, `/?at=${AT}`);
 
       expect(await weatherResponse.json()).toEqual(conditions(0.9));
+    });
+
+    it("serve the weather of then with the METAR of then over it", async () => {
+      table.seed(weather, ago(before(600)), conditions(0.9));
+
+      table.seed(
+        metar,
+        ago(before(900)),
+        parseMetar(
+          "NZWN 020530Z AUTO 36017KT 9999 SCT030 14/10 Q1013",
+          ago(before(1100))
+        )
+      );
+
+      // Observed since: not yet, then.
+      table.seed(
+        metar,
+        ago(60),
+        parseMetar(
+          "NZWN 020700Z AUTO 36017KT 9999 OVC005 11/10 Q1013",
+          ago(200)
+        )
+      );
+
+      const response = await call(weatherRoute, `/?at=${AT}`);
+
+      expect(await response.json()).toMatchObject({
+        cloudCover: 3.5 / 8,
+        temperature: 14,
+        observed: ago(before(1100)),
+      });
     });
 
     it("serve the tide of then", async () => {

@@ -24,6 +24,7 @@ import { z } from "zod";
 import {
   buses,
   flights,
+  metar,
   quakes,
   tide,
   timeline,
@@ -102,8 +103,9 @@ async function main() {
   );
 
   // Small and seldom written: read whole.
-  const [weathers, tides, quakeLists] = await Promise.all([
+  const [weathers, observations, tides, quakeLists] = await Promise.all([
     readSince(weather, from - 3_600_000, to),
+    readSince(metar, from - 3_600_000, to),
     readSince(tide, from - 3_600_000, to),
     readSince(quakes, from - 3_600_000, to),
   ]);
@@ -135,6 +137,7 @@ async function main() {
       vessels: v ?? undefined,
       traffic: s ?? undefined,
       weather: asOf(weathers, at),
+      metar: asOf(observations, at),
       tide: asOf(tides, at),
     };
 

@@ -81,6 +81,22 @@ export const LIVE_CREDITS: Credit[] = [
     who: [{ name: "MetService", href: "https://www.metservice.com" }],
   },
   {
+    what: "Wellington Airport's observations",
+    who: [
+      {
+        name: "NOAA's Aviation Weather Center",
+        href: "https://aviationweather.gov",
+      },
+    ],
+  },
+  {
+    what: "where the cloud is, from Himawari-9",
+    who: [
+      { name: "JMA", href: "https://www.jma.go.jp/jma/indexe.html" },
+      { name: "CIRA's SLIDER", href: "https://slider.cira.colostate.edu" },
+    ],
+  },
+  {
     what: "rain gauges",
     who: [
       {

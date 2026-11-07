@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { CloudLayer } from "./metar";
 import { readJson } from "./schemas";
 
 /** Current weather for the homepage scene. Units: metres, m/s, degrees, 0..1. */
@@ -23,6 +24,14 @@ export interface Conditions {
   wind: { speed: number; direction: number };
   /** At 100m: drives the clouds. */
   windAloft: { speed: number; direction: number };
+  /**
+   * The cloud's layers as the airport's ceilometer saw them lately
+   * (./metar.ts), lowest first: empty for none seen. Missing or null when
+   * it's all forecast, which gives a cover and base, not layers.
+   */
+  layers?: CloudLayer[] | null;
+  /** When what's observed in them was, epoch ms; missing or null if none. */
+  observed?: number | null;
 }
 
 const CONDITION_VARIABLES = [
@@ -46,6 +55,15 @@ const forecast = z.object({
   ),
 });
 
+const HOUR = 3_600_000;
+
+/**
+ * The hour whose forecast is nearest `now` (epoch ms), as MetService's
+ * times are written: within half an hour, either way.
+ */
+export const forecastHour = (now = Date.now()) =>
+  new Date(Math.round(now / HOUR) * HOUR).toISOString();
+
 export async function getConditions(): Promise<Conditions | null> {
   const apiKey = process.env.METSERVICE_API_KEY;
 
@@ -55,8 +73,7 @@ export async function getConditions(): Promise<Conditions | null> {
     return null;
   }
 
-  const hour = new Date();
-  hour.setUTCMinutes(0, 0, 0);
+  const hour = forecastHour();
 
   try {
     const response = await fetch(
@@ -67,7 +84,7 @@ export async function getConditions(): Promise<Conditions | null> {
         body: JSON.stringify({
           points: [{ lon: 174.7787, lat: -41.276825 }],
           variables: CONDITION_VARIABLES,
-          time: { from: hour.toISOString(), interval: "1h", repeat: 0 },
+          time: { from: hour, interval: "1h", repeat: 0 },
         }),
       }
     );
@@ -90,7 +107,7 @@ export async function getConditions(): Promise<Conditions | null> {
     const kelvin = value("air.temperature.at-2m");
 
     return {
-      time: hour.toISOString(),
+      time: hour,
       cloudCover: (value("cloud.cover") ?? 0) / 100,
       cloudBase: value("cloud.base.height"),
       visibility: value("air.visibility") ?? 30000,

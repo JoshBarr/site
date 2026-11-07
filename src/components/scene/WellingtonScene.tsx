@@ -62,6 +62,8 @@ import { Quakes } from "./quakes/Quakes";
 import { OceanConditions, significantHeight } from "./ocean/spectrum";
 import { Clouds } from "./clouds/Clouds";
 import { useMeasuredWind } from "./wind/stations";
+import type { SeenClouds } from "./clouds/cloudField";
+import { useSeenClouds } from "./clouds/seenClouds";
 import { Wind, WIND_DESKTOP, WIND_MOBILE } from "./wind/Wind";
 import type { TileCache } from "./terrain/TileCache";
 import { CLOUDS_DESKTOP, CLOUDS_MOBILE } from "./clouds/cloudNode";
@@ -1724,6 +1726,7 @@ export function Scene({
   index,
   conditions,
   gauges = null,
+  seen = null,
   time,
   mobile,
   wind = false,
@@ -1732,6 +1735,8 @@ export function Scene({
   conditions: Conditions;
   /** The rain gauges, null to go by the forecast. */
   gauges?: Gauge[] | null;
+  /** Where the satellite saw cloud, null to spread it evenly. */
+  seen?: SeenClouds | null;
   time: Date;
   mobile: boolean;
   /** Trails of the wind blowing over the land and sea. */
@@ -1872,6 +1877,7 @@ export function Scene({
       <Clouds
         conditions={conditions}
         gauges={placed}
+        seen={seen}
         quality={mobile ? CLOUDS_MOBILE : CLOUDS_DESKTOP}
         night={lights}
         hidden={map}
@@ -1920,6 +1926,7 @@ export const WellingtonScene: React.FC<{
   const measured = useRainGauges();
   // No clouds, no rain.
   const gauges = clouds ? measured : null;
+  const seen = useSeenClouds();
   // The wind at sea, as the weather stations have it.
   const blowing = useMeasuredWind(forecast.wind);
 
@@ -1978,6 +1985,7 @@ export const WellingtonScene: React.FC<{
             index={index}
             conditions={conditions}
             gauges={gauges}
+            seen={clouds ? seen : null}
             time={time}
             mobile={mobile}
             wind={wind}

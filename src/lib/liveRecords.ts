@@ -2,8 +2,10 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import { z } from "zod";
 import type { Bus } from "./buses";
 import type { CableCarTrip, Timetable } from "./cablecar";
+import type { CloudMap } from "./cloudMap";
 import type { Fix, RouteEnd } from "./flights";
 import type { Sighting } from "./flightStore";
+import type { CloudLayer, Observation } from "./metar";
 import type { Quake } from "./quakes";
 import type { Gauge, Rainfall } from "./rainGauges";
 import { orbit } from "./satellites";
@@ -221,6 +223,27 @@ export const speeds = z.object({
   legs: z.record(z.string(), z.number()),
 }) satisfies z.ZodType<TrafficSpeeds>;
 
+const cloudLayer = z.object({
+  cover: z.number(),
+  base: z.number(),
+}) satisfies z.ZodType<CloudLayer>;
+
+const observation = z.object({
+  time: z.number(),
+  temperature: z.number().nullable(),
+  dewpoint: z.number().nullable(),
+  visibility: z.number().nullable(),
+  clouds: z.array(cloudLayer),
+  weather: z.array(z.string()),
+  raw: z.string(),
+}) satisfies z.ZodType<Observation>;
+
+export const cloudMap = z.object({
+  time: z.number(),
+  product: z.enum(["visible", "mask"]),
+  cells: z.string(),
+}) satisfies z.ZodType<CloudMap>;
+
 export const conditions = z.object({
   time: z.string(),
   cloudCover: z.number(),
@@ -231,6 +254,8 @@ export const conditions = z.object({
   temperature: z.number().nullable().optional(),
   wind,
   windAloft: wind,
+  layers: z.array(cloudLayer).nullable().optional(),
+  observed: z.number().nullable().optional(),
 }) satisfies z.ZodType<Conditions>;
 
 export const quake = z.object({
@@ -291,6 +316,12 @@ export const rain = log("rain", gauges);
 
 /** The wind at each of GWRC's weather stations, every five minutes. */
 export const windStations = log("wind", windReadings);
+
+/** Wellington Airport's METAR, each half-hourly one once. */
+export const metar = log("metar", observation);
+
+/** Where Himawari saw cloud over the map, each scan once (every 10 min). */
+export const clouds = log("cloudmap", cloudMap);
 
 /** Every airport on a callsign's route, or null if adsb.im doesn't know it. */
 export const routes = collection("routes", 1, {

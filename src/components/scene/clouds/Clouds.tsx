@@ -10,6 +10,13 @@ import { quakeWarp } from "../quakes/glow";
 import { tvScreen } from "../time/tv";
 import { switchedOff } from "../stats";
 import { Conditions, lowCloudBase, windVector } from "../weather";
+import { sceneNow } from "../clock";
+import {
+  cloudField,
+  pullFor,
+  type SeenClouds,
+  setCloudField,
+} from "./cloudField";
 import { CloudQuality, createCloudNode } from "./cloudNode";
 import {
   CloudLayerUniforms,
@@ -75,10 +82,22 @@ function useCloudNoise() {
 }
 
 /**
- * MetService gives total cover and a cloud base, not layers, so share the
- * cover out: low cloud sits on the reported base (often wrapping the hills),
- * cumulus above it, and a cirrus sheet that's nearly always faintly there.
- * Not `shown`, the sky's no less overcast, but there's no cloud to see.
+ * A layer above one as cloudy hides how much it adds: it's taken as this
+ * share of its cover.
+ */
+const HIDDEN = 0.5;
+
+const unit = (value: number) => Math.min(Math.max(value, 0), 1);
+
+/**
+ * Shares the cover out into the layers. Observed (the airport's METAR), the
+ * lowest layer's the low cloud, on its base, and those above it the
+ * cumulus: each counts the cloud under it too, so what a layer adds is its
+ * share of the sky those under it leave. Forecast, there's only the total
+ * cover and a cloud base: low cloud sits on the base (often wrapping the
+ * hills), cumulus above it. Either way a cirrus sheet's nearly always
+ * faintly there. Not `shown`, the sky's no less overcast, but there's no
+ * cloud to see.
  */
 function applyConditions(
   conditions: Conditions,
@@ -87,16 +106,41 @@ function applyConditions(
   mid: CloudLayerUniforms,
   cirrus: CloudLayerUniforms
 ) {
-  overcast.value = overcastFor(Math.min(Math.max(conditions.cloudCover, 0), 1));
-  deckLid.value = shown ? overcast.value : 0;
-  const cover = shown ? Math.min(Math.max(conditions.cloudCover, 0), 1) : 0;
+  const total = unit(conditions.cloudCover);
+  const observed = conditions.layers;
+  const [lowest, ...above] = observed ?? [];
+  const cover = shown ? total : 0;
+  const lowSky = observed ? (lowest?.cover ?? 0) : total;
+  const lowCover = shown ? lowSky : 0;
+  // Observed, only the lowest layer overcast closes it into a deck.
+  const lid = overcastFor(lowSky);
+
+  overcast.value = overcastFor(total);
+  deckLid.value = shown ? lid : 0;
   const base = lowCloudBase(conditions);
   // A full deck is thick; broken cloud is shallower.
-  const lowTop = base + 250 + 600 * cover + 400 * overcast.value;
-  low.shape.value.set(base, lowTop, cover * 0.95, 1);
+  const lowTop = base + 250 + 600 * lowCover + 400 * lid;
+  low.shape.value.set(base, lowTop, lowCover * 0.95, 1);
 
-  const midBase = Math.max(lowTop + 400, 1800);
-  mid.shape.value.set(midBase, midBase + 900 + 1200 * cover, cover * 0.4, 0.8);
+  const highest = above.at(-1);
+
+  if (observed && highest) {
+    const adds =
+      highest.cover > lowSky && lowSky < 1
+        ? (highest.cover - lowSky) / (1 - lowSky)
+        : highest.cover * HIDDEN;
+
+    const midBase = Math.max(above[0].base, lowTop + 100);
+    const midTop = Math.max(midBase + 900 + 1200 * adds, highest.base + 600);
+
+    mid.shape.value.set(midBase, midTop, shown ? adds * 0.7 : 0, 0.8);
+  } else {
+    // Observed with nothing above the lowest, there's only a trace.
+    const midCover = observed ? cover * 0.1 : cover * 0.4;
+    const midBase = Math.max(lowTop + 400, 1800);
+
+    mid.shape.value.set(midBase, midBase + 900 + 1200 * cover, midCover, 0.8);
+  }
 
   // No cover at all is a clear sky, cirrus too.
   cirrus.shape.value.set(7500, cover > 0 ? 0.15 + 0.45 * cover : 0, 0, 0);
@@ -110,16 +154,20 @@ function applyConditions(
  * light still as dull as the cover makes it, for looking down through them.
  * With `gauges`, the rain's where and as hard as they measure it
  * (./rainField.ts), whatever the forecast says; without, it's the forecast's.
+ * With what the satellite `seen`, the cloud's where it saw it
+ * (./cloudField.ts).
  */
 export function Clouds({
   conditions: forecast,
   gauges = null,
+  seen = null,
   quality,
   night = 0,
   hidden = false,
 }: {
   conditions: Conditions;
   gauges?: PlacedGauge[] | null;
+  seen?: SeenClouds | null;
   quality: CloudQuality;
   night?: number;
   hidden?: boolean;
@@ -130,6 +178,23 @@ export function Clouds({
   const noiseReady = useCloudNoise();
 
   const rain = useMemo(createRainUniforms, []);
+
+  // A shared texture too; its pull fades as the scan ages.
+  useEffect(() => {
+    if (!seen) {
+      setCloudField(null);
+
+      return;
+    }
+
+    setCloudField(seen, sceneNow() - seen.time);
+
+    const timer = setInterval(() => {
+      cloudField.pull.value = pullFor(sceneNow() - seen.time);
+    }, 60_000);
+
+    return () => clearInterval(timer);
+  }, [seen]);
 
   // The field's a shared texture, filled as the gauges change.
   const measured = useMemo(() => setRainField(gauges), [gauges]);

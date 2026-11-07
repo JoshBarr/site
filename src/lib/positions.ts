@@ -3,6 +3,7 @@ import type { Aircraft } from "./flights";
 import {
   aircraftDetails,
   busFix,
+  cloudMap,
   conditions,
   fix,
   gauges,
@@ -40,7 +41,7 @@ export const positions = z.object({
   vessels: z.array(vessel),
   /** Null until NZTA's been heard from. */
   traffic: speeds.extend({ fetched: z.number() }).nullable(),
-  /** Null until MetService has. */
+  /** Null until MetService has; with the airport's METAR in it, if lately. */
   weather: conditions.nullable(),
   /** Missing from those published before quakes were polled. */
   quakes: z.array(quake).default([]),
@@ -50,6 +51,8 @@ export const positions = z.object({
   rain: gauges.nullable().default(null),
   /** Null until the weather stations have been heard from. */
   wind: windReadings.nullable().default(null),
+  /** Null until Himawari's been looked at. */
+  clouds: cloudMap.nullable().default(null),
 });
 
 export type Positions = z.infer<typeof positions>;
