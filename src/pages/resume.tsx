@@ -2,12 +2,24 @@ import React from "react";
 
 import SEO from "../components/seo";
 import styles from "./resume.module.css";
-import { Merriweather } from "next/font/google";
+import localFont from "next/font/local";
 
-const merriweather = Merriweather({
-  subsets: ["latin"],
-  weight: ["300", "400", "700"],
-  style: ["normal", "italic"],
+// Merriweather's latin subset (v33, variable weight), from Google Fonts but
+// served from here: next/font/google broke Vercel's Turbopack build on it.
+const merriweather = localFont({
+  src: [
+    {
+      path: "../fonts/merriweather-latin.woff2",
+      weight: "300 700",
+      style: "normal",
+    },
+    {
+      path: "../fonts/merriweather-latin-italic.woff2",
+      weight: "300 700",
+      style: "italic",
+    },
+  ],
+  fallback: ["georgia", "serif"],
 });
 
 const Resume = () => (
