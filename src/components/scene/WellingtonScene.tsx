@@ -1933,7 +1933,10 @@ export const WellingtonScene: React.FC<{
   const conditions = useMemo(() => {
     const now = { ...forecast, wind: blowing };
 
-    return clouds ? now : { ...now, cloudCover: 0, precipitation: 0 };
+    // The airport's observed layers too, or Clouds builds its decks from them.
+    return clouds
+      ? now
+      : { ...now, cloudCover: 0, precipitation: 0, layers: null };
   }, [forecast, blowing, clouds]);
 
   const time = useSceneTime();
