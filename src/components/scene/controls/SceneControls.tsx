@@ -39,11 +39,11 @@ import { Icon, IconName } from "./icons";
 import styles from "./SceneControls.module.css";
 
 // The scene's controls, bottom right: the map view, clouds and wind switches; a
-// button each for places, following transport and the camera, opening its panel in one popover
-// that moves and resizes from one to the next; one for the time-travel
-// drawer, which they ride up on; and Info, where the data's from, in the same
-// popover. While replaying or following, a pill saying when or what, with the
-// way back.
+// button each for places, following transport, the camera and Info (where the
+// data's from), opening its panel in one popover that moves and resizes from
+// one to the next; and last, one for the time-travel drawer, which they ride up
+// on. While replaying or following, a pill saying when or what, with the way
+// back.
 
 type PanelId = "places" | "transport" | "camera" | "info";
 
@@ -532,6 +532,7 @@ export const SceneControls: React.FC<{
                 icon="commute"
               />
               <PanelButton panel="camera" label="Camera" icon="camera" />
+              <PanelButton panel="info" label="About the data" icon="info" />
               <Tip
                 label="Time travel"
                 trigger={
@@ -546,7 +547,6 @@ export const SceneControls: React.FC<{
                   </button>
                 }
               />
-              <PanelButton panel="info" label="About the data" icon="info" />
             </div>
           </div>
         </TimeTravel>
