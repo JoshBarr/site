@@ -46,6 +46,30 @@ const CLEARANCE = 30;
 /** Most bank drawn, radians; airliners turn at 25–30°. */
 const MAX_BANK = (35 * Math.PI) / 180;
 
+/**
+ * On the ground, fixes closer than this, metres, are the aircraft standing
+ * still: it keeps the heading it had.
+ */
+const STILL = 3;
+
+/**
+ * On the ground, a fix's tangent is at most this many times as long as the
+ * way to the next fix: any longer and the curve can overshoot it.
+ */
+const GROUND_TANGENT = 1.5;
+
+/** Fastest an aircraft turns on the ground, radians a second. */
+const GROUND_TURN_RATE = (30 * Math.PI) / 180;
+
+/** Pushed back no faster than this, m/s; taxiing is 4–10. */
+const PUSHBACK_SPEED = 3.5;
+
+/**
+ * Going this far off the way the nose is reported to point, radians, from
+ * standing still, is being pushed back.
+ */
+const PUSHBACK_ANGLE = (135 * Math.PI) / 180;
+
 export interface Path {
   /** Seconds since `epoch` the path was built against, increasing. */
   t: Float64Array;
@@ -82,6 +106,8 @@ interface Point {
   p: [number, number, number];
   /** Velocity, m/s; null components aren't known. */
   v: [number | null, number | null, number | null];
+  /** Reported track, radians clockwise from north; null if unknown. */
+  track: number | null;
   ground: boolean;
   groundHeight: number;
 }
@@ -115,15 +141,65 @@ function toPoint(
       ground ? 0 : climb,
       course === null ? null : -Math.cos(course) * speed,
     ],
+    track: course,
     ground,
     groundHeight,
   };
+}
+
+const bearing = (a: Point, b: Point) =>
+  Math.atan2(b.p[0] - a.p[0], -(b.p[2] - a.p[2]));
+
+const apart = (a: Point, b: Point) =>
+  Math.hypot(b.p[0] - a.p[0], b.p[2] - a.p[2]);
+
+/**
+ * On the ground, the way between fixes: adsb.lol's track lags a turn by a
+ * fix or more, and is the way the nose points while it's pushed back, so a
+ * curve along it loops back on itself. Each fix goes the way its neighbours
+ * lie instead, at its reported speed (slow as a pushback is); standing
+ * still, nowhere.
+ */
+function groundVelocity(points: Point[], i: number): Point["v"] {
+  const point = points[i];
+
+  const near = (j: number) =>
+    j >= 0 && j < points.length && Math.abs(points[j].t - point.t) <= MAX_GAP;
+
+  const a = near(i - 1) ? points[i - 1] : point;
+  const b = near(i + 1) ? points[i + 1] : point;
+
+  if (apart(a, b) < STILL) return [0, 0, 0];
+  const way = bearing(a, b);
+  const speed = speedOf(point);
+
+  return [Math.sin(way) * speed, 0, -Math.cos(way) * speed];
+}
+
+/**
+ * Whether the aircraft's being pushed back from `a` to `b`: on the ground,
+ * slowly, against the way its nose points, and from standing still or
+ * carrying on from a pushback.
+ */
+function pushedBack(a: Point, b: Point, before: Point | null, was: boolean) {
+  if (!a.ground || !b.ground || a.track === null) return false;
+  const moved = apart(a, b);
+
+  if (moved < STILL || moved / Math.max(b.t - a.t, 1e-3) > PUSHBACK_SPEED) {
+    return false;
+  }
+
+  if (Math.abs(wrap(bearing(a, b) - a.track)) < PUSHBACK_ANGLE) return false;
+
+  return was || !before || apart(before, a) < STILL;
 }
 
 /**
  * Cubic Hermite between two fixes, using their reported velocities as
  * tangents so turns come out round. A tangent that disagrees wildly with
  * where the aircraft actually went is scaled back, so bad data can't loop.
+ * On the ground, where fixes are close together for the speed, tangents are
+ * kept short enough that the curve never runs past a fix and back.
  */
 function hermite(a: Point, b: Point, u: number, out: number[]) {
   const dt = b.t - a.t;
@@ -133,19 +209,28 @@ function hermite(a: Point, b: Point, u: number, out: number[]) {
   const h10 = u3 - 2 * u2 + u;
   const h01 = -2 * u3 + 3 * u2;
   const h11 = u3 - u2;
+  const chord = [0, 1, 2].map((k) => b.p[k] - a.p[k]);
+  const ground = a.ground && b.ground;
+
+  const tangent = ({ v }: Point) => {
+    const t = chord.map((c, k) => {
+      const limit = Math.abs(c) * 1.5 + 30;
+      const vk = v[k];
+
+      return vk === null ? c : Math.max(-limit, Math.min(limit, vk * dt));
+    });
+
+    const most = Math.hypot(chord[0], chord[2]) * GROUND_TANGENT;
+    const length = Math.hypot(t[0], t[2]);
+
+    return ground && length > most ? t.map((c) => (c * most) / length) : t;
+  };
+
+  const ta = tangent(a);
+  const tb = tangent(b);
 
   for (let k = 0; k < 3; k++) {
-    const chord = b.p[k] - a.p[k];
-    const limit = Math.abs(chord) * 1.5 + 30;
-
-    const tangent = (v: number | null) =>
-      v === null ? chord : Math.max(-limit, Math.min(limit, v * dt));
-
-    out[k] =
-      h00 * a.p[k] +
-      h10 * tangent(a.v[k]) +
-      h01 * b.p[k] +
-      h11 * tangent(b.v[k]);
+    out[k] = h00 * a.p[k] + h10 * ta[k] + h01 * b.p[k] + h11 * tb[k];
   }
 }
 
@@ -172,11 +257,18 @@ export function buildPath(
     if (!parked(a) || !parked(b)) continue;
     const moved = Math.hypot(b.p[0] - a.p[0], b.p[2] - a.p[2]);
 
+    // Either's speed: a pushback starts from nothing at a fix or two m/s.
     const explained =
-      PARKED_JITTER + ((speedOf(a) + speedOf(b)) / 2) * (b.t - a.t);
+      PARKED_JITTER + Math.max(speedOf(a), speedOf(b)) * (b.t - a.t);
 
     if (moved > explained && moved < PARKED_DRIFT) {
       points[i] = { ...b, p: [...a.p], groundHeight: a.groundHeight };
+    }
+  }
+
+  for (let i = 0; i < points.length; i++) {
+    if (points[i].ground) {
+      points[i] = { ...points[i], v: groundVelocity(points, i) };
     }
   }
 
@@ -185,7 +277,8 @@ export function buildPath(
   // just off the runway.
   const last = points[points.length - 1];
   const hold = parked(last) ? PARKED_HOLD : EXTRAPOLATE;
-  const [vx, vy, vz] = last.v.map((v) => v ?? 0);
+  // Parked, it stays put: a fix at a stand can still say 0.6 m/s.
+  const [vx, vy, vz] = last.v.map((v) => (parked(last) ? 0 : (v ?? 0)));
 
   const ahead = [
     last.p[0] + vx * hold,
@@ -211,12 +304,18 @@ export function buildPath(
   const joined: number[] = [];
   const groundHeight: number[] = [];
   const course: (number | null)[] = [];
+  /** 1 where moving between fixes on the ground, 2 where pushed back. */
+  const taxi: number[] = [];
   const out = [0, 0, 0];
+  let backing = false;
 
   for (let i = 0; i < points.length - 1; i++) {
     const a = points[i];
     const b = points[i + 1];
     const dt = b.t - a.t;
+
+    backing = pushedBack(a, b, i > 0 ? points[i - 1] : null, backing);
+    const moving = a.ground && b.ground && apart(a, b) >= STILL;
 
     const stayed =
       parked(a) &&
@@ -245,8 +344,8 @@ export function buildPath(
       ground.push(onGround ? 1 : 0);
       groundHeight.push(below);
       joined.push(gap ? 0 : 1);
-      const [vx, , vz] = a.v;
-      course.push(vx === null || vz === null ? null : Math.atan2(vx, -vz));
+      course.push(a.track);
+      taxi.push(backing ? 2 : moving ? 1 : 0);
     }
   }
 
@@ -256,6 +355,7 @@ export function buildPath(
   groundHeight.push(points[points.length - 1].groundHeight);
   joined.push(0);
   course.push(null);
+  taxi.push(0);
 
   const n = t.length;
 
@@ -274,9 +374,12 @@ export function buildPath(
     ),
   };
 
-  // Attitude from the path itself: heading along it, pitch with the climb,
-  // and bank into turns. Standing still, keep the reported heading.
+  // Attitude from the path itself: heading along it (backwards when pushed
+  // back), pitch with the climb, and bank into turns. In the air and slow,
+  // the reported heading; on the ground, until it first moves, then the
+  // heading it had when it stopped.
   let heading = course.find((c) => c !== null) ?? 0;
+  let taxied = false;
   const speed = new Float32Array(n);
 
   for (let i = 0; i < n; i++) {
@@ -289,10 +392,31 @@ export function buildPath(
     const dt = Math.max(path.t[j] - path.t[k], 1e-3);
     speed[i] = along / dt;
 
-    if (speed[i] > 3) heading = Math.atan2(dx, -dz);
-    else heading = course[i] ?? heading;
-    path.heading[i] = heading;
+    if (path.ground[i] && taxi[i]) {
+      taxied = true;
+
+      if (along > 1e-3) {
+        heading = Math.atan2(dx, -dz) + (taxi[i] === 2 ? Math.PI : 0);
+      }
+    } else if (speed[i] > 3 && !path.ground[i]) {
+      heading = Math.atan2(dx, -dz);
+    } else if (!(path.ground[i] && taxied)) heading = course[i] ?? heading;
+    path.heading[i] = wrap(heading);
     path.pitch[i] = path.ground[i] || along < 1 ? 0 : Math.atan2(dy, along);
+  }
+
+  // A glitch in the fixes can still corner the path sharply on the ground:
+  // aircraft there turn no faster than this.
+  for (let i = 1; i < n; i++) {
+    if (!path.ground[i] || !path.ground[i - 1] || !path.joined[i - 1]) {
+      continue;
+    }
+
+    const most = GROUND_TURN_RATE * (path.t[i] - path.t[i - 1]);
+    const turn = wrap(path.heading[i] - path.heading[i - 1]);
+    path.heading[i] = wrap(
+      path.heading[i - 1] + Math.max(-most, Math.min(most, turn))
+    );
   }
 
   if (clear) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { keepLeft } from "../../src/components/scene/buses/run";
+import { keepLeft } from "../../src/components/scene/buses/side";
 import type { Point } from "../../src/components/scene/trains/network";
 
 describe("keepLeft", () => {

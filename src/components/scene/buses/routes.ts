@@ -1,6 +1,7 @@
 import { nztmToWorld, TileIndex } from "../terrain/manifest";
 import { verticalScale } from "../terrain/Terrain";
 import type { Point } from "../trains/network";
+import { pullInAtStops } from "./side";
 
 // Metlink's bus routes, from public/buses/routes.json (built by
 // scripts/buses/build_routes.mjs): the roads each route's trips drive, as
@@ -182,7 +183,7 @@ export class BusRoutes {
         points.push(...(points.length ? along.slice(1) : along));
       }
 
-      shape = new IndexedShape(points);
+      shape = new IndexedShape(pullInAtStops(points));
       this.shapes.set(i, shape);
     }
 
