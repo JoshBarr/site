@@ -694,11 +694,15 @@ h1 {
 }
 
 .hero__title {
-  /* font-size: 50px; */
   font-weight: 700;
   margin-top: 6rem;
   max-width: 60rem;
   line-height: 1.125;
+}
+
+.hero__smaller {
+  font-size: 36px;
+  max-width: 40rem;
 }
 
 .hero__arrow {

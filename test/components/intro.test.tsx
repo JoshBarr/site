@@ -19,9 +19,7 @@ async function load() {
 
 type Loaded = Awaited<ReturnType<typeof load>>;
 
-// A no-break space keeps the dash off the start of a line.
-const HEADING =
-  "I'm Josh\u00a0– a designer, software engineer and guitarist from Te Whanganui-a-Tara/Wellington. Take a look around my hometown.";
+const HEADING = "Te Whanganui-a-Tara/Wellington. Take a look around.";
 
 afterEach(async () => {
   (await import("@testing-library/react")).cleanup();

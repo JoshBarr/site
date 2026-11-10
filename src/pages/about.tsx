@@ -20,22 +20,24 @@ const AboutPage: React.FC<AboutPageProps> = ({ allPosts }) => (
 
     <div className="hero theme-text relative">
       <div className="container grid relative">
-        <h1 className="grid-span-12 grid-span-9@medium  hero__title font-display">
-          Kia ora, I'm Josh.
+        <h1 className="grid-span-12 grid-span-9@medium  hero__title hero__smaller font-display">
+          Kia ora, I'm Josh – a designer, software engineer and guitarist from
+          Te Whanganui-a-Tara<span className="dim">/</span>Wellington in
+          Aotearoa<span className="dim">/</span>New Zealand.
         </h1>
         <p className="grid-span-12 grid-span-7@medium hero__subtitle font-display font-weight-normal">
-          It all started when I picked up a copy of Usborne's Build your own
-          Website in the school library. It blew my eleven-year-old mind that
-          you could build entire worlds with nothing more than notepad.exe. It
-          set me on a path of combining my love of the creative arts with
-          technology.
+          It all started when I picked up a copy of Usborne's{" "}
+          <em>Build Your Own Website</em> in the school library. It blew my
+          eleven-year-old mind that you could build entire worlds with nothing
+          more than notepad.exe. This set me on a path exploring the creative
+          arts and the internet.
         </p>
         <p className="grid-span-12 grid-span-7@medium hero__subtitle font-display font-weight-normal">
-          Over the years, I've worked as a designer, educator, software
-          engineer, technical leader. I've built things for millions of users,
-          and scaled systems to billions of requests/month. Whatever the role,
-          it's always in service of making a great thing that people love to
-          use.
+          Over the past 18 years, I've worked as a designer, educator, software
+          engineer, and technical leader. I've built things for millions of
+          users, and scaled systems to billions of requests per month. Whatever
+          the role, it's always in service of making a great thing that people
+          love to use.
         </p>
         <p className="grid-span-12 grid-span-7@medium hero__subtitle font-display font-weight-normal">
           Today, I work at{" "}
