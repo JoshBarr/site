@@ -29,6 +29,7 @@ import {
   sunIntensity,
   skyZenith,
   skyHorizon,
+  skyBrightness,
 } from "../environment";
 import { hazeColor, hazeTransmittance, phase } from "../haze";
 import { cloudGlowAtNight, hazeGlowAtNight } from "../skyglow";
@@ -234,7 +235,7 @@ export function createCloudNode({
           const height = saturate(p.y.sub(bottom).div(top.sub(bottom)));
 
           const ambient = mix(skyHorizon, skyZenith.mul(3), height)
-            .mul(1.4)
+            .mul(skyBrightness.mul(1.4))
             .add(overcast.mul(sunIntensity).mul(1.2));
 
           // At night the city lights the base; it's spent a little way in.
@@ -286,7 +287,7 @@ export function createCloudNode({
         ).mul(0.55);
 
         const lum = vec3(phase(cosine, 0.5).mul(sunLight).mul(0.5)).add(
-          skyHorizon.mul(1.6)
+          skyHorizon.mul(skyBrightness.mul(1.6))
         );
 
         // Fade toward the horizon, where the sheet is very far away.

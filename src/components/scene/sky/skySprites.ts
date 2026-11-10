@@ -47,8 +47,8 @@ export const SKY_PRIORITY = 0.75;
 export const SKY_RADIUS = 10_000;
 
 /**
- * The faintest magnitude that shows: past -10 by day, nothing; ~5.5 on a
- * dark night, where the city's lights wash out the rest. Set from the sun.
+ * The faintest magnitude that shows: past -10 by day, nothing; ~6.5 on a
+ * dark night: generous for under a city, so the sky reads as full. Set from the sun.
  */
 export const limitingMagnitude = uniform(-10);
 
@@ -63,7 +63,7 @@ const HAZE_REACH = 20_000;
 export function limitingMagnitudeFor(altitude: number) {
   const t = Math.min(Math.max((-2 - altitude) / 12, 0), 1);
 
-  return -6 + 11.5 * t * t * (3 - 2 * t);
+  return -6 + 12.5 * t * t * (3 - 2 * t);
 }
 
 /**
@@ -117,10 +117,10 @@ export function createSkySprites(capacity: number, twinkling = 0) {
     float(1)
   );
 
-  // Flux, flattened (a magnitude is 0.4 dex; drawn as 0.28) so the faint
-  // still read beside Sirius; Venus and Jupiter cap out, blooming.
+  // Flux, flattened (a magnitude is 0.4 dex; drawn as 0.16) and lifted, so the
+  // faint still read beside Sirius; Venus and Jupiter cap out, blooming.
   const brightness = varying(
-    min(pow(float(10), m.mul(-0.28)), 4)
+    min(pow(float(10), m.mul(-0.16)).mul(1.5), 4)
       .mul(visibility(m))
       .mul(
         hazeTransmittance(

@@ -26,7 +26,7 @@ const DATA =
 const RANKS = new Set(["1", "2"]);
 
 /** Any star brighter than this is kept, figure or not (magnitude). */
-const BRIGHT = 2.5;
+const BRIGHT = 5;
 
 /** A figure's vertex further than this from any star is left out, degrees. */
 const MATCH = 0.05;

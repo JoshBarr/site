@@ -21,6 +21,20 @@ export const skyHorizon = uniform(new Color("#3a3a3a"));
 export const skyZenith = uniform(new Color("#0a0a0a"));
 
 /**
+ * How much of the sky's own light is left, 1 by day to NIGHT_SKY at night:
+ * the sky and the haze it lights go dark, so the haze doesn't hang over the
+ * night like a grey fog. The city's glow in it is added on top.
+ */
+export const skyBrightness = uniform(1);
+
+const NIGHT_SKY = 0.3;
+
+/** skyBrightness for `night`, 0 by day to 1 at night. */
+export function skyBrightnessFor(night: number) {
+  return 1 - (1 - NIGHT_SKY) * night;
+}
+
+/**
  * The sea's height, metres above mean sea level (the terrain's zero): the
  * tide, which ./ocean/tide.ts keeps current. The water, and whatever floats
  * on it, sit at this.

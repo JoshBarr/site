@@ -186,7 +186,7 @@ function Atmosphere({
       environment.skyHorizon,
       mix(environment.skyZenith, environment.skyHorizon, environment.overcast),
       smoothstep(0, 0.35, direction.y)
-    );
+    ).mul(environment.skyBrightness);
 
     const horizon = float(1).sub(smoothstep(0, 0.25, max(direction.y, 0)));
 
@@ -1760,6 +1760,10 @@ export function Scene({
   useEffect(() => {
     environment.skylight.value = skylight;
   }, [skylight]);
+
+  useEffect(() => {
+    environment.skyBrightness.value = environment.skyBrightnessFor(lights);
+  }, [lights]);
 
   useTide();
 

@@ -11,7 +11,12 @@ import {
   select,
   uniform,
 } from "three/tsl";
-import { skyHorizon, sunDirection, sunIntensity } from "./environment";
+import {
+  skyHorizon,
+  skyBrightness,
+  sunDirection,
+  sunIntensity,
+} from "./environment";
 
 // Atmospheric haze: extinction falls off exponentially with height, so the
 // boundary layer over the harbour is thick and the hilltops clear above it.
@@ -101,11 +106,11 @@ export function phase(cosine, g) {
 
 /**
  * Light the haze scatters toward the viewer along `direction`: the horizon
- * colour, brightened toward the sun by forward scattering.
+ * colour, dimmed at night, brightened toward the sun by forward scattering.
  */
 export function hazeColor(direction) {
   const toward = dot(normalize(direction), sunDirection);
   const glow = phase(toward, 0.7).mul(sunIntensity).mul(0.6);
 
-  return mix(skyHorizon, hazeTint, 0.5).add(glow);
+  return mix(skyHorizon, hazeTint, 0.5).mul(skyBrightness).add(glow);
 }
