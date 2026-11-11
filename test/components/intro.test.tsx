@@ -19,7 +19,7 @@ async function load() {
 
 type Loaded = Awaited<ReturnType<typeof load>>;
 
-const HEADING = "Te Whanganui-a-Tara/Wellington. Take a look around.";
+const HEADING = "Te Whanganui-a-Tara/Wellington Loading...";
 
 afterEach(async () => {
   (await import("@testing-library/react")).cleanup();

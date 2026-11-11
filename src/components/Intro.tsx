@@ -21,7 +21,7 @@ const SENTENCES: { runs: Run[]; className?: string }[] = [
     ],
   },
   {
-    runs: [{ text: "Loading..." }],
+    runs: [{ text: " Loading..." }],
     className: "hero__invitation",
   },
 ];
