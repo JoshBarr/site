@@ -89,7 +89,7 @@ code,
 kbd,
 pre,
 samp {
-  font-family: monospace, monospace;
+  font-family: var(--font-mono), ui-monospace, monospace;
   font-size: 1em;
 }
 figure {
@@ -214,7 +214,7 @@ img {
   padding-left: 0;
   padding-right: 0;
   padding-top: 0;
-  margin-bottom: 1.45rem;
+  margin-bottom: var(--line);
 }
 h1 {
   margin-left: 0;
@@ -224,11 +224,7 @@ h1 {
   padding-left: 0;
   padding-right: 0;
   padding-top: 0;
-  margin-bottom: 1.45rem;
-  color: inherit;
-  font-weight: 600;
-  text-rendering: optimizeLegibility;
-  line-height: 1.1;
+  margin-bottom: var(--line);
 }
 h2 {
   margin-left: 0;
@@ -238,12 +234,7 @@ h2 {
   padding-left: 0;
   padding-right: 0;
   padding-top: 0;
-  margin-bottom: 1.45rem;
-  color: inherit;
-  font-weight: bold;
-  text-rendering: optimizeLegibility;
-  font-size: 1.62671rem;
-  line-height: 1.2;
+  margin-bottom: var(--line);
 }
 h3 {
   margin-left: 0;
@@ -253,12 +244,7 @@ h3 {
   padding-left: 0;
   padding-right: 0;
   padding-top: 0;
-  margin-bottom: 1.2rem;
-  color: inherit;
-  font-weight: bold;
-  text-rendering: optimizeLegibility;
-  font-size: 23px;
-  line-height: 1.5;
+  margin-bottom: var(--line);
 }
 h4 {
   margin-left: 0;
@@ -268,12 +254,7 @@ h4 {
   padding-left: 0;
   padding-right: 0;
   padding-top: 0;
-  margin-bottom: 1.45rem;
-  color: inherit;
-  font-weight: bold;
-  text-rendering: optimizeLegibility;
-  font-size: 1em;
-  line-height: 1.1;
+  margin-bottom: var(--line);
 }
 h5 {
   margin-left: 0;
@@ -283,12 +264,7 @@ h5 {
   padding-left: 0;
   padding-right: 0;
   padding-top: 0;
-  margin-bottom: 1.45rem;
-  color: inherit;
-  font-weight: bold;
-  text-rendering: optimizeLegibility;
-  font-size: 0.85028rem;
-  line-height: 1.1;
+  margin-bottom: var(--line);
 }
 h6 {
   margin-left: 0;
@@ -298,12 +274,7 @@ h6 {
   padding-left: 0;
   padding-right: 0;
   padding-top: 0;
-  margin-bottom: 1.45rem;
-  color: inherit;
-  font-weight: bold;
-  text-rendering: optimizeLegibility;
-  font-size: 0.78405rem;
-  line-height: 1.1;
+  margin-bottom: var(--line);
 }
 hgroup {
   margin-left: 0;
@@ -313,29 +284,29 @@ hgroup {
   padding-left: 0;
   padding-right: 0;
   padding-top: 0;
-  margin-bottom: 1.45rem;
+  margin-bottom: var(--line);
 }
 ul {
-  margin-left: 1.45rem;
+  margin-left: var(--line);
   margin-right: 0;
   margin-top: 0;
   padding-bottom: 0;
   padding-left: 0;
   padding-right: 0;
   padding-top: 0;
-  margin-bottom: 1.45rem;
+  margin-bottom: var(--line);
   list-style-position: outside;
   list-style-image: none;
 }
 ol {
-  margin-left: 1.45rem;
+  margin-left: var(--line);
   margin-right: 0;
   margin-top: 0;
   padding-bottom: 0;
   padding-left: 0;
   padding-right: 0;
   padding-top: 0;
-  margin-bottom: 1.45rem;
+  margin-bottom: var(--line);
   list-style-position: outside;
   list-style-image: none;
 }
@@ -347,7 +318,7 @@ dl {
   padding-left: 0;
   padding-right: 0;
   padding-top: 0;
-  margin-bottom: 1.45rem;
+  margin-bottom: var(--line);
 }
 dd {
   margin-left: 0;
@@ -357,7 +328,7 @@ dd {
   padding-left: 0;
   padding-right: 0;
   padding-top: 0;
-  margin-bottom: 1.45rem;
+  margin-bottom: var(--line);
 }
 p {
   margin-left: 0;
@@ -367,7 +338,7 @@ p {
   padding-left: 0;
   padding-right: 0;
   padding-top: 0;
-  margin-bottom: 1.45rem;
+  margin-bottom: var(--line);
 }
 figure {
   margin-left: 0;
@@ -377,7 +348,7 @@ figure {
   padding-left: 0;
   padding-right: 0;
   padding-top: 0;
-  margin-bottom: 1.45rem;
+  margin-bottom: var(--line);
 }
 pre {
   margin-left: 0;
@@ -387,14 +358,14 @@ pre {
   padding-left: 0;
   padding-right: 0;
   padding-top: 0;
-  margin-bottom: 1.45rem;
+  margin-bottom: var(--line);
   font-size: 0.85rem;
-  line-height: 1.42;
+  line-height: calc(var(--line) * 0.75);
   background: hsla(0, 0%, 0%, 0.04);
   border-radius: 3px;
   overflow: auto;
   word-wrap: normal;
-  padding: 1.45rem;
+  padding: calc(var(--line) / 2) var(--line);
 }
 table {
   margin-left: 0;
@@ -404,9 +375,9 @@ table {
   padding-left: 0;
   padding-right: 0;
   padding-top: 0;
-  margin-bottom: 1.45rem;
+  margin-bottom: var(--line);
   font-size: 1rem;
-  line-height: 1.45rem;
+  line-height: var(--line);
   border-collapse: collapse;
   width: 100%;
 }
@@ -418,17 +389,17 @@ fieldset {
   padding-left: 0;
   padding-right: 0;
   padding-top: 0;
-  margin-bottom: 1.45rem;
+  margin-bottom: var(--line);
 }
 blockquote {
-  margin-left: 1.45rem;
-  margin-right: 1.45rem;
+  margin-left: var(--line);
+  margin-right: var(--line);
   margin-top: 0;
   padding-bottom: 0;
   padding-left: 0;
   padding-right: 0;
   padding-top: 0;
-  margin-bottom: 1.45rem;
+  margin-bottom: var(--line);
   font-style: italic;
   font-weight: 400;
 }
@@ -440,7 +411,7 @@ form {
   padding-left: 0;
   padding-right: 0;
   padding-top: 0;
-  margin-bottom: 1.45rem;
+  margin-bottom: var(--line);
 }
 noscript {
   margin-left: 0;
@@ -450,7 +421,7 @@ noscript {
   padding-left: 0;
   padding-right: 0;
   padding-top: 0;
-  margin-bottom: 1.45rem;
+  margin-bottom: var(--line);
 }
 iframe {
   margin-left: 0;
@@ -460,7 +431,7 @@ iframe {
   padding-left: 0;
   padding-right: 0;
   padding-top: 0;
-  margin-bottom: 1.45rem;
+  margin-bottom: var(--line);
 }
 hr {
   margin-left: 0;
@@ -470,7 +441,7 @@ hr {
   padding-left: 0;
   padding-right: 0;
   padding-top: 0;
-  margin-bottom: calc(1.45rem - 1px);
+  margin-bottom: calc(var(--line) - 1px);
   background: hsla(0, 0%, 0%, 0.2);
   border: none;
   height: 1px;
@@ -483,7 +454,7 @@ address {
   padding-left: 0;
   padding-right: 0;
   padding-top: 0;
-  margin-bottom: 1.45rem;
+  margin-bottom: var(--line);
 }
 b {
   font-weight: bold;
@@ -498,7 +469,7 @@ th {
   font-weight: bold;
 }
 li {
-  margin-bottom: calc(1.45rem / 2);
+  margin-bottom: calc(var(--line) / 2);
 }
 ol li {
   padding-left: 0;
@@ -507,14 +478,14 @@ ul li {
   padding-left: 0;
 }
 li > ol {
-  margin-left: 1.45rem;
-  margin-bottom: calc(1.45rem / 2);
-  margin-top: calc(1.45rem / 2);
+  margin-left: var(--line);
+  margin-bottom: calc(var(--line) / 2);
+  margin-top: calc(var(--line) / 2);
 }
 li > ul {
-  margin-left: 1.45rem;
-  margin-bottom: calc(1.45rem / 2);
-  margin-top: calc(1.45rem / 2);
+  margin-left: var(--line);
+  margin-bottom: calc(var(--line) / 2);
+  margin-top: calc(var(--line) / 2);
 }
 blockquote *:last-child {
   margin-bottom: 0;
@@ -526,19 +497,19 @@ p *:last-child {
   margin-bottom: 0;
 }
 li > p {
-  margin-bottom: calc(1.45rem / 2);
+  margin-bottom: calc(var(--line) / 2);
 }
 code {
   font-size: 0.85rem;
-  line-height: 1.45rem;
+  line-height: var(--line);
 }
 kbd {
   font-size: 0.85rem;
-  line-height: 1.45rem;
+  line-height: var(--line);
 }
 samp {
   font-size: 0.85rem;
-  line-height: 1.45rem;
+  line-height: var(--line);
 }
 abbr {
   border-bottom: 1px dotted hsla(0, 0%, 0%, 0.5);
@@ -566,8 +537,8 @@ th {
   -webkit-font-feature-settings: "tnum";
   padding-left: 0.96667rem;
   padding-right: 0.96667rem;
-  padding-top: 0.725rem;
-  padding-bottom: calc(0.725rem - 1px);
+  padding-top: calc(var(--line) / 2);
+  padding-bottom: calc(var(--line) / 2 - 1px);
 }
 th:first-child,
 td:first-child {
@@ -587,7 +558,7 @@ code {
 }
 pre code {
   background: none;
-  line-height: 1.42;
+  line-height: inherit;
 }
 code:before,
 code:after,
@@ -603,69 +574,199 @@ pre tt:after {
   content: "";
 }
 
-@media only screen and (max-width: 480px) {
-  html {
-    font-size: 100%;
-  }
-}
-
 /*
   =================================================================
   Typography
   =================================================================
+
+  One scale, by role. Each step moves once, at 700px, as the body goes
+  from 16 to 17px. Plex Sans carries reading; Plex Mono carries
+  metadata, labels and code.
 */
 
-.tiny-caps {
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  font-size: 11px;
-}
-
-.body {
-  font-size: 15px;
-  line-height: calc(21 / 15);
-}
-
-.intro {
-  font-weight: 400;
-  color: hsla(0, 0%, 0%, 0.9);
-  font-size: 21px;
-  /* line-height: 1.4; */
-}
-
-h1 {
-  font-weight: 700;
-  line-height: 1.2;
-  font-size: 30px;
-}
-
-.small {
-  font-size: 13px;
-}
-
-.hero__subtitle {
-  /* margin-top: 1.5rem; */
-  font-size: 22px;
-  font-weight: 400;
-  line-height: 33px;
+:root {
+  --text-title: 2rem;
+  --text-heading: 1.375rem;
+  --text-subheading: 1.125rem;
+  --text-lead: 1.1875rem;
+  --text-body: 1rem;
+  --text-small: 0.8125rem;
+  --text-label: 0.75rem;
+  /* The basic leading. Line heights and gaps are measured in it. */
+  --line: 1.625rem;
+  /*
+    Where the body's baseline falls in its line: Plex Sans sets its
+    baseline 0.375em below the middle of the line box (ascent 1.025,
+    descent 0.275). The grid is drawn on these baselines.
+  */
+  --baseline: calc(var(--line) / 2 + 0.375 * var(--text-body));
+  /* Above a page's title. */
+  --space-page: calc(var(--line) * 2);
 }
 
 @media only screen and (min-width: 700px) {
-  body {
-    font-size: 17px;
-    line-height: calc(24 / 17);
-    /* line-height: 1.8; */
-    /* border-left: solid 5px #ff7912; */
+  :root {
+    --text-title: 2.25rem;
+    --text-heading: 1.4375rem;
+    --text-subheading: 1.1875rem;
+    --text-lead: 1.3125rem;
+    --text-body: 1.0625rem;
+    --line: 1.75rem;
+    --space-page: calc(var(--line) * 3);
   }
+}
 
-  .intro {
-    font-size: 1.35em;
-  }
+body {
+  font-size: var(--text-body);
+  line-height: var(--line);
+}
 
-  h1,
-  .heading-1 {
-    font-size: 3em;
-  }
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  color: inherit;
+  text-rendering: optimizeLegibility;
+  text-wrap: balance;
+}
+
+p,
+li,
+blockquote {
+  text-wrap: pretty;
+}
+
+/* Title: one per page, the same on every page. */
+h1,
+.page-title {
+  font-size: var(--text-title);
+  font-weight: 700;
+  line-height: calc(var(--line) * 1.5);
+  letter-spacing: -0.01em;
+  max-width: 18em;
+}
+
+/* Heading: prose sections, and the titles in lists of posts. */
+h2,
+.post-listing__heading,
+.hero__post-title {
+  font-size: var(--text-heading);
+  font-weight: 600;
+  line-height: var(--line);
+}
+
+h3 {
+  font-size: var(--text-subheading);
+  font-weight: 600;
+  line-height: var(--line);
+}
+
+h4 {
+  font-size: var(--text-body);
+  font-weight: 600;
+  line-height: var(--line);
+}
+
+h5,
+h6 {
+  font-size: var(--text-small);
+  font-weight: 600;
+  line-height: calc(var(--line) * 0.75);
+}
+
+/*
+  Baselines on the grid. Text at another size or leading than the body's
+  puts its baseline elsewhere in the line, so it's nudged onto the body's:
+  by (1 − n) · line / 2 + 0.375 · (body − size), for a leading of n lines.
+  It doesn't move anything around it. The grid's unit is half a line:
+  body text takes every other rule, a title every third.
+*/
+.page-title,
+.lead,
+.post-listing__heading,
+.hero__post-title,
+.theme-prose h2,
+.theme-prose h3,
+.theme-prose h4,
+.post-meta,
+:is(h2, h3, h4, h5, h6, p).tiny-caps {
+  position: relative;
+  top: calc(
+    (1 - var(--leading, 1)) * var(--line) / 2 + 0.375 * (var(--text-body) - 1em)
+  );
+}
+
+.page-title {
+  --leading: 1.5;
+}
+
+/* Lead: the paragraph that opens a page. */
+.lead {
+  font-size: var(--text-lead);
+  font-weight: 400;
+  line-height: var(--line);
+  max-width: 32em;
+}
+
+/* Prose lists run on the line: no half-line gaps between items. */
+.theme-prose li,
+.theme-prose li > ul,
+.theme-prose li > ol {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+/* A line and a half above a heading, half a line below: two lines. */
+.theme-prose h2,
+.theme-prose h3,
+.theme-prose h4 {
+  margin-top: calc(var(--line) * 1.5);
+  margin-bottom: calc(var(--line) / 2);
+}
+
+.small {
+  font-size: var(--text-small);
+  line-height: calc(var(--line) * 0.75);
+}
+
+/* Label: small mono caps, for dates, sections and captions. */
+.tiny-caps {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: var(--text-label);
+  font-weight: 500;
+  line-height: var(--line);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+a {
+  text-underline-offset: 0.2em;
+}
+
+::selection {
+  background: #ff7912;
+  color: #141414;
+}
+
+.hero__title {
+  margin-top: var(--space-page);
+}
+
+.hero__arrow {
+  vertical-align: middle;
+  margin-top: -7px;
+  display: inline-block;
+  color: #aaa;
+  margin-left: 4px;
+}
+
+.dim {
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 300;
+  padding-left: 0.125em;
+  padding-right: 0.125em;
 }
 
 .fill-white {
@@ -680,9 +781,27 @@ h1 {
   background-color: #242323;
 }
 
-.w-20 {
+/*
+  The about page's companies: the logo in a slot a line and a half tall,
+  at its bottom left whatever its shape, then the years and domain on
+  half lines, then a line and a half. Four lines a row, so the rows keep
+  the rhythm.
+*/
+.company-logo {
+  display: block;
   width: 68px;
-  margin-bottom: 0.25rem;
+  height: calc(var(--line) * 1.5);
+  padding-bottom: calc(var(--line) / 4);
+  margin-bottom: 0;
+}
+
+.company-logo ~ .tiny-caps {
+  --leading: 0.5;
+  line-height: calc(var(--line) / 2);
+}
+
+.company-logo ~ .tiny-caps:last-child {
+  margin-bottom: calc(var(--line) * 1.5);
 }
 
 .text-right {
@@ -693,71 +812,19 @@ h1 {
   text-align: right;
 }
 
-.hero__title {
-  font-weight: 700;
-  margin-top: 6rem;
-  max-width: 60rem;
-  line-height: 1.125;
-}
-
-.hero__smaller {
-  font-size: 36px;
-  max-width: 40rem;
-}
-
-.hero__arrow {
-  vertical-align: middle;
-  margin-top: -7px;
-  display: inline-block;
-  color: #aaa;
-  margin-left: 4px;
-}
-
-.dim {
-  color: rgba(255, 255, 255, 0.5);
-  font-weight: 100;
-  padding-left: 0.125em;
-  padding-right: 0.125em;
-}
-
-.color-grey-500 {
-  color: rgb(126, 127, 135);
-}
-
-.font-weight-normal {
-  font-weight: 300;
-}
-
-.font-secondary-italic {
-  font-style: "italic";
-}
-
-@media only screen and (min-width: 1000px) {
-  h1,
-  .heading-1 {
-    font-size: 3em;
-  }
-}
-
 /*
   =================================================================
   Structure
   =================================================================
 */
 
-.split {
-  display: flex;
-  flex-direction: column-reverse;
-  justify-content: space-between;
-}
-
 .section-top {
-  padding-top: calc(1rem + 8vw);
+  padding-top: var(--space-page);
 }
 
 .section {
-  padding-top: calc(1rem + 8vw);
-  padding-bottom: calc(1rem + 4vw);
+  padding-top: calc(var(--line) * 4);
+  padding-bottom: calc(var(--line) * 3);
 }
 
 /*
@@ -768,7 +835,7 @@ h1 {
 .grid {
   display: grid;
   column-gap: 2rem;
-  row-gap: 1rem;
+  row-gap: 0;
   grid-template-columns: repeat(12, 1fr);
 }
 
@@ -897,7 +964,7 @@ h1 {
 }
 
 .section-small {
-  padding-top: 3vw;
+  padding-top: calc(var(--line) * 2);
 }
 
 .generic-page {
@@ -906,7 +973,8 @@ h1 {
 }
 
 .article {
-  max-width: 38em;
+  /* About 70 characters of Plex Sans a line. */
+  max-width: 32em;
   min-height: 100vh;
   padding-bottom: 4vh;
   margin-right: auto;
@@ -914,13 +982,16 @@ h1 {
 }
 
 .measure {
-  max-width: 38em;
+  max-width: 32em;
 }
 
-.sidebar {
-  padding-top: 0.5rem;
-  width: 12rem;
-  margin-right: 5vw;
+/* A post's title, then its date and tags. */
+.post-header {
+  margin-bottom: calc(var(--line) * 2);
+}
+
+.post-header > :last-child {
+  margin-bottom: 0;
 }
 
 .container {
@@ -957,10 +1028,6 @@ h1 {
     margin-right: 12vw;
   }
 
-  .split {
-    flex-direction: row;
-  }
-
   .article,
   .generic-page {
     padding-bottom: 8vh;
@@ -974,19 +1041,19 @@ h1 {
 */
 
 .space {
-  margin-bottom: 1.75rem;
+  margin-bottom: var(--line);
 }
 
 .space--medium {
-  margin-bottom: 3.5rem;
+  margin-bottom: calc(var(--line) * 2);
 }
 
 .space--large {
-  margin-bottom: 3vw;
+  margin-bottom: calc(var(--line) * 2);
 }
 
 .space--tight {
-  margin-bottom: 0.75rem;
+  margin-bottom: calc(var(--line) / 2);
 }
 
 /*
@@ -1004,6 +1071,7 @@ h1 {
 .list-inline > li {
   display: inline-block;
   margin-right: 1rem;
+  margin-bottom: 0;
 }
 
 .list-unstyled {
@@ -1017,14 +1085,18 @@ h1 {
 }
 
 .pill {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: var(--text-small);
   border-radius: 3px;
-  padding: 0.375rem 0.5rem;
+  /* Under a line tall, so a row of them keeps the rhythm. */
+  padding: 0.3125rem 0.5rem;
   border: solid 1px transparent;
   display: inline-block;
   line-height: 1;
 }
 
 .pill--large {
+  font-size: 0.9375rem;
   padding: 0.5rem 0.75rem;
   border-radius: 4px;
 }
@@ -1050,41 +1122,14 @@ h1 {
   margin-left: 0.5rem;
 }
 
-.media {
-  display: flex;
-  margin-bottom: 1.75rem;
-  align-items: center;
-}
-
-.media__image {
-  margin-right: 0.625rem;
-}
-
-.media__body > :last-child {
-  margin-bottom: 0;
-}
-
-.avatar {
-  border-radius: 100em;
-  background: #eee;
-  display: inline-block;
-  width: 40px;
-  height: 40px;
-  overflow: hidden;
-}
-
-.avatar > img {
-  height: auto;
-}
-
 .keyline--top {
   border-top: solid 1px transparent;
-  padding-top: 1.75rem;
+  padding-top: var(--line);
 }
 
 .keyline--bottom {
   border-bottom: solid 1px transparent;
-  padding-bottom: 1.75rem;
+  padding-bottom: var(--line);
 }
 
 /*
@@ -1365,7 +1410,7 @@ h1 {
 }
 
 .footer {
-  padding-top: calc(1.75rem + 1vw);
+  padding-top: calc(var(--line) * 2);
   padding-bottom: 6vh;
 }
 
@@ -1408,8 +1453,7 @@ h1 {
 /* The header floats over the scene, so clear it as well. */
 .hero__intro .hero__title {
   max-width: 17em;
-  margin-top: 9rem;
-  font-size: 26px;
+  margin-top: calc(60px + 6vw);
 }
 
 .hero__sentence {
@@ -1420,12 +1464,10 @@ h1 {
 .hero__invitation {
   margin-top: 0.4em;
   font-weight: 400;
-}
-
-@media only screen and (min-width: 700px) {
-  .hero__intro .hero__title {
-    font-size: 2.5em;
-  }
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.375em;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .hero__name {
@@ -1507,13 +1549,6 @@ h1 {
   }
 }
 
-.hero h5 {
-  font-weight: 400;
-}
-
-.font-book {
-  font-weight: 400;
-}
 .hero__social {
   margin-bottom: 0;
 }
@@ -1523,7 +1558,7 @@ h1 {
 }
 
 .hero__post {
-  margin-bottom: 0;
+  margin-bottom: var(--line);
   grid-column: span 6 / 1;
 }
 
@@ -1582,8 +1617,7 @@ h1 {
 }
 
 .hero__post-title {
-  font-weight: 500;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0;
 }
 
 .hero__post-link {
@@ -1595,26 +1629,36 @@ h1 {
   text-decoration: underline;
 }
 
-.hero__subtitle {
-  /* font-weight: 400; */
-  max-width: 45rem;
-}
-
-.hero .hero__subtitle {
-  color: #eee;
-}
-
 .post-listing__heading {
-  margin-bottom: 0.5rem;
+  margin-bottom: 0;
 }
 
-.post-listing__blurb {
-  margin-bottom: 0.75rem;
-  line-height: 1.6;
+/* A line for the date and tags, set on its baseline, wrapping by lines. */
+.post-meta {
+  line-height: var(--line);
+  margin-bottom: 0;
+}
+
+.post-meta > li {
+  display: inline-block;
+  margin-right: 1rem;
+  margin-bottom: 0;
+}
+
+/* Tags as larger pills: two lines a row. */
+.tag-cloud {
+  line-height: calc(var(--line) * 2);
+}
+
+.post-listing__blurb,
+.hero__post-body {
+  margin-bottom: calc(var(--line) / 2);
 }
 
 .post-listing {
   max-width: 38rem;
+  /* Half a line under the date and tags, less the rule, then a line. */
+  padding-bottom: calc(var(--line) / 2 - 1px);
   border-bottom: solid 1px transparent;
 }
 
@@ -1631,7 +1675,7 @@ h1 {
 
 .hr {
   border-top: solid 1px rgba(255, 255, 255, 0.3);
-  margin-bottom: 0;
+  margin-bottom: calc(var(--line) - 1px);
 }
 
 .mb0 {
@@ -1639,23 +1683,23 @@ h1 {
 }
 
 .mb1 {
-  margin-bottom: 0.25rem;
+  margin-bottom: calc(var(--line) / 4);
 }
 
 .mb2 {
-  margin-bottom: 0.75rem;
+  margin-bottom: calc(var(--line) / 2);
 }
 
 .mb4 {
-  margin-bottom: 4rem;
+  margin-bottom: calc(var(--line) * 2);
 }
 
 .mt2 {
-  margin-top: 2rem;
+  margin-top: var(--line);
 }
 
 .pb2 {
-  padding-bottom: 4rem;
+  padding-bottom: calc(var(--line) * 2);
 }
 
 /*
@@ -1771,6 +1815,46 @@ fieldset {
   width: 100%;
   height: 30vh;
   background-image: linear-gradient(to top, #141414 30%, transparent);
+}
+
+/*
+  The grid overlay (⌘'): a rule on each of the body's baselines from the
+  top of the content, a fainter one on the half line between, and the
+  twelve columns.
+*/
+.children {
+  position: relative;
+}
+
+.grid-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  background-image:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(255, 121, 18, 0.45) 0 1px,
+      transparent 1px var(--line)
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0 calc(var(--line) / 2),
+      rgba(255, 121, 18, 0.15) calc(var(--line) / 2) calc(var(--line) / 2 + 1px),
+      transparent calc(var(--line) / 2 + 1px) var(--line)
+    );
+  background-position: 0 var(--baseline);
+}
+
+.grid-overlay__columns {
+  height: 100%;
+}
+
+.grid-overlay__column {
+  background: rgba(64, 160, 255, 0.07);
+  box-shadow:
+    inset 1px 0 rgba(64, 160, 255, 0.25),
+    inset -1px 0 rgba(64, 160, 255, 0.25);
 }
 
 @media print {

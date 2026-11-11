@@ -17,11 +17,11 @@ const SENTENCES: { runs: Run[]; className?: string }[] = [
     runs: [
       { text: "Te Whanganui-a-Tara", className: "hero__name" },
       { text: "/", className: "dim", breakAfter: true },
-      { text: "Wellington." },
+      { text: "Wellington" },
     ],
   },
   {
-    runs: [{ text: " Take a look around." }],
+    runs: [{ text: "Loading..." }],
     className: "hero__invitation",
   },
 ];
@@ -33,12 +33,9 @@ export const Intro: React.FC<{
 }> = ({ hidden }) => (
   <div className={`hero__intro${hidden ? " hero__intro--hidden" : ""}`}>
     <div className="container grid">
-      <h1 className="grid-span-12 grid-span-9@medium hero__title  font-display theme-text">
+      <h1 className="grid-span-12 grid-span-9@medium hero__title page-title theme-text">
         {SENTENCES.map(({ runs, className }, s) => (
-          <span
-            key={s}
-            className={`hero__sentence hero__smaller ${className ?? ""}`}
-          >
+          <span key={s} className={`hero__sentence  ${className ?? ""}`}>
             {runs.map(({ text, className, breakAfter }, r) => (
               <React.Fragment key={r}>
                 <span className={className}>{text}</span>

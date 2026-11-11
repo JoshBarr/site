@@ -14,9 +14,7 @@ const BlogIndex: React.FC<BlogIndexProps> = ({ allPosts }: BlogIndexProps) => (
   <Layout theme="theme--hero">
     <SEO title="Blog" thumbnail={undefined} />
     <div className="container generic-page">
-      <h1 className="section-top theme-text theme-display-weight space--large">
-        Blog
-      </h1>
+      <h1 className="page-title section-top theme-text space--large">Blog</h1>
 
       <div>
         {allPosts.map((post) => {

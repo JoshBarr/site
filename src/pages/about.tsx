@@ -20,26 +20,26 @@ const AboutPage: React.FC<AboutPageProps> = ({ allPosts }) => (
 
     <div className="hero theme-text relative">
       <div className="container grid relative">
-        <h1 className="grid-span-12 grid-span-9@medium  hero__title hero__smaller font-display">
+        <h1 className="grid-span-12 grid-span-9@medium hero__title page-title">
           Kia ora, I'm Josh – a designer, software engineer and guitarist from
           Te Whanganui-a-Tara<span className="dim">/</span>Wellington in
           Aotearoa<span className="dim">/</span>New Zealand.
         </h1>
-        <p className="grid-span-12 grid-span-7@medium hero__subtitle font-display font-weight-normal">
+        <p className="grid-span-12 grid-span-7@medium lead">
           It all started when I picked up a copy of Usborne's{" "}
           <em>Build Your Own Website</em> in the school library. It blew my
           eleven-year-old mind that you could build entire worlds with nothing
           more than notepad.exe. This set me on a path exploring the creative
           arts and the internet.
         </p>
-        <p className="grid-span-12 grid-span-7@medium hero__subtitle font-display font-weight-normal">
+        <p className="grid-span-12 grid-span-7@medium lead">
           Over the past 18 years, I've worked as a designer, educator, software
           engineer, and technical leader. I've built things for millions of
           users, and scaled systems to billions of requests per month. Whatever
           the role, it's always in service of making a great thing that people
           love to use.
         </p>
-        <p className="grid-span-12 grid-span-7@medium hero__subtitle font-display font-weight-normal">
+        <p className="grid-span-12 grid-span-7@medium lead">
           Today, I work at{" "}
           <a className="theme-link" href="https://www.stedi.com">
             Stedi
@@ -69,7 +69,7 @@ const AboutPage: React.FC<AboutPageProps> = ({ allPosts }) => (
     <div>
       <div className="container">
         <div className="grid">
-          <h2 className="grid-span-12 theme-text hero__title heading-1 font-display mb0">
+          <h2 className="grid-span-12 theme-text hero__title page-title">
             Play the hits!
           </h2>
 
@@ -80,7 +80,7 @@ const AboutPage: React.FC<AboutPageProps> = ({ allPosts }) => (
             <p className="font-secondary tiny-caps mb0">2026 &ndash; Present</p>
             <p className="font-secondary tiny-caps">stedi.com</p>
           </div>
-          <p className="grid-span-9 grid-span-6@medium theme-text font-weight-normal">
+          <p className="grid-span-9 grid-span-6@medium theme-body-text">
             Tech Lead, Accounts &amp; Identity Team.
           </p>
 
@@ -92,7 +92,7 @@ const AboutPage: React.FC<AboutPageProps> = ({ allPosts }) => (
             <p className="font-secondary tiny-caps mb0">2023 &ndash; 2026</p>
             <p className="font-secondary tiny-caps">vital.io</p>
           </div>
-          <p className="grid-span-9 grid-span-6@medium theme-text font-weight-normal">
+          <p className="grid-span-9 grid-span-6@medium theme-body-text">
             Led a major rewrite of the entire application stack, that cut our
             platform cost-to-serve by 43% and laid the foundations to process
             upwards of 15% of all Emergency Room visits in the USA.
@@ -107,7 +107,7 @@ const AboutPage: React.FC<AboutPageProps> = ({ allPosts }) => (
             <p className="font-secondary tiny-caps">stedi.com</p>
           </div>
 
-          <div className="grid-span-9 grid-span-6@medium theme-text font-weight-normal">
+          <div className="grid-span-9 grid-span-6@medium theme-body-text">
             <p className="">
               Built an evergreen API docs platform, that aggregated API changes
               from our CI pipelines into our public docs site in seconds.
@@ -128,7 +128,7 @@ const AboutPage: React.FC<AboutPageProps> = ({ allPosts }) => (
             <p className="font-secondary tiny-caps mb0">2016 &ndash; 2021</p>
             <p className="font-secondary tiny-caps">xero.com</p>
           </div>
-          <div className="grid-span-9 grid-span-6@medium theme-text font-weight-normal">
+          <div className="grid-span-9 grid-span-6@medium theme-body-text">
             <p>
               Designed and delivered Xero's Public API Gateway, a mission
               critical system processing two billion requests a month.
@@ -164,7 +164,7 @@ const AboutPage: React.FC<AboutPageProps> = ({ allPosts }) => (
             <p className="font-secondary tiny-caps mb0">2011 &ndash; 2016</p>
             <p className="font-secondary tiny-caps">springload.co.nz</p>
           </div>
-          <div className="grid-span-9 grid-span-6@medium theme-text font-weight-normal">
+          <div className="grid-span-9 grid-span-6@medium theme-body-text">
             <p>
               Delivered the first ever in-browser OpenType Tester for Klim Type
               Foundry.
@@ -205,12 +205,9 @@ const AboutPage: React.FC<AboutPageProps> = ({ allPosts }) => (
           {allPosts.map((post) => {
             return (
               <div key={post.slug} className="hero__post hero__post--article">
-                <Link
-                  className="theme-link-block font-display"
-                  href={post.permalink}
-                >
+                <Link className="theme-link-block" href={post.permalink}>
                   <h3 className="hero__post-title theme-link">{post.title}</h3>
-                  <p className="hero__post-body theme-body-text link-inert font-primary">
+                  <p className="hero__post-body theme-body-text link-inert">
                     {post.blurb}
                   </p>
                 </Link>

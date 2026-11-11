@@ -4,7 +4,8 @@ export const LogoXero = () => (
     aria-labelledby=":Ramdm:"
     viewBox="0 0 53 53"
     fill="none"
-    className="w-20"
+    className="company-logo"
+    preserveAspectRatio="xMinYMax meet"
   >
     <title id=":Ramdm:">Xero</title>
     <path

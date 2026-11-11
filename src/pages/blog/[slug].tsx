@@ -2,8 +2,7 @@ import React from "react";
 
 import SEO from "../../components/seo";
 import Layout from "../../components/layout";
-import Author from "../../components/Author";
-import Tag from "../../components/Tag";
+import PostMetadata from "../../components/PostMetadata";
 import { GetStaticPaths, GetStaticProps } from "next";
 import { FrontMatter, getPostBySlug, getPostSlugs } from "../../lib/blog";
 
@@ -22,32 +21,15 @@ export default function ArticlePage({ source, frontMatter }: ArticleProps) {
     <Layout>
       <SEO title={`${frontMatter.title}`} description={frontMatter.blurb} />
       <div className="container">
-        <div className="section-top theme-text">
-          <h1 className="">{frontMatter.title}</h1>
-        </div>
+        <header className="post-header section-top theme-text">
+          <h1 className="page-title">{frontMatter.title}</h1>
+          <PostMetadata post={frontMatter} />
+        </header>
 
-        <div className="split section-small">
-          <div className="sidebar theme-text">
-            <Author
-              author={{ name: "Josh Barr", image: "/images/josh.png" }}
-              date={frontMatter.date}
-            />
-            <h6 className="keyline--top theme-border space--tight">
-              Post tags:
-            </h6>
-            <ul className={`small font-primary list-unstyled`}>
-              {frontMatter.tags.map((tag) => (
-                <li key={tag}>
-                  <Tag tag={tag} />
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="article">
-            <p className="intro theme-text ">{frontMatter.blurb}</p>
-            <div className="blog-post-content theme-prose">
-              <MDXRemote {...source} components={components} />
-            </div>
+        <div className="article">
+          <p className="lead theme-text">{frontMatter.blurb}</p>
+          <div className="blog-post-content theme-prose">
+            <MDXRemote {...source} components={components} />
           </div>
         </div>
       </div>

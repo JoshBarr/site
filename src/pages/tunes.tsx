@@ -41,10 +41,8 @@ const Chuuuunes: React.FC<TunesProps> = ({ discography, equipment }) => {
 
       <div className="container generic-page relative">
         <div className={styles.tunesHero}>
-          <h1 className="theme-text hero__title section-top theme-text theme-display-weight">
-            Tunes.
-          </h1>
-          <p className="hero__subtitle font-display theme-display-weight theme-text">
+          <h1 className="page-title section-top theme-text">Tunes.</h1>
+          <p className="lead theme-text">
             Guitar. Bass. Live production. Mixing.
           </p>
 
@@ -59,7 +57,7 @@ const Chuuuunes: React.FC<TunesProps> = ({ discography, equipment }) => {
           </figcaption>
         </div>
 
-        <h2 className="theme-text tiny-caps font-book">Latest</h2>
+        <h2 className="theme-text tiny-caps">Latest</h2>
 
         <div className="measure">
           <iframe
@@ -72,9 +70,7 @@ const Chuuuunes: React.FC<TunesProps> = ({ discography, equipment }) => {
           ></iframe>
         </div>
 
-        <h2 className="theme-text tiny-caps font-book section-small">
-          Discography
-        </h2>
+        <h2 className="theme-text tiny-caps section-small">Discography</h2>
 
         <div className="grid grid-three">
           {discography.map((disco) => {
@@ -89,7 +85,7 @@ const Chuuuunes: React.FC<TunesProps> = ({ discography, equipment }) => {
           })}
         </div>
 
-        <h2 className="theme-text tiny-caps section-small font-book">Listen</h2>
+        <h2 className="theme-text tiny-caps section-small">Listen</h2>
 
         <div className="measure">
           <iframe
@@ -103,9 +99,7 @@ const Chuuuunes: React.FC<TunesProps> = ({ discography, equipment }) => {
           ></iframe>
         </div>
 
-        <h2 className="theme-text tiny-caps section-small font-book">
-          Equipment
-        </h2>
+        <h2 className="theme-text tiny-caps section-small">Equipment</h2>
         <p className="theme-text">
           If you'd like to collaborate on a project, I can provide the
           following:
@@ -114,7 +108,7 @@ const Chuuuunes: React.FC<TunesProps> = ({ discography, equipment }) => {
           {equipment.map((list) => {
             return (
               <div className="theme-text" key={list.category}>
-                <h4 className="font-book tiny-caps mb2">{list.category}</h4>
+                <h4 className="tiny-caps mb2">{list.category}</h4>
                 <ul className="small">
                   {list.items.map((item) => {
                     return <li key={item}>{item}</li>;

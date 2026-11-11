@@ -16,7 +16,7 @@ const Tags: React.FC<TagsPageProps> = ({ name, posts }) => (
   <Layout>
     <SEO title="Tags" thumbnail={undefined} />
     <div className="container generic-page ">
-      <h1 className="section-top theme-text theme-display-weight space--large">
+      <h1 className="page-title section-top theme-text space--large">
         Tag: {name}
       </h1>
 

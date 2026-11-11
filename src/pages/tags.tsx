@@ -18,16 +18,16 @@ const Tags: React.FC<TagsPageProps> = ({ postsByTag }) => (
   <Layout>
     <SEO title="Tags" thumbnail={undefined} />
     <div className="container generic-page ">
-      <h1 className="section-top theme-text theme-display-weight space--large">
+      <h1 className="page-title section-top theme-text space--large">
         Posts by tag
       </h1>
-      <ul className="list-inline font-primary">
+      <ul className="list-inline tag-cloud">
         {postsByTag.map((tag) => (
           <li>
             <Link
               key={tag.name}
               href={`/tags/${tag.slug}`}
-              className="shadow pill pill--large theme-link theme-border-link space"
+              className="shadow pill pill--large theme-link theme-border-link"
             >
               {tag.name}{" "}
               <span className="counter theme-border-link theme-link__brand">

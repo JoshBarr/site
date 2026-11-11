@@ -16,9 +16,7 @@ const PostListing = ({ post, hideBlurb = false }: PostListingProps) => (
       </Link>
     </h3>
     {!hideBlurb && (
-      <p className="post-listing__blurb font-primary theme-body-text">
-        {post.blurb}
-      </p>
+      <p className="post-listing__blurb theme-body-text">{post.blurb}</p>
     )}
     <PostMetadata post={post} />
   </div>

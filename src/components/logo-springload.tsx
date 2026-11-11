@@ -4,7 +4,8 @@ export const LogoSpringload = () => (
     x="0px"
     y="0px"
     viewBox="0 0 67 30"
-    className="w-20 fill-white"
+    className="company-logo fill-white"
+    preserveAspectRatio="xMinYMax meet"
   >
     <title>Springload</title>
     <path

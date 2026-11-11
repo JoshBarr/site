@@ -14,6 +14,8 @@
 
 .tunesHero {
   min-height: 60vw;
+  /* In whole lines, so what follows stays on the baseline grid. */
+  min-height: round(up, 60vw, var(--line));
 }
 
 @media screen and (min-width: 1000px) {
@@ -23,5 +25,6 @@
 
   .tunesHero {
     min-height: 100vh;
+    min-height: round(up, 100vh, var(--line));
   }
 }

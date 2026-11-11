@@ -5,7 +5,8 @@ import { useEffect } from "react";
 
 const plex = IBM_Plex_Sans({
   subsets: ["latin"],
-  weight: ["300", "400", "500", "700", "600"],
+  // 300 for the hairline slashes; 500 isn't used in Plex Sans.
+  weight: ["300", "400", "600", "700"],
   style: ["normal", "italic"],
 });
 
@@ -45,11 +46,6 @@ export default function JoshBarrSite({ Component, pageProps }) {
         .header,
         .font-secondary {
           font-family: ${plexMono.style.fontFamily}, sans-serif;
-        }
-
-        .font-secondary-italic {
-          font-family: ${plexMono.style.fontFamily}, sans-serif;
-          font-style: italic;
         }
       `}</style>
       <Component {...pageProps} />

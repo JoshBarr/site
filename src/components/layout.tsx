@@ -1,5 +1,6 @@
 import React, { FC, ReactElement } from "react";
 import Header from "./header";
+import { GridOverlay } from "./GridOverlay";
 
 interface LayoutProps {
   children?: ReactElement | ReactElement[];
@@ -18,8 +19,9 @@ const Layout: FC<LayoutProps> = ({
 }) => (
   <>
     <Header theme={theme} siteTitle={"Josh Barr"} floating={floatingHeader} />
-    <div className={`children`}>
+    <div className="children">
       <div className="theme-background">{children}</div>
+      <GridOverlay />
     </div>
     {footer && (
       <div className="theme--footer">
