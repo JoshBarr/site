@@ -734,14 +734,19 @@ async function loadFootprints(modelled) {
       ring.push(new Vector2(flat[i], flat[i + 1]));
     }
 
-    // Centre and area of the outline.
+    // Centre and area of the outline, from its first corner. In whole NZTM
+    // metres each product (~1e13) keeps only millimetres; times millions of
+    // metres again, over a shed's few m², that put centres tens to hundreds
+    // of metres off, and the ground sampled there stood the roof on a
+    // pillar of wall.
+    const [o] = ring;
     let area = 0;
     let ce = 0;
     let cn = 0;
 
     for (let i = 0; i < ring.length; i++) {
-      const a = ring[i];
-      const b = ring[(i + 1) % ring.length];
+      const a = ring[i].clone().sub(o);
+      const b = ring[(i + 1) % ring.length].clone().sub(o);
       const cross = a.x * b.y - b.x * a.y;
       area += cross / 2;
       ce += ((a.x + b.x) * cross) / 6;
@@ -749,7 +754,7 @@ async function loadFootprints(modelled) {
     }
 
     if (Math.abs(area) < 1) continue;
-    const centre = [ce / area, cn / area];
+    const centre = [o.x + ce / area, o.y + cn / area];
 
     if (covered.has(cell(...centre))) continue;
 
@@ -824,7 +829,13 @@ async function loadCableCarTrack() {
  */
 function raiseFootprint(b) {
   const top = b.ground + b.height;
-  const triangles = ShapeUtils.triangulateShape(b.ring, []);
+  // Triangulated from the first corner, for the same reason as the centre.
+  const [o] = b.ring;
+
+  const triangles = ShapeUtils.triangulateShape(
+    b.ring.map((p) => p.clone().sub(o)),
+    []
+  );
 
   if (!triangles.length) return null;
 
