@@ -10,6 +10,7 @@ import { ObstructionLights } from "./ObstructionLights";
 import { turbineLights } from "./turbineLights";
 import { E_44, SWT_2_3_82 } from "./turbineModels";
 import { Wind, WindTurbines } from "./WindTurbines";
+import { applyToneMapping } from "../tone";
 
 // Standalone bench for the landmark assets: each on flat ground, with the
 // wind, time and light under control. /landmarks
@@ -251,6 +252,8 @@ export const LandmarksPreview: React.FC = () => {
         return renderer;
       }}
       camera={{ fov: 50, near: 1, far: 80000, position: [0, 50, 300] }}
+      // As the scene: after R3F has put in its default, ACES.
+      onCreated={({ gl }) => applyToneMapping(gl)}
     >
       <Lighting night={settings.night} sun={settings.sun} />
       <Ground night={settings.night} />

@@ -45,6 +45,7 @@ import {
 } from "./density";
 import { rainfall, RainUniforms } from "./rain";
 import { rainDeck, rainField } from "./rainField";
+import { switchedOff } from "../stats";
 
 export interface CloudQuality {
   /** Steps along the view ray. */
@@ -92,6 +93,33 @@ const RAIN_DISTANCE = 25000;
  * haze around them, so they read against a bright sky and lighter than hills.
  */
 const RAIN_SHADE = 0.75;
+
+/**
+ * Light scattered more than once, as octaves (Wrenninge 2013; Hillaire,
+ * Frostbite 2016): each sees the sun through DEPTH^i of the optical depth,
+ * gives LIGHT^i of its light, and scatters with ECCENTRICITY^i of the phase's
+ * lobes. It's what keeps thick cloud bright through its body, where light
+ * scattered once is spent in the first few tens of metres. Tried against the
+ * sheets (scripts/shots): four octaves at 0.5 and 0.5 lit the bases from
+ * below until the half-cover skies went flat; these keep their shading.
+ */
+const OCTAVES = 3;
+const DEPTH = 0.7;
+const LIGHT = 0.4;
+const ECCENTRICITY = 0.5;
+
+/**
+ * The sun's radiance in the march. Phase functions integrate to 1 over the
+ * sphere (isotropic ≈ 0.08), so it's big for sunlit cloud to read as white.
+ */
+const SUN_RADIANCE = 28;
+
+/**
+ * Of the "powder" darkening on the sunny side of dense cloud. With the
+ * octaves it still earns its place: without it thin cloud came out twice as
+ * bright and melted into the sky.
+ */
+const POWDER = 0.5;
 
 /**
  * Raymarches the cloud layers for each screen pixel, stopping at the scene
@@ -191,11 +219,29 @@ export function createCloudNode({
     );
 
     const cosine = dot(direction, sunDirection);
+
     // Bright forward lobe for silver linings, gentle back lobe.
-    const cloudPhase = mix(phase(cosine, 0.6), phase(cosine, -0.25), 0.35);
-    // Phase functions integrate to 1 over the sphere (isotropic ≈ 0.08), so
-    // the sun needs a big radiance for sunlit cloud to read as white.
-    const sunLight = sunIntensity.mul(28);
+    const lobes = (scale: number) =>
+      mix(phase(cosine, 0.6 * scale), phase(cosine, -0.25 * scale), 0.35);
+
+    const cloudPhase = lobes(1);
+    const scattering = !switchedOff("cloudoctaves");
+
+    // Each octave's phase, by its share of the light: the same for the whole
+    // ray, so worked out once. Their sum is scaled to the light scattered
+    // once, so thin cloud, which every octave sees straight through, is as
+    // bright as it was from every angle; only thick cloud gains.
+    const shares = Array.from({ length: OCTAVES }, (_, i) =>
+      lobes(ECCENTRICITY ** i).mul(LIGHT ** i)
+    );
+
+    const total = shares.reduce((sum: any, share) => sum.add(share), float(0));
+
+    const octaves = scattering
+      ? shares.map((share) => share.mul(cloudPhase).div(total).toVar())
+      : [];
+
+    const sunLight = sunIntensity.mul(SUN_RADIANCE);
 
     If(tFar.greaterThan(tNear).and(lowCloud.or(midCloud)), () => {
       // Steps grow with distance: fine near the camera, coarse far away
@@ -233,14 +279,19 @@ export function createCloudNode({
             stride *= 2;
           }
 
-          const sunTransmittance = exp(toSun.mul(-EXTINCTION));
+          // The sun through the cloud, scattered once or in octaves.
+          const sunward = scattering
+            ? octaves.reduce(
+                (sum: any, octave, i) =>
+                  sum.add(octave.mul(exp(toSun.mul(-EXTINCTION * DEPTH ** i)))),
+                float(0)
+              )
+            : exp(toSun.mul(-EXTINCTION)).mul(cloudPhase);
+
           // Dark edges on the sunny side of dense cloud ("powder").
           const powder = float(1).sub(exp(toSun.mul(-EXTINCTION * 2)));
 
-          const direct = sunTransmittance
-            .mul(mix(1, powder, 0.5))
-            .mul(cloudPhase)
-            .mul(sunLight);
+          const direct = sunward.mul(mix(1, powder, POWDER)).mul(sunLight);
 
           // Sky light, brighter toward the tops. Under a deck, the sun
           // scattered many times through it lights the whole layer evenly,
@@ -299,9 +350,10 @@ export function createCloudNode({
           )
         ).mul(0.55);
 
-        const lum = vec3(phase(cosine, 0.5).mul(sunLight).mul(0.5)).add(
-          skyHorizon.mul(skyBrightness.mul(1.6))
-        );
+        // Thin, so scattered once: the octaves' light isn't in it.
+        const lum = vec3(
+          phase(cosine, 0.5).mul(sunIntensity.mul(SUN_RADIANCE)).mul(0.5)
+        ).add(skyHorizon.mul(skyBrightness.mul(1.6)));
 
         // Fade toward the horizon, where the sheet is very far away.
         const fadeOut = smoothstep(0.01, 0.15, direction.y);

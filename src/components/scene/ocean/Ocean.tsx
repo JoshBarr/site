@@ -57,6 +57,8 @@ import {
 } from "./spectrum";
 import { useRenderer } from "../renderer";
 import { switchedOff } from "../stats";
+import { loadSeaWind, openWind, seaWindiness } from "./seaWind";
+import { windVector } from "../weather";
 
 export interface OceanQuality {
   /** FFT resolution per cascade. */
@@ -174,13 +176,28 @@ function createMaterial(
   // Waves shoal and die in shallow water.
   const shoaling = smoothstep(0.3, 10, depthAt(world));
 
+  // How built-up the sea is here, against the open sea, for the cascades
+  // after the swell (./seaWind.ts): 1 for the swell, which the lee doesn't
+  // calm. Worked out per vertex and passed down.
+  const gusting = !switchedOff("seawind");
+
+  const windiness: any = gusting
+    ? varying(seaWindiness(world, rootSize))
+    : vec2(1);
+
+  const builtUp = (c: number) =>
+    c === 0 ? float(1) : c === 1 ? windiness.x : windiness.y;
+
   let displacement: any = vec3(0);
   cascades.forEach(({ size }, c) => {
     // Vertex density falls with distance, so drop each cascade once its
     // waves are smaller than the mesh can carry.
     const fade = float(1).sub(smoothstep(size * 4, size * 16, distance));
     displacement = displacement.add(
-      texture(displacements[c], world.div(size)).level(float(0)).xyz.mul(fade)
+      texture(displacements[c], world.div(size))
+        .level(float(0))
+        .xyz.mul(fade)
+        .mul(builtUp(c))
     );
   });
 
@@ -209,19 +226,25 @@ function createMaterial(
   cascades.forEach(({ size }, c) => {
     // (slope x, slope z, jacobian, slope squared)
     const d = texture(derivatives[c], surface.div(size));
-    slope = slope.add(d.xy);
+    const scale = builtUp(c);
+    slope = slope.add(d.xy.mul(scale));
 
     // The finest cascade's ripples are under a pixel from any height, and
     // the glint's never counted them: the look is of the two that draw.
     if (c >= 2) return;
 
-    jacobian = jacobian.add(d.z.sub(1));
+    jacobian = jacobian.add(d.z.sub(1).mul(scale));
 
     // The squares' mean less the mean's square. Only where the map's
     // minified: between two texels the same sum is the slope's change
     // across them, which is drawn.
     const minified = log2(footprint.div(size / fftSize)).saturate();
-    unseen = unseen.add(max(d.w.sub(d.xy.dot(d.xy)), 0).mul(minified));
+
+    unseen = unseen.add(
+      max(d.w.sub(d.xy.dot(d.xy)), 0)
+        .mul(scale.mul(scale))
+        .mul(minified)
+    );
   });
   slope = slope.mul(shallow);
   unseen = unseen.mul(shallow).mul(shallow);
@@ -389,7 +412,16 @@ export function Ocean({
 
   useEffect(() => {
     simulation?.setConditions(conditions);
+
+    const [x, z] = windVector(conditions.windSpeed, conditions.windDirection);
+    openWind.value.set(x, z);
   }, [simulation, conditions]);
+
+  useEffect(() => {
+    if (supported && !switchedOff("seawind")) {
+      loadSeaWind().catch((e) => console.error("[sea wind]", e));
+    }
+  }, [supported]);
 
   useEffect(
     () => () => {

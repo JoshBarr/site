@@ -37,6 +37,46 @@ interface Collection {
   schema: z.ZodType<{ sk: unknown; data: unknown }>;
 }
 
+const update = z.object({
+  TableName: z.string(),
+  Key: z.object({ pk: wireValue, sk: wireValue }),
+  UpdateExpression: z.string(),
+  ExpressionAttributeNames: z.record(z.string(), z.string()),
+  ExpressionAttributeValues: z.record(z.string(), wireValue),
+});
+
+/**
+ * `asked` done to `items`, for the one update the site makes (addOne in
+ * src/lib/liveTable.ts): ADD numbers, and SET one if it's not there.
+ */
+function added(items: Wire[], asked: z.infer<typeof update>) {
+  const { Key, UpdateExpression, ExpressionAttributeNames: names } = asked;
+  const values = asked.ExpressionAttributeValues;
+
+  const shape = /^ADD (.+) SET (\w+) = if_not_exists\(\2, (:\w+)\)$/.exec(
+    UpdateExpression
+  );
+
+  if (!shape) throw new Error(`fake table: ${UpdateExpression} isn't served`);
+
+  let item = items.find((i) => i.pk?.S === Key.pk.S && i.sk?.S === Key.sk.S);
+
+  if (!item) {
+    item = { pk: Key.pk, sk: Key.sk };
+    items.push(item);
+  }
+
+  for (const term of shape[1].split(", ")) {
+    const [name, value] = term.split(" ");
+    const attribute = names[name] ?? name;
+    const before = Number(item[attribute]?.N ?? 0);
+
+    item[attribute] = { N: String(before + Number(values[value]?.N)) };
+  }
+
+  item[shape[2]] ??= values[shape[3]];
+}
+
 /** Whether `item` meets the key condition, as the site words them. */
 function matches(
   item: Wire,
@@ -76,10 +116,24 @@ function matches(
 export function liveTable() {
   const items: Wire[] = [];
   const queries: z.infer<typeof query>[] = [];
+  const updates: z.infer<typeof update>[] = [];
 
   server.use(
     http.post(ENDPOINT, async ({ request }) => {
-      const asked = query.parse(await request.json());
+      const body = await request.json();
+
+      if (request.headers.get("X-Amz-Target")?.endsWith(".UpdateItem")) {
+        const asked = update.parse(body);
+        updates.push(asked);
+        added(items, asked);
+
+        return HttpResponse.json(
+          {},
+          { headers: { "Content-Type": "application/x-amz-json-1.0" } }
+        );
+      }
+
+      const asked = query.parse(body);
       queries.push(asked);
 
       const found = items
@@ -98,6 +152,12 @@ export function liveTable() {
 
   return {
     queries,
+    updates,
+
+    /** The item at `pk`/`sk`, as it's stored. */
+    item(pk: string, sk: string) {
+      return items.find((item) => item.pk?.S === pk && item.sk?.S === sk);
+    },
 
     /** Stores `data` as `c`'s item at `sk`, as the poller would. */
     seed<C extends Collection>(

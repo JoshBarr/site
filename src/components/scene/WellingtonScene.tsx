@@ -99,6 +99,7 @@ import {
   subscribeActive,
 } from "./scope/scope";
 import { cloudsSeen } from "./clouds/density";
+import { withMirroredCloud } from "./clouds/mirrored";
 import { updateLens } from "./lens";
 import { DEFAULT_FOV, flightFor, FollowRig, smootherstep } from "./follow/rig";
 import { groundAlong } from "./ground";
@@ -131,6 +132,8 @@ import {
 import { sceneNow, useSeek } from "./clock";
 import { arcUnder, beneath, ceilingFor, DECK_CLEARANCE } from "./underDeck";
 import { attachInspector, showStats, Stats, switchedOff } from "./stats";
+import { applyToneMapping } from "./tone";
+import { useFrameReport } from "./frames";
 
 // Over the harbour, looking west across Te Aro to Kelburn.
 const START_POSITION: [number, number] = [1752500, 5429000];
@@ -198,7 +201,7 @@ function Atmosphere({
 
     const far = cameraPosition.add(direction.mul(SKYGLOW_DISTANCE));
 
-    scene.backgroundNode = mix(gradient, hazeColor(direction), horizon.mul(0.8))
+    const sky = mix(gradient, hazeColor(direction), horizon.mul(0.8))
       .add(hazeGlowToward(toward, 0.15))
       .add(disc)
       .add(moonDisc(direction))
@@ -207,6 +210,11 @@ function Atmosphere({
           float(1).sub(hazeTransmittance(cameraPosition, far))
         )
       );
+
+    // The water's mirror sees the low cloud's base in it (./clouds/mirrored).
+    scene.backgroundNode = switchedOff("mirrorclouds")
+      ? sky
+      : withMirroredCloud(sky, direction);
 
     return () => {
       scene.fogNode = null;
@@ -1786,6 +1794,7 @@ export function Scene({
   }, [lights, light]);
 
   useTide();
+  useFrameReport(mobile ? "mobile" : "desktop");
 
   const placed = useMemo(
     () =>
@@ -2001,6 +2010,8 @@ export const WellingtonScene: React.FC<{
           return renderer;
         }}
         camera={CAMERA}
+        // After R3F has put in its default, ACES.
+        onCreated={({ gl }) => applyToneMapping(gl)}
       >
         <CompileInBackground />
         {index && (

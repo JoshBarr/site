@@ -19,6 +19,7 @@ import { updateLens } from "../lens";
 import { Conditions } from "../weather";
 import { Clouds } from "./Clouds";
 import { CLOUDS_DESKTOP, CLOUDS_MOBILE } from "./cloudNode";
+import { applyToneMapping } from "../tone";
 
 // Standalone bench for the clouds: the real march over a flat sea, with the
 // weather, sun and view under control. Spin the camera to see the march's
@@ -297,6 +298,8 @@ export const CloudsPreview: React.FC = () => {
         return renderer;
       }}
       camera={{ fov: 50, near: 5, far: 80000, position: [0, 900, 0] }}
+      // As the scene: after R3F has put in its default, ACES.
+      onCreated={({ gl }) => applyToneMapping(gl)}
     >
       <Sky />
       <Sun

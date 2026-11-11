@@ -95,8 +95,9 @@ const positionsCdn = Effect.fn(function* (bucket: AWS.S3.Bucket) {
 
 /**
  * A role the site's Vercel functions assume with their OIDC tokens (team
- * issuer mode) to read the table: no keys. Made once VERCEL_TEAM (the team
- * slug) and VERCEL_PROJECT (the project name) are in the env file.
+ * issuer mode) to read the table, and count the scene's frame times: no
+ * keys. Made once VERCEL_TEAM (the team slug) and VERCEL_PROJECT (the
+ * project name) are in the env file.
  */
 const vercelReader = Effect.fn(function* (table: AWS.DynamoDB.Table) {
   const team = yield* Config.String("VERCEL_TEAM").pipe(Config.option);
@@ -137,6 +138,23 @@ const vercelReader = Effect.fn(function* (table: AWS.DynamoDB.Table) {
             Effect: "Allow",
             Action: ["dynamodb:GetItem", "dynamodb:Query"],
             Resource: [table.tableArn],
+          },
+        ],
+      },
+      // The scene's frame times, counted by day (src/pages/api/frames.ts):
+      // only in their own partition.
+      CountFrames: {
+        Version: "2012-10-17",
+        Statement: [
+          {
+            Effect: "Allow",
+            Action: ["dynamodb:UpdateItem"],
+            Resource: [table.tableArn],
+            Condition: {
+              "ForAllValues:StringEquals": {
+                "dynamodb:LeadingKeys": ["frames"],
+              },
+            },
           },
         ],
       },

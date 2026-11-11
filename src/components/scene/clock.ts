@@ -43,6 +43,13 @@ function current() {
 
 const read = () => frozen ?? Date.now() + offset;
 
+/** Whether the clock's held still, with `?freeze`. */
+export function isFrozen() {
+  current();
+
+  return frozen !== null;
+}
+
 /** The scene's time now, epoch ms. */
 export function sceneNow() {
   current();

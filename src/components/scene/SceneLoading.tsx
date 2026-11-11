@@ -82,6 +82,7 @@ export const SceneLoading: React.FC<{
   const [settled, setSettled] = useState(false);
   const [busy, setBusy] = useState(false);
   const isStarted = useRef(started);
+  const status = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     isStarted.current = started;
@@ -99,7 +100,11 @@ export const SceneLoading: React.FC<{
 
     const id = setInterval(() => {
       const now = performance.now();
-      const loading = loadingCount() > 0;
+      const count = loadingCount();
+      const loading = count > 0;
+
+      // For scripts/shots, which wait for the layers to be in.
+      status.current?.setAttribute("data-loads", String(count));
 
       if (loading && isStarted.current) streamed = true;
 
@@ -144,8 +149,11 @@ export const SceneLoading: React.FC<{
 
   return (
     <div
+      ref={status}
       role="status"
       aria-label={shown ? "Loading" : undefined}
+      // For scripts/shots: the first view's in.
+      data-settled={settled || undefined}
       style={{
         ...panel,
         position: "absolute",

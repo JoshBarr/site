@@ -11,7 +11,7 @@ import { quakeWarp } from "../quakes/glow";
 import { tvScreen } from "../time/tv";
 import { switchedOff } from "../stats";
 import { Conditions, lowCloudBase, windVector } from "../weather";
-import { sceneNow } from "../clock";
+import { isFrozen, sceneNow } from "../clock";
 import {
   cloudField,
   pullFor,
@@ -369,7 +369,11 @@ export function Clouds({
   useFrame((_, delta) => {
     const { speed, direction } = conditions.windAloft;
 
+    // Held still (?freeze), so shots of the same view can be compared.
+    const held = isFrozen();
+
     const drift = (layer: CloudLayerUniforms, factor: number, veer = 0) => {
+      if (held) return;
       const [vx, vz] = windVector(speed * factor, direction + veer);
       // Sampling at p + offset moves the pattern along -offset.
       layer.offset.value.x -= vx * delta * DRIFT_SPEED;

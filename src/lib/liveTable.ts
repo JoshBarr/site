@@ -3,6 +3,7 @@ import {
   DynamoDBClient,
   QueryCommand,
   type QueryCommandInput,
+  UpdateItemCommand,
 } from "@aws-sdk/client-dynamodb";
 import { awsCredentialsProvider } from "@vercel/functions/oidc";
 import { z } from "zod";
@@ -133,4 +134,32 @@ export async function readOldest<C extends Collection>(c: C) {
   });
 
   return record ?? null;
+}
+
+/**
+ * Adds one to each of `counters` in the item at `pk`/`sk`, made if it isn't
+ * there, which expires `ttl` seconds after it's made: one write.
+ */
+export async function addOne(
+  pk: string,
+  sk: string,
+  counters: string[],
+  ttl: number
+) {
+  const names = Object.fromEntries(counters.map((name, i) => [`#c${i}`, name]));
+
+  await getClient().send(
+    new UpdateItemCommand({
+      TableName: process.env.LIVE_TABLE,
+      Key: { pk: { S: pk }, sk: { S: sk } },
+      UpdateExpression: `ADD ${Object.keys(names)
+        .map((name) => `${name} :one`)
+        .join(", ")} SET expires = if_not_exists(expires, :expires)`,
+      ExpressionAttributeNames: names,
+      ExpressionAttributeValues: {
+        ":one": { N: "1" },
+        ":expires": { N: String(Math.floor(Date.now() / 1000) + ttl) },
+      },
+    })
+  );
 }
