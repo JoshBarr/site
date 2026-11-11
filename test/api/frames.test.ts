@@ -81,6 +81,7 @@ describe("/api/frames", () => {
       json({ ...REPORT, tier: "watch" }),
       json({ ...REPORT, median: -1 }),
       json({ ...REPORT, width: 1.5 }),
+      json({ ...REPORT, scale: 2 }),
       json({ median: 16 }),
       "not json",
     ]) {
@@ -112,5 +113,19 @@ describe("/api/frames", () => {
       "megapixels:desktop:3",
       "dpr:desktop:2",
     ]);
+  });
+
+  it("counts the scale the scene was drawn at, when it's sent", async () => {
+    const response = await post(json({ ...REPORT, scale: 0.7 }));
+
+    expect(response.status).toBe(204);
+
+    const day = table.updates[0].Key.sk.S ?? "";
+    const item = table.item("frames", day);
+
+    expect(item?.["scale:desktop:webgpu:0.7"]).toEqual({ N: "1" });
+    expect(countersFor({ ...REPORT, scale: 1 })).toContain(
+      "scale:desktop:webgpu:1"
+    );
   });
 });

@@ -20,6 +20,12 @@ export const frameReport = z.object({
   height: z.int().min(1).max(16_384),
   /** The screen's device pixel ratio. */
   dpr: z.number().min(0.25).max(8),
+  /**
+   * The size the scene was being drawn at by the end, of the canvas's each
+   * way: under 1 where frames ran late (the scene's governor.ts). Reports
+   * from before it have none.
+   */
+  scale: z.number().min(0.1).max(1).optional(),
 });
 
 export type FrameReport = z.infer<typeof frameReport>;
@@ -54,6 +60,10 @@ export function countersFor(report: FrameReport) {
     `p95:${kind}:${bucket(report.p95, INTERVALS)}`,
     `megapixels:${tier}:${bucket(megapixels, MEGAPIXELS)}`,
     `dpr:${tier}:${dpr}`,
+    // To the nearest twentieth: the governor's steps.
+    ...(report.scale === undefined
+      ? []
+      : [`scale:${kind}:${Math.round(report.scale * 20) / 20}`]),
   ];
 }
 

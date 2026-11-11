@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { HalfFloatType, RenderPipeline, Scene } from "three/webgpu";
+import {
+  HalfFloatType,
+  RenderPipeline,
+  Scene,
+  Vector2,
+  Vector3,
+} from "three/webgpu";
 import { mix, pass, rtt, select, texture, uniform, vec4 } from "three/tsl";
 import { gaussianBlur } from "three/addons/tsl/display/GaussianBlurNode.js";
 import { cloudShadowMap, overcast, overcastFor } from "../environment";
@@ -40,6 +46,11 @@ import { cloudHistory } from "./temporal";
 import { lensWetness, updateLensWetness, wetLens } from "./wetLens";
 import { useRenderer } from "../renderer";
 import { setSceneDepth } from "../sceneDepth";
+import { createGovernor } from "../governor";
+import { hazeShadow, shadedHaze } from "../hazeShadow";
+import { meterSky, skyStage, stopDown } from "../sky/skyModel";
+import { hasFirstViewLoaded } from "../loading";
+import { sceneShown } from "../visibility";
 
 /**
  * Clouds drift at the real wind speed times this. Real time reads as
@@ -54,6 +65,13 @@ const CIRRUS_VEER = 25;
 
 /** Water on the lens in rain. Off until it looks like water. */
 const WET_LENS = false;
+
+/**
+ * The finished frame as the canvas shows it: stopped down where the sky
+ * model's glow ahead is bright (?sky=), then tone mapped and dithered.
+ */
+const shown = (frame) =>
+  dithered(skyStage() ? vec4(frame.rgb.mul(stopDown), frame.a) : frame);
 
 /**
  * Fills the shared noise textures off the main thread. True once they hold
@@ -89,6 +107,9 @@ function useCloudNoise() {
 const HIDDEN = 0.5;
 
 const unit = (value: number) => Math.min(Math.max(value, 0), 1);
+
+/** Which way the camera faces, each frame. */
+const facing = new Vector3();
 
 /**
  * Shares the cover out into the layers. Observed (the airport's METAR), the
@@ -176,7 +197,10 @@ export function Clouds({
   const renderer = useRenderer();
   const scene = useThree((state) => state.scene);
   const camera = useThree((state) => state.camera);
+  // Drawing every frame it can, not ticking over while it's hidden.
+  const flatOut = useThree((state) => state.frameloop === "always");
   const noiseReady = useCloudNoise();
+  const governor = useMemo(createGovernor, []);
 
   const rain = useMemo(createRainUniforms, []);
 
@@ -234,12 +258,20 @@ export function Clouds({
 
     if (!noiseReady || switchedOff("clouds")) {
       const tv = tvScreen(depthOfField(color, depth));
-      pipeline.outputNode = dithered(tv.node);
+      pipeline.outputNode = shown(tv.node);
 
       return { scenePass, pipeline, glow, history: null, drops: null, tv };
     }
 
     const offset = uniform(0);
+    const accumulated = !switchedOff("cloudhistory");
+
+    // A quarter of the march's pixels a frame, the rest kept from the
+    // history: which of each four, set by the history as it goes.
+    const sub =
+      accumulated && !switchedOff("cloudquarter")
+        ? uniform(new Vector2())
+        : null;
 
     const cloudNode = createCloudNode({
       depth: scenePass.getTextureNode("depth"),
@@ -251,6 +283,7 @@ export function Clouds({
       rain,
       quality,
       offset,
+      sub,
     });
 
     // Relative to CSS pixels: on a 2x display the march would otherwise do
@@ -258,32 +291,50 @@ export function Clouds({
     // A second texture for how far off the cloud is.
     const clouds = rtt(cloudNode, null, null, {
       type: HalfFloatType,
-      resolutionScale: quality.resolutionScale / renderer.getPixelRatio(),
+      resolutionScale:
+        (quality.resolutionScale / renderer.getPixelRatio()) * (sub ? 0.5 : 1),
       count: 2,
     });
 
-    const history = switchedOff("cloudhistory")
-      ? null
-      : cloudHistory(
+    const history = accumulated
+      ? cloudHistory(
           clouds,
           texture(clouds.renderTarget!.textures[1]),
           camera,
-          offset
+          offset,
+          sub
+        )
+      : null;
+
+    // The haze in the clouds' shadows goes dark, before they're laid over.
+    const eye = {
+      cameraPosition: uniform(camera.position),
+      cameraWorld: uniform(camera.matrixWorld),
+      projectionInverse: uniform(camera.projectionMatrixInverse),
+    };
+
+    const lit: typeof color.rgb = switchedOff("hazeshadow")
+      ? color.rgb
+      : shadedHaze(
+          color.rgb,
+          hazeShadow({
+            depth,
+            ...eye,
+            resolutionScale: quality.resolutionScale / renderer.getPixelRatio(),
+          }),
+          eye
         );
 
     // Just enough blur to dissolve the march's jitter grain.
-    const soft = gaussianBlur(history?.getTextureNode() ?? clouds, 1, 0.4);
+    const settled = history?.getTextureNode() ?? clouds;
+    const soft = gaussianBlur(settled, 1, 0.4);
 
     // Faded out by cloudsSeen; not drawn at all once it's 0.
-    const cloudy = color.rgb.mul(soft.a).add(soft.rgb);
+    const cloudy = lit.mul(soft.a).add(soft.rgb);
 
     const composite: any = depthOfField(
       vec4(
-        select(
-          cloudsSeen.greaterThan(0),
-          mix(color.rgb, cloudy, cloudsSeen),
-          color.rgb
-        ),
+        select(cloudsSeen.greaterThan(0), mix(lit, cloudy, cloudsSeen), lit),
         1
       ),
       depth
@@ -291,7 +342,7 @@ export function Clouds({
 
     if (!raining) {
       const tv = tvScreen(composite);
-      pipeline.outputNode = dithered(tv.node);
+      pipeline.outputNode = shown(tv.node);
 
       return { scenePass, pipeline, glow, history, drops: null, tv };
     }
@@ -319,14 +370,14 @@ export function Clouds({
 
     if (!WET_LENS) {
       const tv = tvScreen(vec4(over(composite.rgb, streaks), 1));
-      pipeline.outputNode = dithered(tv.node);
+      pipeline.outputNode = shown(tv.node);
 
       return { scenePass, pipeline, glow, history, drops, tv };
     }
 
     const tv = tvScreen(
       wetLens(vec4(over(composite.rgb, streaks), 1), (uv) => {
-        const sky = clouds.sample(uv);
+        const sky = settled.sample(uv);
 
         return over(
           output.sample(uv).rgb.mul(sky.a).add(sky.rgb),
@@ -335,7 +386,7 @@ export function Clouds({
       })
     );
 
-    pipeline.outputNode = dithered(tv.node);
+    pipeline.outputNode = shown(tv.node);
 
     return { scenePass, pipeline, glow, history, drops, tv };
   }, [renderer, scene, camera, noiseReady, rain, quality, dark, raining]);
@@ -413,6 +464,20 @@ export function Clouds({
       delta
     );
     tv.update(delta);
+    meterSky(camera.getWorldDirection(facing), delta);
+
+    // The scene's own pass, smaller when frames run late (see governor).
+    // The clouds, the lens and the dither keep the canvas's size: they read
+    // it by where on screen, not by pixel.
+    const scale = governor.frame(
+      delta,
+      flatOut && sceneShown() && hasFirstViewLoaded()
+    );
+
+    if (scale !== scenePass.getResolutionScale()) {
+      scenePass.setResolutionScale(scale);
+    }
+
     pipeline.render();
   }, 1);
 

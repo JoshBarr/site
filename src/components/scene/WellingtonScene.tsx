@@ -28,6 +28,7 @@ import {
   positionWorld,
   positionWorldDirection,
   smoothstep,
+  varying,
 } from "three/tsl";
 import {
   clearAround,
@@ -35,6 +36,8 @@ import {
   hazeColor,
   hazeDensity,
   hazeDensityForVisibility,
+  hazeGrey,
+  hazeHeight,
   hazeTransmittance,
   hazeTransmittanceBetween,
   hazeGlowToward,
@@ -83,6 +86,15 @@ import { Buses } from "./buses/Buses";
 import { Traffic } from "./traffic/Traffic";
 import { AirfieldLights } from "./airport/AirfieldLights";
 import { Sky } from "./sky/Sky";
+import {
+  nightSky,
+  showSky,
+  skyFor,
+  skyOnCloud,
+  skyRadiance,
+  skyStage,
+  type Sky as SkyModel,
+} from "./sky/skyModel";
 import { moonAt, moonDisc, moonlight } from "./sky/moon";
 import { sight } from "./sky/orbits";
 import { Telescope } from "./scope/Telescope";
@@ -171,7 +183,8 @@ function Atmosphere({
     const edgeFade = smoothstep(half * 0.6, half * 0.95, edge);
     const haze = float(1).sub(hazeTransmittance(cameraPosition, positionWorld));
 
-    const fogColor = hazeColor(positionWorld.sub(cameraPosition)).add(
+    // The sky model's glow is smooth across any triangle: by the vertex.
+    const fogColor = hazeColor(positionWorld.sub(cameraPosition), varying).add(
       hazeGlowAtNight(cameraPosition, positionWorld)
     );
 
@@ -187,11 +200,13 @@ function Atmosphere({
     const direction = positionWorldDirection;
     const toward = dot(direction, environment.sunDirection);
 
-    const gradient = mix(
+    const greys = mix(
       environment.skyHorizon,
       mix(environment.skyZenith, environment.skyHorizon, environment.overcast),
       smoothstep(0, 0.35, direction.y)
-    ).mul(environment.skyBrightness);
+    );
+
+    const gradient = greys.mul(environment.skyBrightness);
 
     const horizon = float(1).sub(smoothstep(0, 0.25, max(direction.y, 0)));
 
@@ -201,8 +216,44 @@ function Atmosphere({
 
     const far = cameraPosition.add(direction.mul(SKYGLOW_DISTANCE));
 
-    const sky = mix(gradient, hazeColor(direction), horizon.mul(0.8))
-      .add(hazeGlowToward(toward, 0.15))
+    // From the sky model (?sky=): the day's sky is its own, hazy horizon,
+    // glow round the sun and all, going over to the deck's underside as the
+    // cloud closes; the old greys are what's left of the sky at night, and
+    // the glow the moon's. Under the horizon there's no sky, only the haze
+    // the far sea's lost in.
+    const modelled = () => {
+      // The sky goes over to the haze toward the horizon, as the old sky
+      // did: far cloud and far hills fade into that, and it's darker than
+      // the model's sky there (the old haze, or the model's at its veil). A
+      // brighter sky behind them showed as a band under the cloud.
+      const lost = smoothstep(0, -0.02, direction.y);
+      const hazed = max(lost, horizon.mul(0.8));
+
+      // The deck's underside, lost in the haze toward the horizon.
+      const deck = mix(
+        hazeColor(direction),
+        skyOnCloud(0).add(
+          environment.overcast.mul(environment.sunIntensity).mul(1.2)
+        ),
+        hazeTransmittance(cameraPosition, far)
+      );
+
+      return mix(
+        mix(skyRadiance(direction), deck, environment.overcast)
+          .add(mix(greys, hazeGrey, horizon.mul(0.8)).mul(nightSky))
+          .add(hazeGlowToward(toward, 0.15).mul(environment.moonlit)),
+        hazeColor(direction),
+        hazed
+      );
+    };
+
+    const air = skyStage()
+      ? modelled()
+      : mix(gradient, hazeColor(direction), horizon.mul(0.8)).add(
+          hazeGlowToward(toward, 0.15)
+        );
+
+    const sky = air
       .add(disc)
       .add(moonDisc(direction))
       .add(
@@ -1577,9 +1628,14 @@ interface SceneLight {
 
 /**
  * The sun at its real position over Wellington, at `time`; while it's down,
- * the moon at its, by its phase, once twilight's over.
+ * the moon at its, by its phase, once twilight's over. With `sky`, the sun's
+ * as strong as the sky model has it.
  */
-function lightAt(sun: SunPosition, time: Date): SceneLight {
+function lightAt(
+  sun: SunPosition,
+  time: Date,
+  sky: SkyModel | null
+): SceneLight {
   if (sun.altitude < 0) {
     const { body, direction, altitude } = moonAt(time.getTime());
 
@@ -1588,6 +1644,11 @@ function lightAt(sun: SunPosition, time: Date): SceneLight {
       intensity: moonlight(body, altitude, sun.altitude),
       moon: true,
     };
+  }
+
+  // As strong as the air it comes through leaves it (./sky/skyModel.ts).
+  if (sky) {
+    return { direction: sunDirection(sun), intensity: sky.sun, moon: false };
   }
 
   // Fade in through the first few degrees above the horizon.
@@ -1777,14 +1838,50 @@ export function Scene({
   }, [wind]);
   const sun = useMemo(() => sunPosition(time), [time]);
   const sea = useMemo(() => seaConditions(conditions), [conditions]);
-  const light = useMemo(() => lightAt(sun, time), [sun, time]);
+  // The day's light from the sky model, unless the page asks for less (?sky=).
+  const stage = skyStage();
+
+  const sky = useMemo(
+    () =>
+      stage
+        ? skyFor(
+            sun.altitude,
+            hazeDensityForVisibility(conditions.visibility),
+            hazeHeight.value
+          )
+        : null,
+    [stage, sun.altitude, conditions.visibility]
+  );
+
+  const light = useMemo(
+    () => lightAt(sun, time, stage >= 2 ? sky : null),
+    [sun, time, stage, sky]
+  );
+
   const lights = nightFor(sun.altitude);
   const deck = conditions.cloudCover > 0 ? lowCloudBase(conditions) : null;
-  const skylight = environment.skylightFor(conditions.cloudCover, 1 - lights);
+
+  const skylight = environment.skylightFor(
+    conditions.cloudCover,
+    1 - lights,
+    stage >= 3 && sky ? sky.sky : null
+  );
 
   useEffect(() => {
     environment.skylight.value = skylight;
   }, [skylight]);
+
+  useEffect(() => {
+    if (!sky) return;
+
+    showSky(
+      sky,
+      sunDirection(sun),
+      lights,
+      light.moon ? light.intensity : 0,
+      conditions.cloudCover
+    );
+  }, [sky, sun, lights, light, conditions.cloudCover]);
 
   useEffect(() => {
     environment.skyBrightness.value = environment.skyBrightnessFor(

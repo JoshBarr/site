@@ -18,6 +18,7 @@ import {
   sunDirection,
   sunIntensity,
 } from "./environment";
+import { hazeRadiance, nightSky, skyStage } from "./sky/skyModel";
 
 // Atmospheric haze: extinction falls off exponentially with height, so the
 // boundary layer over the harbour is thick and the hilltops clear above it.
@@ -30,6 +31,9 @@ export const hazeHeight = uniform(900);
 
 /** Colour of the haze lit from the side; the sun adds a glow toward itself. */
 const hazeTint = uniform(new Color("#4a4a4a"));
+
+/** The haze's own grey, lit by the sky alone. */
+export const hazeGrey = mix(skyHorizon, hazeTint, 0.5);
 
 /** Koschmieder: visibility is where contrast falls to 2% (ln 50 ≈ 3.912). */
 export function hazeDensityForVisibility(visibility: number) {
@@ -124,10 +128,23 @@ export function hazeGlowToward(toward, strength: number) {
 /**
  * Light the haze scatters toward the viewer along `direction`: the horizon
  * colour, dimmed at night, brightened toward the sun by forward scattering.
+ * `model` is handed the sky model's share of it (from its fourth stage), to
+ * work out where it's cheapest: a table read, which the fog on every
+ * material would otherwise make at every pixel.
  */
-export function hazeColor(direction) {
-  const toward = dot(normalize(direction), sunDirection);
+export function hazeColor(direction, model = (glow) => glow) {
+  const along = normalize(direction);
+  const toward = dot(along, sunDirection);
   const glow = hazeGlowToward(toward, 0.6);
 
-  return mix(skyHorizon, hazeTint, 0.5).mul(skyBrightness).add(glow);
+  // From the sky model, the day's glow is its; the night's grey and the
+  // moon's glow stay.
+  if (skyStage() >= 4) {
+    return hazeGrey
+      .mul(nightSky)
+      .add(glow.mul(moonlit))
+      .add(model(hazeRadiance(along)));
+  }
+
+  return hazeGrey.mul(skyBrightness).add(glow);
 }

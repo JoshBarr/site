@@ -16,6 +16,7 @@ import {
   outputStruct,
   property,
   screenCoordinate,
+  screenSize,
   screenUV,
   smoothstep,
   texture,
@@ -23,14 +24,8 @@ import {
   vec3,
   vec4,
 } from "three/tsl";
-import {
-  overcast,
-  sunDirection,
-  sunIntensity,
-  skyZenith,
-  skyHorizon,
-  skyBrightness,
-} from "../environment";
+import { overcast, sunDirection, sunIntensity } from "../environment";
+import { skyOnCloud } from "../sky/skyModel";
 import { hazeColor, hazeTransmittance, phase } from "../haze";
 import { cloudGlowAtNight, hazeGlowAtNight } from "../skyglow";
 import {
@@ -139,6 +134,7 @@ export function createCloudNode({
   rain,
   quality,
   offset = float(0),
+  sub = null,
 }: {
   depth: any;
   cameraPosition: any;
@@ -157,6 +153,13 @@ export function createCloudNode({
    * frames average out (see temporal).
    */
   offset?: any;
+  /**
+   * Marching a quarter of the pixels a frame (see temporal): the target's
+   * half the size each way, each of its pixels a 2×2 block of the full one's,
+   * and this (a vec2 uniform of 0s and 1s) is which of the block's pixels the
+   * ray goes through this frame. Null marches every pixel.
+   */
+  sub?: any;
 }) {
   // Whether there's any cloud in each layer at all. Uniforms, so under a
   // clear sky the march, which otherwise steps through both reading the
@@ -182,9 +185,20 @@ export function createCloudNode({
   const distance = property("float", "cloudDistance");
 
   const march = Fn(() => {
+    // Where on screen the ray goes: through this pixel, or through this
+    // frame's pixel of the block of the full target it stands for.
+    const at = sub
+      ? screenCoordinate.xy
+          .floor()
+          .mul(2)
+          .add(sub)
+          .add(0.5)
+          .div(screenSize.mul(2))
+      : screenUV;
+
     // Ray from the camera through this pixel, as far as the scene goes.
-    const sceneDepth = depth.sample(screenUV).r;
-    const view = getViewPosition(screenUV, sceneDepth, projectionInverse);
+    const sceneDepth = depth.sample(at).r;
+    const view = getViewPosition(at, sceneDepth, projectionInverse);
     const world = cameraWorld.mul(vec4(view, 1)).xyz;
     const toScene = world.sub(cameraPosition);
     const direction = normalize(toScene);
@@ -212,6 +226,8 @@ export function createCloudNode({
     const depthSum = float(0).toVar();
 
     // Interleaved gradient noise jitters the start to trade banding for grain.
+    // By the target's own pixels, a quarter march's too: the noise is even
+    // over neighbours a pixel apart, not two.
     const jitter = fract(
       dot(screenCoordinate.xy, vec2(0.06711056, 0.00583715))
         .mul(52.9829189)
@@ -298,9 +314,9 @@ export function createCloudNode({
           // where the march above sees it spent at the top.
           const height = saturate(p.y.sub(bottom).div(top.sub(bottom)));
 
-          const ambient = mix(skyHorizon, skyZenith.mul(3), height)
-            .mul(skyBrightness.mul(1.4))
-            .add(overcast.mul(sunIntensity).mul(1.2));
+          const ambient = skyOnCloud(height).add(
+            overcast.mul(sunIntensity).mul(1.2)
+          );
 
           // At night the city lights the base; it's spent a little way in.
           const below = float(1).sub(height);
@@ -353,7 +369,7 @@ export function createCloudNode({
         // Thin, so scattered once: the octaves' light isn't in it.
         const lum = vec3(
           phase(cosine, 0.5).mul(sunIntensity.mul(SUN_RADIANCE)).mul(0.5)
-        ).add(skyHorizon.mul(skyBrightness.mul(1.6)));
+        ).add(skyOnCloud(0, 1.6));
 
         // Fade toward the horizon, where the sheet is very far away.
         const fadeOut = smoothstep(0.01, 0.15, direction.y);

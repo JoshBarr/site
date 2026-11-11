@@ -76,11 +76,14 @@ export function overcastFor(cloudCover: number) {
   return t * t * (3 - 2 * t);
 }
 
+/** A clear sky's light, by day and (with NIGHT_FILL) by night. */
+const CLEAR_SKY = 0.25;
+
 /**
  * The sky's even light: the ambient light's intensity, for materials that
  * shade themselves.
  */
-export const skylight = uniform(0.25);
+export const skylight = uniform(CLEAR_SKY);
 
 /**
  * At night, what the eye makes of starlight, the city's light off the cloud
@@ -95,12 +98,20 @@ const NIGHT_FILL = 0.3;
  * the sun but spreads it into flat light from everywhere, so by day an
  * overcast sky lights the scene nearly as much as the sun did.
  */
-export function skylightFor(cloudCover: number, daylight: number) {
-  return (
-    0.25 +
-    NIGHT_FILL * (1 - daylight) +
-    overcastFor(cloudCover) * (0.3 + 0.6 * daylight)
-  );
+export function skylightFor(
+  cloudCover: number,
+  daylight: number,
+  sky: number | null = null
+) {
+  const deck = overcastFor(cloudCover) * (0.3 + 0.6 * daylight);
+
+  // From the sky model (./sky/skyModel.ts): the clear sky's light by day,
+  // as it has it, and by night what there was.
+  if (sky !== null) {
+    return sky * daylight + (CLEAR_SKY + NIGHT_FILL) * (1 - daylight) + deck;
+  }
+
+  return CLEAR_SKY + NIGHT_FILL * (1 - daylight) + deck;
 }
 
 /**

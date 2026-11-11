@@ -88,6 +88,10 @@ for (const kind of kinds) {
     console.log(`\n${kind} ${measure} frame time, ms up to`);
     table(`${measure}:${kind}:`, count);
   }
+
+  // Under 1, the governor had made the scene smaller to keep up.
+  console.log(`\n${kind} scale the scene was drawn at`);
+  table(`scale:${kind}:`, count);
 }
 
 for (const measure of ["megapixels", "dpr"]) {

@@ -9,14 +9,9 @@ import {
   smoothstep,
   vec3,
 } from "three/tsl";
-import {
-  overcast,
-  seaLevel,
-  skyBrightness,
-  skyHorizon,
-  sunIntensity,
-} from "../environment";
+import { overcast, seaLevel, sunIntensity } from "../environment";
 import { hazeColor, hazeTransmittance } from "../haze";
+import { skyOnCloud } from "../sky/skyModel";
 import { cloudGlowAtNight } from "../skyglow";
 import { cloudShare } from "./cloudField";
 import { coverageMap, LOW_ANGLE } from "./coverage";
@@ -80,8 +75,7 @@ export const withMirroredCloud = (sky, direction) =>
         .mul(smoothstep(REACH, REACH * 0.5, t))
         .mul(float(1).sub(overcast));
 
-      const underside = skyHorizon
-        .mul(skyBrightness.mul(1.4))
+      const underside = skyOnCloud(0)
         .add(overcast.mul(sunIntensity).mul(1.2))
         .add(sunIntensity.mul(UNDERSIDE_SUN))
         .add(cloudGlowAtNight(vec3(xz.x, low.shape.x, xz.y)));

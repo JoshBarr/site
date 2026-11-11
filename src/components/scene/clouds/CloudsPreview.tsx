@@ -14,7 +14,14 @@ import {
 } from "three/tsl";
 import GUI from "lil-gui";
 import * as environment from "../environment";
-import { hazeColor, hazeTransmittance, phase } from "../haze";
+import {
+  hazeColor,
+  hazeDensity,
+  hazeHeight,
+  hazeTransmittance,
+  phase,
+} from "../haze";
+import { showSky, skyFor, skyRadiance, skyStage } from "../sky/skyModel";
 import { updateLens } from "../lens";
 import { Conditions } from "../weather";
 import { Clouds } from "./Clouds";
@@ -86,13 +93,16 @@ function Sky() {
 
     const horizon = float(1).sub(smoothstep(0, 0.25, direction.y.max(0)));
 
-    scene.backgroundNode = mix(gradient, hazeColor(direction), horizon.mul(0.8))
-      .add(phase(toward, 0.7).mul(environment.sunIntensity).mul(0.15))
-      .add(
-        smoothstep(0.99996, 0.99999, toward).mul(
-          environment.sunIntensity.mul(3)
-        )
-      );
+    // From the sky model, the day's sky is its own, glow and all.
+    const air = skyStage()
+      ? skyRadiance(direction)
+      : gradient.add(
+          phase(toward, 0.7).mul(environment.sunIntensity).mul(0.15)
+        );
+
+    scene.backgroundNode = mix(air, hazeColor(direction), horizon.mul(0.8)).add(
+      smoothstep(0.99996, 0.99999, toward).mul(environment.sunIntensity.mul(3))
+    );
 
     return () => {
       scene.fogNode = null;
@@ -121,17 +131,35 @@ function Sun({ altitude, bearing, cover }) {
     );
   }, [altitude, bearing]);
 
-  const lit = 3 * (1 - 0.85 * environment.overcastFor(cover));
+  // The light from the sky model, as far as the scene takes it (?sky=).
+  const stage = skyStage();
+
+  const sky = useMemo(
+    () =>
+      stage ? skyFor(altitude, hazeDensity.value, hazeHeight.value) : null,
+    [stage, altitude]
+  );
+
+  const sun = stage >= 2 && sky ? sky.sun : 3;
+  const lit = sun * (1 - 0.85 * environment.overcastFor(cover));
+
+  const skylight = environment.skylightFor(
+    cover,
+    1,
+    stage >= 3 && sky ? sky.sky : null
+  );
 
   useEffect(() => {
     environment.sunDirection.value.copy(direction);
     environment.sunIntensity.value = lit / 3;
-    environment.skylight.value = environment.skylightFor(cover, 1);
-  }, [direction, lit, cover]);
+    environment.skylight.value = skylight;
+
+    if (sky) showSky(sky, [direction.x, direction.y, direction.z], 0, 0, cover);
+  }, [direction, lit, cover, sky, skylight]);
 
   return (
     <>
-      <ambientLight intensity={environment.skylightFor(cover, 1)} />
+      <ambientLight intensity={skylight} />
       <directionalLight position={direction.clone()} intensity={lit} />
     </>
   );

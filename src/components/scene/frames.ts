@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import type { FrameReport } from "../../lib/frames";
+import { renderScale } from "./governor";
 import { hasFirstViewLoaded } from "./loading";
 import { useRenderer } from "./renderer";
 import { sceneShown } from "./visibility";
@@ -63,6 +64,7 @@ export function useFrameReport(tier: FrameReport["tier"]) {
       width: canvas.width,
       height: canvas.height,
       dpr: window.devicePixelRatio,
+      scale: renderScale(),
     };
 
     navigator.sendBeacon(

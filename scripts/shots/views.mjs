@@ -6,12 +6,19 @@
 const NOON = "2026-11-10T00:00:00Z"; // 13:00
 const EVENING = "2026-11-10T06:20:00Z"; // 19:20, the sun ~8° up
 const DUSK = "2026-11-10T07:45:00Z"; // 20:45, just under
+const TWILIGHT = "2026-11-10T07:32:00Z"; // 20:32, the sun ~2° under
 const NIGHT = "2026-11-10T10:30:00Z"; // 23:30
 
 const CLEAR = "cloud=0";
 const HALF = "cloud=50";
 const OVERCAST = "cloud=100";
 const RAIN = "cloud=90&rain=4";
+
+/**
+ * No cloud, no rain and 30 km of air, whatever that hour's weather was: the
+ * sky and the low sun, without the mist the recorded evening had.
+ */
+const FINE = "cloud=0&rain=0&vis=30000";
 
 /**
  * Every shot holds the clock (and with it the cloud's drift) and the wind,
@@ -39,6 +46,11 @@ const LIST = [
   ["mt-victoria-noon-overcast", "mt-victoria", NOON, OVERCAST],
   ["airport-dusk-overcast", "airport", DUSK, OVERCAST],
   ["west-wind-evening-half", "west-wind", EVENING, HALF],
+  // Fine air, for the sky's own light (?sky=) through the evening.
+  ["overview-noon-fine", "overview", NOON, FINE],
+  ["overview-evening-fine", "overview", EVENING, FINE],
+  ["overview-twilight-fine", "overview", TWILIGHT, FINE],
+  ["mt-victoria-evening-fine", "mt-victoria", EVENING, FINE],
   // A northerly gale, for the sea's lee calms.
   ["harbour-noon-gale", "harbour", NOON, CLEAR, GALE],
   ["oriental-bay-noon-gale", "oriental-bay", NOON, CLEAR, GALE],
