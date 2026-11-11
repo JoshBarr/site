@@ -37,8 +37,8 @@ import {
   hazeDensityForVisibility,
   hazeTransmittance,
   hazeTransmittanceBetween,
+  hazeGlowToward,
   outsideClearing,
-  phase,
 } from "./haze";
 import { hazeGlowAtNight } from "./skyglow";
 import { Conditions, lowCloudBase, useConditions } from "./weather";
@@ -83,6 +83,7 @@ import { Buses } from "./buses/Buses";
 import { Traffic } from "./traffic/Traffic";
 import { AirfieldLights } from "./airport/AirfieldLights";
 import { Sky } from "./sky/Sky";
+import { moonAt, moonDisc, moonlight } from "./sky/moon";
 import { sight } from "./sky/orbits";
 import { Telescope } from "./scope/Telescope";
 import { vantage } from "./scope/vantage";
@@ -177,8 +178,9 @@ function Atmosphere({
     );
 
     // Sky: zenith to horizon, hazier toward the horizon, glowing and with a
-    // small disc toward the sun. Under a deck it goes flat grey: the clouds
-    // hide it, but the water's reflection (which leaves them out) shows it.
+    // small disc toward the sun, and the moon. Under a deck it goes flat
+    // grey: the clouds hide it, but the water's reflection (which leaves them
+    // out) shows it.
     const direction = positionWorldDirection;
     const toward = dot(direction, environment.sunDirection);
 
@@ -190,15 +192,16 @@ function Atmosphere({
 
     const horizon = float(1).sub(smoothstep(0, 0.25, max(direction.y, 0)));
 
-    const disc = smoothstep(0.99996, 0.99999, toward).mul(
-      environment.sunIntensity.mul(3)
-    );
+    const disc = smoothstep(0.99996, 0.99999, toward)
+      .mul(environment.sunIntensity.mul(3))
+      .mul(float(1).sub(environment.moonlit));
 
     const far = cameraPosition.add(direction.mul(SKYGLOW_DISTANCE));
 
     scene.backgroundNode = mix(gradient, hazeColor(direction), horizon.mul(0.8))
-      .add(phase(toward, 0.7).mul(environment.sunIntensity).mul(0.15))
+      .add(hazeGlowToward(toward, 0.15))
       .add(disc)
+      .add(moonDisc(direction))
       .add(
         hazeGlowAtNight(cameraPosition, far).mul(
           float(1).sub(hazeTransmittance(cameraPosition, far))
@@ -1505,9 +1508,6 @@ const SHADOW_CENTRE: [number, number] = [1745500, 5429000];
 const litForReflections = (light: Light | null) =>
   light?.layers.enable(environment.REFLECTION_LAYER);
 
-// Stand-in until the night sky exists: low light from the north-east.
-const MOON: [number, number, number] = [0.5, 0.4, -0.75];
-
 /**
  * Night falls through civil twilight, from the sun going behind the hills:
  * sun altitude, degrees. The lights come on one by one through it, and the
@@ -1559,17 +1559,44 @@ function useSceneTime() {
   return time;
 }
 
-/** Sun at its real position over Wellington. */
+/** The scene's directional light: the sun, or while it's down the moon. */
+interface SceneLight {
+  direction: [number, number, number];
+  /** As the light's intensity: 3 for the full sun. */
+  intensity: number;
+  moon: boolean;
+}
+
+/**
+ * The sun at its real position over Wellington, at `time`; while it's down,
+ * the moon at its, by its phase, once twilight's over.
+ */
+function lightAt(sun: SunPosition, time: Date): SceneLight {
+  if (sun.altitude < 0) {
+    const { body, direction, altitude } = moonAt(time.getTime());
+
+    return {
+      direction,
+      intensity: moonlight(body, altitude, sun.altitude),
+      moon: true,
+    };
+  }
+
+  // Fade in through the first few degrees above the horizon.
+  const fade = Math.min(1, sun.altitude / 6);
+
+  return { direction: sunDirection(sun), intensity: 3 * fade, moon: false };
+}
+
+/** The sun, or the moon (see lightAt), shining and casting its shadows. */
 function Sun({
   index,
-  mobile,
   cloudCover,
-  position,
+  light: { direction, intensity, moon },
 }: {
   index: TileIndex;
-  mobile: boolean;
   cloudCover: number;
-  position: SunPosition;
+  light: SceneLight;
 }) {
   const light = useRef<DirectionalLight>(environment.sunLight);
 
@@ -1579,24 +1606,14 @@ function Sun({
     return new Vector3(x, 0, z);
   }, [index]);
 
-  const { direction, intensity } = useMemo(() => {
-    if (position.altitude < 0) {
-      return { direction: MOON, intensity: 0.4 };
-    }
-
-    // Fade in through the first few degrees above the horizon.
-    const fade = Math.min(1, position.altitude / 6);
-
-    return { direction: sunDirection(position), intensity: 3 * fade };
-  }, [position]);
-
   // Under a full deck the sun barely gets through; light goes flat.
   const lit = intensity * (1 - 0.85 * environment.overcastFor(cloudCover));
 
   useEffect(() => {
     environment.sunDirection.value.set(...direction);
     environment.sunIntensity.value = lit / 3;
-  }, [direction, lit]);
+    environment.moonlit.value = moon ? 1 : 0;
+  }, [direction, lit, moon]);
 
   // The sun moves as the scene's clock runs; its shadows follow.
   useEffect(() => {
@@ -1613,7 +1630,6 @@ function Sun({
     sun.target.updateMatrixWorld();
     sun.layers.enable(environment.REFLECTION_LAYER);
     sun.castShadow = true;
-    sun.shadow.mapSize.setScalar(mobile ? 2048 : 4096);
     Object.assign(sun.shadow.camera, {
       left: -half,
       right: half,
@@ -1629,7 +1645,7 @@ function Sun({
     sun.shadow.bias = -0.0002;
     sun.shadow.autoUpdate = false;
     sun.shadow.needsUpdate = true;
-  }, [mobile, centre]);
+  }, [centre]);
 
   const casterVersion = useRef(-1);
   useFrame(() => {
@@ -1753,6 +1769,7 @@ export function Scene({
   }, [wind]);
   const sun = useMemo(() => sunPosition(time), [time]);
   const sea = useMemo(() => seaConditions(conditions), [conditions]);
+  const light = useMemo(() => lightAt(sun, time), [sun, time]);
   const lights = nightFor(sun.altitude);
   const deck = conditions.cloudCover > 0 ? lowCloudBase(conditions) : null;
   const skylight = environment.skylightFor(conditions.cloudCover, 1 - lights);
@@ -1762,8 +1779,11 @@ export function Scene({
   }, [skylight]);
 
   useEffect(() => {
-    environment.skyBrightness.value = environment.skyBrightnessFor(lights);
-  }, [lights]);
+    environment.skyBrightness.value = environment.skyBrightnessFor(
+      lights,
+      light.moon ? light.intensity : 0
+    );
+  }, [lights, light]);
 
   useTide();
 
@@ -1804,13 +1824,10 @@ export function Scene({
         intensity={skylight}
       />
       <Atmosphere rootSize={index.manifest.rootSize} conditions={conditions} />
-      <Sun
-        index={index}
-        mobile={mobile}
-        cloudCover={conditions.cloudCover}
-        position={sun}
-      />
-      {shown("sky") && <Sky time={time} sunAltitude={sun.altitude} />}
+      <Sun index={index} cloudCover={conditions.cloudCover} light={light} />
+      {shown("sky") && (
+        <Sky time={time} sunAltitude={sun.altitude} night={lights} />
+      )}
       {watching && <Telescope />}
       {!switchedOff("terrain") && (
         <Terrain
@@ -1831,12 +1848,7 @@ export function Scene({
       )}
       {shown("quakes") && <Quakes index={index} />}
       {shown("landmarks") && (
-        <Landmarks
-          index={index}
-          wind={conditions.wind}
-          lights={lights}
-          shadowMapSize={mobile ? 2048 : 4096}
-        />
+        <Landmarks index={index} wind={conditions.wind} lights={lights} />
       )}
       {shown("buildings") && (
         <Buildings

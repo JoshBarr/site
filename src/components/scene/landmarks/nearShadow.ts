@@ -1,9 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import { type RootState, useFrame, useThree } from "@react-three/fiber";
 import { Matrix4, Object3D, Vector3 } from "three/webgpu";
 import {
   NEAR_SHADOW_LAYER,
   nearShadowLight,
+  SHADOW_MAP_SIZE,
   sunDirection,
 } from "../environment";
 import { switchedOff } from "../stats";
@@ -108,15 +109,9 @@ export function orbits(
  * and the map is fine enough to show its blades, and otherwise every REFRESH
  * seconds.
  */
-export function useNearShadow(mapSize: number) {
+export function useNearShadow() {
   const controls = useThree((state) => state.controls);
   const fit = useRef({ extent: 0, sinceRender: Infinity });
-
-  // The shadow node sizes its target from this on each render.
-  useEffect(() => {
-    nearShadowLight.shadow.mapSize.setScalar(mapSize);
-    fit.current.extent = 0;
-  }, [mapSize]);
 
   useFrame(({ camera }, delta) => {
     if (switchedOff("nearshadow")) return;
@@ -134,7 +129,7 @@ export function useNearShadow(mapSize: number) {
     const extent =
       EXTENT_STEP ** Math.ceil(Math.log(wanted) / Math.log(EXTENT_STEP));
 
-    const texel = extent / mapSize;
+    const texel = extent / SHADOW_MAP_SIZE;
 
     // Snap the centre to whole texels across the light's view, so the
     // shadows of still things hold still as the view moves.

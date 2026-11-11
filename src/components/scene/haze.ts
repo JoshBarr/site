@@ -12,6 +12,7 @@ import {
   uniform,
 } from "three/tsl";
 import {
+  moonlit,
   skyHorizon,
   skyBrightness,
   sunDirection,
@@ -105,12 +106,28 @@ export function phase(cosine, g) {
 }
 
 /**
+ * Of the light toward the sun the haze scatters to the eye, how much of it
+ * shows by moonlight. The eye's adapted to the dark, but not so far that the
+ * haze around the moon glows like it does around the sun: at the sun's
+ * share, a quarter of the night sky went grey.
+ */
+const MOON_HAZE = 0.25;
+
+/** The haze's forward scattering from the sun, or moon, by `toward`'s cosine. */
+export function hazeGlowToward(toward, strength: number) {
+  return phase(toward, 0.7)
+    .mul(sunIntensity)
+    .mul(mix(1, MOON_HAZE, moonlit))
+    .mul(strength);
+}
+
+/**
  * Light the haze scatters toward the viewer along `direction`: the horizon
  * colour, dimmed at night, brightened toward the sun by forward scattering.
  */
 export function hazeColor(direction) {
   const toward = dot(normalize(direction), sunDirection);
-  const glow = phase(toward, 0.7).mul(sunIntensity).mul(0.6);
+  const glow = hazeGlowToward(toward, 0.6);
 
   return mix(skyHorizon, hazeTint, 0.5).mul(skyBrightness).add(glow);
 }

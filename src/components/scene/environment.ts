@@ -17,26 +17,43 @@ import { createCloudShadowMap } from "./clouds/shadow";
 // Scene-wide lighting state, shared by materials that shade themselves
 // (water, later sky and clouds). The Sun component keeps these current.
 
-/** Unit vector toward the sun (x east, y up, z south). */
+/**
+ * Unit vector toward the sun (x east, y up, z south), and its light, 1 for
+ * the full sun. While the sun's down they're the moon's: what the scene's
+ * lit by, whichever it is (see `moonlit`).
+ */
 export const sunDirection = uniform(new Vector3(0, 1, 0));
 export const sunIntensity = uniform(1);
+
+/**
+ * 1 while the light in sunDirection is the moon's, 0 while it's the sun's:
+ * no sun's disc drawn there, and a fainter glow around it in the haze.
+ */
+export const moonlit = uniform(0);
 
 /** Sky colour at the horizon and overhead. Also the fog colour. */
 export const skyHorizon = uniform(new Color("#3a3a3a"));
 export const skyZenith = uniform(new Color("#0a0a0a"));
 
 /**
- * How much of the sky's own light is left, 1 by day to NIGHT_SKY at night:
- * the sky and the haze it lights go dark, so the haze doesn't hang over the
- * night like a grey fog. The city's glow in it is added on top.
+ * How much of the sky's own light is left, 1 by day to NIGHT_SKY on a
+ * moonless night: the sky and the haze it lights go dark, so the haze doesn't
+ * hang over the night like a grey fog. The moon lights them back up some, and
+ * the city's glow in them is added on top.
  */
 export const skyBrightness = uniform(1);
 
-const NIGHT_SKY = 0.3;
+const NIGHT_SKY = 0.2;
 
-/** skyBrightness for `night`, 0 by day to 1 at night. */
-export function skyBrightnessFor(night: number) {
-  return 1 - (1 - NIGHT_SKY) * night;
+/** Of the moonlight (as the light's intensity), the sky's share. */
+const MOON_SKY = 0.5;
+
+/**
+ * skyBrightness for `night`, 0 by day to 1 at night, and the `moonlight`
+ * (the light's intensity while it's the moon's).
+ */
+export function skyBrightnessFor(night: number, moonlight = 0) {
+  return 1 - (1 - NIGHT_SKY) * night + MOON_SKY * moonlight;
 }
 
 /**
@@ -66,12 +83,24 @@ export function overcastFor(cloudCover: number) {
 export const skylight = uniform(0.25);
 
 /**
+ * At night, what the eye makes of starlight, the city's light off the cloud
+ * and the haze, and its own adapting: an even light that keeps the hills and
+ * buildings in shape on a moonless night. It's in the ambient, not the sun's
+ * place, so the haze doesn't glow toward a moon that isn't there.
+ */
+const NIGHT_FILL = 0.3;
+
+/**
  * Skylight for a cloud cover fraction, 0 at night to 1 by day. A deck takes
  * the sun but spreads it into flat light from everywhere, so by day an
  * overcast sky lights the scene nearly as much as the sun did.
  */
 export function skylightFor(cloudCover: number, daylight: number) {
-  return 0.25 + overcastFor(cloudCover) * (0.3 + 0.6 * daylight);
+  return (
+    0.25 +
+    NIGHT_FILL * (1 - daylight) +
+    overcastFor(cloudCover) * (0.3 + 0.6 * daylight)
+  );
 }
 
 /**
@@ -109,8 +138,21 @@ export const shadowCasters = { version: 0 };
  */
 export const NEAR_SHADOW_LAYER = 3;
 
+/**
+ * Both shadow maps' resolution, half on touch screens. Set here, before three
+ * first builds the maps, and never changed: three resizes a map by destroying
+ * its depth texture mid-frame, and a draw still bound to the old one fails
+ * its submit ("Destroyed texture ShadowDepthTexture used in a submit").
+ */
+export const SHADOW_MAP_SIZE = globalThis.matchMedia?.("(pointer: coarse)")
+  .matches
+  ? 2048
+  : 4096;
+
 /** The sun. Created here so its shadow can be shared (see sunShadow). */
 export const sunLight = new DirectionalLight();
+
+sunLight.shadow.mapSize.setScalar(SHADOW_MAP_SIZE);
 
 /**
  * The sun's shadow factor (1 lit, 0 shadowed). Lit materials get it through
@@ -144,6 +186,8 @@ filterOnce(sunLight);
 export const nearShadowLight = new DirectionalLight();
 
 nearShadowLight.shadow.camera.layers.set(NEAR_SHADOW_LAYER);
+
+nearShadowLight.shadow.mapSize.setScalar(SHADOW_MAP_SIZE);
 
 nearShadowLight.shadow.autoUpdate = false;
 

@@ -2,9 +2,12 @@ import { Vector3 } from "three/webgpu";
 import { describe, expect, it } from "vitest";
 import {
   equatorial,
+  moon,
+  moonDirection,
   planets,
   skyRotation,
 } from "../../src/components/scene/sky/ephemeris";
+import { moonAt, moonlight } from "../../src/components/scene/sky/moon";
 
 // Where the sky's things are over Wellington, against astronomy-engine
 // (Don Cross's, to arcseconds) at 2026-11-05 10:00 UTC, 11 pm NZDT.
@@ -67,5 +70,50 @@ describe("the sky over Wellington", () => {
     expect(magnitude.jupiter).toBeCloseTo(-2.04, 0);
     // Without its rings' share.
     expect(Math.abs(magnitude.saturn - 0.41)).toBeLessThan(0.6);
+  });
+
+  it("puts the Moon within its width, seen from Wellington", () => {
+    // astronomy-engine's topocentric altitude and azimuth, refraction left
+    // out, and its phase: a waning crescent, a gibbous Moon and the full.
+    const expected = [
+      ["2026-11-05T10:00:00Z", -46.464, 161.52, 0.151, -7.95],
+      ["2026-11-20T10:00:00Z", 39.498, 328.822, 0.781, -11.27],
+      ["2026-11-24T10:00:00Z", 18.076, 26.52, 0.997, -12.73],
+      ["2026-11-26T12:00:00Z", 14.657, 27.974, 0.947, -12.19],
+    ] as const;
+
+    for (const [iso, altitude, azimuth, lit, magnitude] of expected) {
+      const time = Date.parse(iso);
+      const seen = horizontal(moonDirection(time));
+      const body = moon(time);
+      const across = (seen.azimuth - azimuth) * Math.cos(altitude / DEG);
+
+      expect(Math.hypot(seen.altitude - altitude, across), iso).toBeLessThan(
+        0.4
+      );
+      expect(body.illuminated, iso).toBeCloseTo(lit, 2);
+      // Allen's phase law leaves out the full Moon's surge.
+      expect(Math.abs(body.magnitude - magnitude), iso).toBeLessThan(0.2);
+    }
+  });
+
+  it("lights the night by the Moon's phase, once it's up and the Sun's down", () => {
+    const full = moonAt(Date.parse("2026-11-24T10:00:00Z"));
+    const gibbous = moonAt(Date.parse("2026-11-20T10:00:00Z"));
+    const set = moonAt(Date.parse("2026-11-05T10:00:00Z"));
+
+    const night = -20;
+    const fullLight = moonlight(full.body, full.altitude, night);
+
+    expect(fullLight).toBeGreaterThan(0.25);
+    expect(moonlight(gibbous.body, gibbous.altitude, night)).toBeLessThan(
+      fullLight
+    );
+    expect(moonlight(set.body, set.altitude, night)).toBe(0);
+    // Twilight's light is the sky's, not the Moon's.
+    expect(moonlight(full.body, full.altitude, 0)).toBe(0);
+    expect(moonlight(full.body, full.altitude, -3)).toBeLessThan(fullLight);
+    // Low down, through the most air, it fades out.
+    expect(moonlight(full.body, 1, night)).toBeLessThan(fullLight / 4);
   });
 });

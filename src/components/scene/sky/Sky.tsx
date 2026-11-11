@@ -12,11 +12,14 @@ import {
 } from "./skySprites";
 import { STARS } from "./stars";
 import { Satellites } from "./Satellites";
+import { hideMoon, useMoon } from "./moon";
 import { switchedOff } from "../stats";
+import { sunDirection, sunPosition } from "../sun";
 
 // The night sky: the major constellations' stars and the planets Mercury
 // to Saturn, where they are over Wellington at the scene's time, and the
 // satellites passing over. Small points, coming out as the sky darkens.
+// And the Moon, drawn with the sky's gradient (see moonDisc).
 
 const STAR_COUNT = STARS.length / 3;
 
@@ -49,16 +52,23 @@ function useStars() {
   return { group, points };
 }
 
-/** The stars, planets and satellites, at the scene's time. */
+/** The stars, planets, Moon and satellites, at the scene's time. */
 export function Sky({
   time,
   sunAltitude,
+  night,
 }: {
   time: Date;
   /** Degrees: the stars come out as it sinks. */
   sunAltitude: number;
+  /** 0 by day to 1 at night: the Moon brightens with it. */
+  night: number;
 }) {
   const { group, points } = useStars();
+  const sun = useMemo(() => sunDirection(sunPosition(time)), [time]);
+
+  useMoon(sun, night);
+  useEffect(() => hideMoon, []);
 
   useEffect(() => {
     limitingMagnitude.value = limitingMagnitudeFor(sunAltitude);

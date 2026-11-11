@@ -1,4 +1,4 @@
-import { Matrix3 } from "three/webgpu";
+import { Matrix3, Vector3 } from "three/webgpu";
 import { WELLINGTON } from "../sun";
 
 // Where the stars and planets are over Wellington. Directions are in the
@@ -212,3 +212,113 @@ export function planets(time: number): Planet[] {
     };
   });
 }
+
+/** Earth radii in an astronomical unit. */
+const EARTH_RADII_PER_AU = 23_455;
+
+/** Sine and cosine of degrees. */
+const sind = (degrees: number) => Math.sin(degrees * RAD);
+const cosd = (degrees: number) => Math.cos(degrees * RAD);
+
+export interface Moon {
+  /** Unit vector toward it from the Earth's centre, equatorial of date. */
+  direction: [number, number, number];
+  /** From the Earth's centre, in Earth radii. */
+  distance: number;
+  /** Sun–Moon–Earth angle, degrees: 0 full, 180 new. */
+  phaseAngle: number;
+  /** Fraction of the disc lit, 0..1. */
+  illuminated: number;
+  magnitude: number;
+}
+
+/**
+ * Where the Moon is at `time`, and how much of it's lit: the Astronomical
+ * Almanac's low-precision series (to about 0.3°, a little over its own
+ * width), with the Sun from its own short series for the phase. Of date, so
+ * placed by skyRotation it's right on the sky to that, precession and all.
+ */
+export function moon(time: number): Moon {
+  const T = daysSinceJ2000(time) / 36525;
+
+  const longitude =
+    218.32 +
+    481267.881 * T +
+    6.29 * sind(135.0 + 477198.87 * T) -
+    1.27 * sind(259.3 - 413335.36 * T) +
+    0.66 * sind(235.7 + 890534.22 * T) +
+    0.21 * sind(269.9 + 954397.74 * T) -
+    0.19 * sind(357.5 + 35999.05 * T) -
+    0.11 * sind(186.5 + 966404.03 * T);
+
+  const latitude =
+    5.13 * sind(93.3 + 483202.02 * T) +
+    0.28 * sind(228.2 + 960400.89 * T) -
+    0.28 * sind(318.3 + 6003.15 * T) -
+    0.17 * sind(217.6 - 407332.21 * T);
+
+  const parallax =
+    0.9508 +
+    0.0518 * cosd(135.0 + 477198.87 * T) +
+    0.0095 * cosd(259.3 - 413335.36 * T) +
+    0.0078 * cosd(235.7 + 890534.22 * T) +
+    0.0028 * cosd(269.9 + 954397.74 * T);
+
+  const distance = 1 / sind(parallax);
+
+  // Ecliptic to equatorial, about x by the obliquity.
+  const [x, y, z] = [
+    cosd(latitude) * cosd(longitude),
+    cosd(latitude) * sind(longitude),
+    sind(latitude),
+  ];
+
+  const [c, s] = [Math.cos(OBLIQUITY), Math.sin(OBLIQUITY)];
+
+  // The Sun's longitude, to a hundredth of a degree, and its distance.
+  const anomaly = 357.529 + 35999.05 * T;
+
+  const sun =
+    280.459 + 36000.77 * T + 1.915 * sind(anomaly) + 0.02 * sind(2 * anomaly);
+
+  const sunDistance = (1.00014 - 0.01671 * cosd(anomaly)) * EARTH_RADII_PER_AU;
+
+  // Elongation from the Sun, then the phase angle across at the Moon.
+  const elongation = Math.acos(cosd(latitude) * cosd(longitude - sun));
+
+  const phaseAngle =
+    Math.atan2(
+      sunDistance * Math.sin(elongation),
+      distance - sunDistance * Math.cos(elongation)
+    ) / RAD;
+
+  return {
+    direction: [x, y * c - z * s, y * s + z * c],
+    distance,
+    phaseAngle,
+    illuminated: (1 + cosd(phaseAngle)) / 2,
+    // Allen's, from full at -12.73.
+    magnitude: -12.73 + 0.026 * phaseAngle + 4e-9 * phaseAngle ** 4,
+  };
+}
+
+/**
+ * Unit vector toward the Moon from Wellington, in the scene's frame, at
+ * `time`: turned by skyRotation, less the observer's offset from the Earth's
+ * centre (up to a degree, at the Moon's distance).
+ */
+export function moonDirection(
+  time: number,
+  { direction, distance } = moon(time)
+): [number, number, number] {
+  const [x, y, z] = new Vector3(...direction)
+    .applyMatrix3(skyRotation(time))
+    .multiplyScalar(distance)
+    .sub(UP)
+    .normalize()
+    .toArray();
+
+  return [x, y, z];
+}
+
+const UP = new Vector3(0, 1, 0);

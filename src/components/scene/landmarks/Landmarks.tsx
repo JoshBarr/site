@@ -131,16 +131,13 @@ export function Landmarks({
   index,
   wind,
   lights = 0,
-  shadowMapSize = 4096,
 }: {
   index: TileIndex;
   wind: Wind;
   lights?: number;
-  /** Resolution of the near shadow map they cast into. */
-  shadowMapSize?: number;
 }) {
   usePixelAngle();
-  useNearShadow(shadowMapSize);
+  useNearShadow();
 
   useEffect(() => {
     obstructionLights.value = lights;
