@@ -15,10 +15,13 @@ import {
   cameraFar,
   cameraNear,
   cameraPosition,
+  dFdx,
+  dFdy,
   dot,
   exp,
   float,
   linearDepth,
+  log2,
   max,
   mix,
   normalize,
@@ -85,6 +88,9 @@ export const OCEAN_MOBILE: OceanQuality = {
 const CASCADE_SIZES = [503, 89, 13];
 const RADIUS = 45000;
 
+/** How tight the sun's glint is off smooth water: the exponent of its lobe. */
+const GLINT = 900;
+
 /**
  * Disc of rings around the origin. Ring spacing grows with radius so cells
  * stay roughly square, which keeps vertex density matched to screen size.
@@ -150,6 +156,7 @@ function createMaterial(
   const cascades = simulation?.cascades ?? [];
   const displacements = simulation?.displacement ?? [];
   const derivatives = simulation?.derivatives ?? [];
+  const fftSize = simulation?.size ?? 1;
   const { rootSize } = index.manifest;
   const maxDepth = index.manifest.water?.maxDepth ?? 30;
   const sqrtEncoded = index.manifest.water?.encoding === "sqrt";
@@ -192,18 +199,32 @@ function createMaterial(
   const depth = depthAt(surface);
   const shallow = smoothstep(0.3, 10, depth);
 
+  // Metres of sea a pixel spans, the long way.
+  const footprint = max(dFdx(surface).length(), dFdy(surface).length());
+
   let slope: any = vec2(0);
   let jacobian: any = float(1);
+  // Slope too fine to draw: what the mips have averaged out of the normal.
+  let unseen: any = float(0);
   cascades.forEach(({ size }, c) => {
-    const uv = surface.div(size);
-    const d = texture(derivatives[c], uv);
-    slope = slope.add(vec2(d.x.div(d.z.add(1)), d.y.div(d.w.add(1))));
+    // (slope x, slope z, jacobian, slope squared)
+    const d = texture(derivatives[c], surface.div(size));
+    slope = slope.add(d.xy);
 
-    if (c < 2) {
-      jacobian = jacobian.add(texture(displacements[c], uv).w.sub(1));
-    }
+    // The finest cascade's ripples are under a pixel from any height, and
+    // the glint's never counted them: the look is of the two that draw.
+    if (c >= 2) return;
+
+    jacobian = jacobian.add(d.z.sub(1));
+
+    // The squares' mean less the mean's square. Only where the map's
+    // minified: between two texels the same sum is the slope's change
+    // across them, which is drawn.
+    const minified = log2(footprint.div(size / fftSize)).saturate();
+    unseen = unseen.add(max(d.w.sub(d.xy.dot(d.xy)), 0).mul(minified));
   });
   slope = slope.mul(shallow);
+  unseen = unseen.mul(shallow).mul(shallow);
 
   const normal = normalize(vec3(slope.x.negate(), 1, slope.y.negate()));
   const view = normalize(cameraPosition.sub(positionWorld));
@@ -235,8 +256,32 @@ function createMaterial(
     .mul(nearShadow as any)
     .mul(cloudShadow);
 
-  const glint = pow(sunAmount, 900)
-    .mul(40)
+  // The sun's glint off each facet that mirrors it.
+  const sparkle = pow(sunAmount, GLINT).mul(40);
+
+  // Far off, the waves that carry those glints are smaller than a pixel and
+  // averaged out of the normal, so the glint stopped a couple of kilometres
+  // out and the far sea was a mirror. There the glints' average stands in:
+  // how likely a wave is to have the slope that mirrors the sun to the eye,
+  // taking the slopes the mips averaged away as Gaussian about the one
+  // drawn. Its peak spreads the sparkle's own light over that range of
+  // slopes: a lobe cos^n about the mirror direction is one of slope variance
+  // 1/4n each way, since a reflection turns twice as far as its surface.
+  // Worked in slopes, it comes out as the long narrow path a low sun lays
+  // on the water, not a round patch.
+  const half = normalize(view.add(sunDirection));
+  const mirroring = half.xz.div(max(half.y, 0.05)).negate();
+  const miss = mirroring.sub(slope);
+  const spread = max(unseen.mul(0.5), 1e-5);
+
+  const path = exp(miss.dot(miss).div(spread.mul(-2)))
+    .div(spread)
+    .mul(40 / (4 * GLINT));
+
+  // All sparkle where every wave's drawn, all path where none is.
+  const averaged = unseen.div(unseen.add(1 / GLINT));
+
+  const glint = mix(sparkle, path, averaged)
     .add(pow(sunAmount, 60).mul(0.25))
     .mul(sunIntensity)
     .mul(lit);

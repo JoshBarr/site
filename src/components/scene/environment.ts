@@ -1,4 +1,9 @@
-import { Color, DirectionalLight, Vector3 } from "three/webgpu";
+import {
+  Color,
+  DirectionalLight,
+  HemisphereLight,
+  Vector3,
+} from "three/webgpu";
 import {
   BasicShadowFilter,
   float,
@@ -68,6 +73,23 @@ export const skylight = uniform(0.25);
 export function skylightFor(cloudCover: number, daylight: number) {
   return 0.25 + overcastFor(cloudCover) * (0.3 + 0.6 * daylight);
 }
+
+/**
+ * Of the sky's light, what comes back up off the ground: onto walls it's
+ * half and half, onto undersides all there is.
+ */
+const GROUND_BOUNCE = 0.35;
+
+/**
+ * The sky as a light, at skylight's intensity: all of it on what faces up,
+ * less on walls, and only the ground's bounce on what faces down. Lit evenly
+ * from every side, an overcast city (when the sky is most of the light) had
+ * no faces to it at all.
+ */
+export const skyDome = new HemisphereLight(
+  new Color().setScalar(1),
+  new Color().setScalar(GROUND_BOUNCE)
+);
 
 /**
  * Objects on this layer are seen only by the water's reflection camera, which

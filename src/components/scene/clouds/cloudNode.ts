@@ -44,7 +44,7 @@ import {
   saturate,
 } from "./density";
 import { rainfall, RainUniforms } from "./rain";
-import { rainDeck } from "./rainField";
+import { rainDeck, rainField } from "./rainField";
 
 export interface CloudQuality {
   /** Steps along the view ray. */
@@ -130,12 +130,25 @@ export function createCloudNode({
    */
   offset?: any;
 }) {
-  const density = (p, cheap = false) =>
+  // Whether there's any cloud in each layer at all. Uniforms, so under a
+  // clear sky the march, which otherwise steps through both reading the
+  // maps for cloud that isn't there, is skipped outright.
+  const lowCloud = low.shape.z
+    .greaterThan(0)
+    .or(deckLid.greaterThan(0))
+    .or(rainField.deck.greaterThan(0));
+
+  const midCloud = mid.shape.z.greaterThan(0);
+
+  /** Both layers' density at p, for a march whose samples are `step` apart, m. */
+  const density = (p, step, cheap = false) =>
     layerDensity(p, low, LOW_STYLE, {
       // An overcast deck closes where the satellite saw cloud.
       lid: (share) => max(deckLid.mul(min(share, 1)), rainDeck(p.xz)),
       cheap,
-    }).add(layerDensity(p, mid, MID_STYLE, { cheap }));
+      step,
+      when: lowCloud,
+    }).add(layerDensity(p, mid, MID_STYLE, { cheap, step, when: midCloud }));
 
   // Set by the march, written to the second output.
   const distance = property("float", "cloudDistance");
@@ -184,7 +197,7 @@ export function createCloudNode({
     // the sun needs a big radiance for sunlit cloud to read as white.
     const sunLight = sunIntensity.mul(28);
 
-    If(tFar.greaterThan(tNear), () => {
+    If(tFar.greaterThan(tNear).and(lowCloud.or(midCloud)), () => {
       // Steps grow with distance: fine near the camera, coarse far away
       // where haze hides the difference.
       const stepFor = (distance) => max(distance.mul(STEP_GROWTH), MIN_STEP);
@@ -201,7 +214,7 @@ export function createCloudNode({
 
         // Thin out right around the camera so it never sits in a white wall,
         // and toward the end of the march so the layer has no hard horizon.
-        const d = density(p)
+        const d = density(p, dt)
           .mul(smoothstep(NEAR_FADE * 0.25, NEAR_FADE, t))
           .mul(smoothstep(MAX_DISTANCE, MAX_DISTANCE * 0.6, t));
 
@@ -216,7 +229,7 @@ export function createCloudNode({
 
           for (let i = 0; i < quality.lightSteps; i++) {
             const q = p.add(sunDirection.mul(stride * (i + 0.5)));
-            toSun.addAssign(density(q, true).mul(stride));
+            toSun.addAssign(density(q, dt, true).mul(stride));
             stride *= 2;
           }
 
@@ -341,7 +354,7 @@ export function createCloudNode({
           const dt = span.mul(u).mul(2 / quality.rainSteps);
           // Haze hides far-off rain: count what shows through it.
           depth.addAssign(
-            rainfall(weather, low, rain, p)
+            rainfall(weather, low, rain, p, dt)
               .mul(hazeTransmittance(cameraPosition, p))
               .mul(dt)
           );

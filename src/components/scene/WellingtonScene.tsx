@@ -1798,7 +1798,11 @@ export function Scene({
 
   return (
     <>
-      <ambientLight ref={litForReflections} intensity={skylight} />
+      <primitive
+        object={environment.skyDome}
+        ref={litForReflections}
+        intensity={skylight}
+      />
       <Atmosphere rootSize={index.manifest.rootSize} conditions={conditions} />
       <Sun
         index={index}

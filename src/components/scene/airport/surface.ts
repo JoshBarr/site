@@ -340,7 +340,7 @@ function endMarkings(
  */
 export function shadeAirfield(
   maps: AirfieldMaps,
-  { world, detail }: { world: any; detail: Texture }
+  { world, tone }: { world: any; tone: Texture }
 ) {
   // Field, paved, albedo and mowing; none of it out of view. The branch is
   // on a uniform, so the derivatives inside are allowed.
@@ -350,7 +350,7 @@ export function shadeAirfield(
     If(maps.shown.greaterThan(0), () => {
       const { field, paved, albedo, mowing } = shadeInView(maps, {
         world,
-        detail,
+        tone,
       });
 
       out.assign(vec4(field, paved, albedo, mowing));
@@ -369,7 +369,7 @@ export function shadeAirfield(
 
 function shadeInView(
   maps: AirfieldMaps,
-  { world, detail }: { world: any; detail: Texture }
+  { world, tone }: { world: any; tone: Texture }
 ) {
   const [x0, z0, width, height] = maps.bounds;
   const uv = world.sub(vec2(x0, z0)).div(vec2(width, height));
@@ -397,12 +397,12 @@ function shadeInView(
   const field = max(ground.g, runway);
 
   // Asphalt, concrete aprons, weathered in patches.
-  const weathering = texture(detail, world.div(61)).a;
+  const weathering = texture(tone, world.div(61)).r;
   let albedo: any = mix(ASPHALT, CONCRETE, ground.b.mul(float(1).sub(runway)));
   albedo = albedo.mul(mix(0.8, 1.25, weathering));
 
   // Tyre rubber where wheels touch down, in streaks along the runway.
-  const streaks = texture(detail, vec2(c.div(5), a.div(170))).a;
+  const streaks = texture(tone, vec2(c.div(5), a.div(170))).r;
 
   const touchdownZone = (t) =>
     smoothstep(60, 250, t).mul(smoothstep(950, 400, t));

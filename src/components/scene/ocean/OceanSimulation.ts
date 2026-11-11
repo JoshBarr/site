@@ -9,12 +9,14 @@ import {
 } from "three/webgpu";
 import {
   Fn,
+  clamp,
   cos,
   float,
   instanceIndex,
   instancedArray,
   int,
   ivec2,
+  max,
   select,
   sin,
   textureStore,
@@ -37,13 +39,24 @@ const cmul = (a: Complex, b: Complex): Complex =>
 const ci = (a: Complex): Complex => vec2(a.y.negate(), a.x);
 
 /**
+ * Where the choppiness folds the surface over, its points close up to
+ * nothing and the slope between them runs off to infinity: they're held
+ * this far apart (of their spacing at rest), and the slope to this.
+ */
+const LEAST_STRETCH = 0.1;
+const STEEPEST = 6;
+
+/**
  * FFT ocean (Tessendorf). Each frame:
  *   1. advance the spectrum to the current time, producing eight real fields
  *      packed two-per-complex into two vec4 buffers,
  *   2. inverse FFT rows then columns (Stockham, radix 2, no bit reversal),
  *   3. write displacement and derivative textures per cascade.
  *
- * displacement: (x, y, z, jacobian)   derivatives: (dy/dx, dy/dz, dx/dx, dz/dz)
+ * displacement: (x, y, z, -), read by the vertices at full size, so without
+ * mips. derivatives: (slope x, slope z, jacobian, slope squared), all the
+ * pixels need, with mips: the squares' mean less the mean's square is the
+ * slope the mips have averaged away.
  */
 export class OceanSimulation {
   readonly size: number;
@@ -69,19 +82,21 @@ export class OceanSimulation {
     this.size = size;
     this.cascades = cascades;
 
-    const texture = () => {
+    // Mips are drawn again every frame, a pass a level: about 0.2 ms a
+    // texture on an M1, so only for those read through them.
+    const texture = (mips: boolean) => {
       const t = new StorageTexture(size, size);
       t.type = HalfFloatType;
       t.wrapS = t.wrapT = RepeatWrapping;
       t.magFilter = LinearFilter;
-      t.minFilter = LinearMipmapLinearFilter;
-      t.generateMipmaps = true;
+      t.minFilter = mips ? LinearMipmapLinearFilter : LinearFilter;
+      t.generateMipmaps = mips;
 
       return t;
     };
 
-    this.displacement = cascades.map(texture);
-    this.derivatives = cascades.map(texture);
+    this.displacement = cascades.map(() => texture(false));
+    this.derivatives = cascades.map(() => texture(true));
 
     this.build();
   }
@@ -235,13 +250,25 @@ export class OceanSimulation {
         const dxdz = q.w.mul(lambda);
         const jacobian = dxdx.add(1).mul(dzdz.add(1)).sub(dxdz.mul(dxdz));
 
+        // The slope of the surface as displaced: the height's change over
+        // how far apart the choppiness leaves the points.
+        const slope = clamp(
+          vec2(p.w, q.x).div(max(vec2(dxdx, dzdz).add(1), LEAST_STRETCH)),
+          -STEEPEST,
+          STEEPEST
+        );
+
         const texel = ivec2(int(x), int(z));
         textureStore(
           this.displacement[c],
           texel,
-          vec4(p.x.mul(lambda), p.y, p.z.mul(lambda), jacobian)
+          vec4(p.x.mul(lambda), p.y, p.z.mul(lambda), 1)
         );
-        textureStore(this.derivatives[c], texel, vec4(p.w, q.x, dxdx, dzdz));
+        textureStore(
+          this.derivatives[c],
+          texel,
+          vec4(slope, jacobian, slope.dot(slope))
+        );
       })().compute(n * n);
 
       this.passes.push(assemble);

@@ -1,8 +1,33 @@
 import { DataTexture } from "three/webgpu";
-import { clamp, texture, vec2 } from "three/tsl";
+import { clamp, log2, texture, vec2 } from "three/tsl";
 
 /** The 2D coverage map spans this many metres before repeating. */
 const WEATHER_SCALE = 24000;
+
+/** The coarsest mip a march reads the map at: 32 of its texels to one. */
+const COARSEST = 5;
+
+/**
+ * `map` where `uv` is in metres over `scale` a repeat. With the `step`
+ * between a march's samples, m, read at the mip whose texels are half a step
+ * across: detail finer than the samples are apart only aliases. Left to the
+ * GPU, the mip comes from how far apart neighbouring pixels' samples are,
+ * and in a march's loop that's their jitter: the level was noise, which drew
+ * stripes through near cloud and squared distant cloud off into slabs.
+ */
+export function sampleStepped(
+  map: DataTexture,
+  uv,
+  scale: number,
+  step: any = null
+) {
+  const sampled = texture(map, uv.div(scale));
+
+  if (!step) return sampled;
+  const texel = scale / map.image.width;
+
+  return sampled.level(clamp(log2(step.div(texel * 2)), 0, COARSEST));
+}
 
 /**
  * Each layer samples the noise rotated, so the tiles don't line up into rows,
@@ -15,9 +40,16 @@ export const MID_ANGLE = -0.83;
  * Where a layer's clouds are, at xz with the layer's drift `offset`: two
  * scales of coverage map, the finer one turned again, so the pattern doesn't
  * repeat for tens of kilometres. Also returns the samples and the rotated
- * position, which the cloud bodies reuse for their warp.
+ * position, which the cloud bodies reuse for their warp. In a march, `step`
+ * is how far apart its samples are, m (see sampleStepped).
  */
-export function coverageMap(weather: DataTexture, xz, offset, angle: number) {
+export function coverageMap(
+  weather: DataTexture,
+  xz,
+  offset,
+  angle: number,
+  step: any = null
+) {
   const c = Math.cos(angle);
   const s = Math.sin(angle);
   const moved = xz.add(offset);
@@ -27,11 +59,13 @@ export function coverageMap(weather: DataTexture, xz, offset, angle: number) {
     moved.x.mul(s).add(moved.y.mul(c))
   );
 
-  const broad = texture(weather, rotated.div(WEATHER_SCALE));
+  const broad = sampleStepped(weather, rotated, WEATHER_SCALE, step);
 
-  const fine = texture(
+  const fine = sampleStepped(
     weather,
-    vec2(rotated.y, rotated.x.negate()).div(WEATHER_SCALE * 0.37)
+    vec2(rotated.y, rotated.x.negate()),
+    WEATHER_SCALE * 0.37,
+    step
   );
 
   // Blending two maps squeezes their range toward the middle; stretch it

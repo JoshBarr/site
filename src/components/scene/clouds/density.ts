@@ -142,7 +142,10 @@ export const MID_STYLE: LayerStyle = {
  * erosion, for samples toward the sun; `erosion` then takes off that much
  * evenly instead (the detail averages 0.5), for the cloud's outline from
  * afar. `lid` (0..1) closes the layer into an unbroken deck, given the
- * share of the cover where the satellite saw cloud (./cloudField.ts).
+ * share of the cover where the satellite saw cloud (./cloudField.ts). In a
+ * march, `step` is how far apart its samples are, m (see coverageMap), and
+ * `when` false leaves the layer out unread: a uniform, for a layer with no
+ * cloud in it anywhere.
  */
 export function layerDensity(
   p,
@@ -152,18 +155,23 @@ export function layerDensity(
     lid = null,
     cheap = false,
     erosion = 0,
+    step = null,
+    when = null,
   }: {
     lid?: ((share: any) => any) | null;
     cheap?: boolean;
     erosion?: number;
+    step?: any;
+    when?: any;
   } = {}
 ) {
   const { shape, offset } = layer;
   const { shape: shapeNoise, weather } = cloudNoise;
   const density = float(0).toVar();
   const h = p.y.sub(shape.x).div(shape.y.sub(shape.x));
+  const within = h.greaterThan(0).and(h.lessThan(1));
 
-  If(h.greaterThan(0).and(h.lessThan(1)), () => {
+  If(when ? when.and(within) : within, () => {
     // Rounded bases, tapering tops.
     const profile = smoothstep(0, 0.12, h).mul(smoothstep(1, flatTop, h));
 
@@ -171,7 +179,8 @@ export function layerDensity(
       weather,
       p.xz,
       offset,
-      angle
+      angle,
+      step
     );
 
     // Coverage picks the regions that hold cloud, then fills them: low

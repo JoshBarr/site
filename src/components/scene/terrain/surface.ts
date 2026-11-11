@@ -55,6 +55,8 @@ export interface SurfaceMaps {
   landcoverBounds: ReturnType<typeof createLandcoverBounds>;
   /** From detailWorker. */
   detail: DataTexture;
+  /** Its blotches (the alpha) alone, in red, filtered plainly. */
+  tone: DataTexture;
   airfield: AirfieldMaps;
 }
 
@@ -77,19 +79,19 @@ function canopySlope(sample, period: number, height: number) {
  * (negative on it) and `cell` the metres between the tile's samples.
  */
 export function shadeSurface(
-  { landcover, landcoverBounds, detail, airfield }: SurfaceMaps,
+  { landcover, landcoverBounds, detail, tone, airfield }: SurfaceMaps,
   { world, height, normal, relief, building, kerb, cell }
 ) {
   // The aerodrome is grass and paving, whatever the land cover map says.
-  const airport = shadeAirfield(airfield, { world, detail });
+  const airport = shadeAirfield(airfield, { world, tone });
   const open = float(1).sub(airport.field);
 
   // Blotches at two scales: break up edges and vary the tone. Each blends
   // two samples at unrelated scales and angles so the tiling doesn't show.
   const blotches = (period: number) =>
-    texture(detail, world.div(period))
-      .a.add(
-        texture(detail, vec2(world.y, world.x.negate()).div(period * 1.618)).a
+    texture(tone, world.div(period))
+      .r.add(
+        texture(tone, vec2(world.y, world.x.negate()).div(period * 1.618)).r
       )
       .mul(0.5);
 
@@ -192,9 +194,7 @@ export function shadeSurface(
 
   // Roofs, each its own shade (near enough: the blotches are roof-sized),
   // outlined where the footprint's edge is filtered.
-  const roof = float(ROOF).mul(
-    mix(0.35, 1.9, texture(detail, world.div(37)).a)
-  );
+  const roof = float(ROOF).mul(mix(0.35, 1.9, texture(tone, world.div(37)).r));
 
   albedo = mix(albedo, roof, building);
   albedo = albedo.mul(

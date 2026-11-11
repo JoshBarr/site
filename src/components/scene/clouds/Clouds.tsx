@@ -6,6 +6,7 @@ import { gaussianBlur } from "three/addons/tsl/display/GaussianBlurNode.js";
 import { cloudShadowMap, overcast, overcastFor } from "../environment";
 import { nightGlow, setNightGlow } from "../glow";
 import { depthOfField } from "../lens";
+import { dithered } from "../dither";
 import { quakeWarp } from "../quakes/glow";
 import { tvScreen } from "../time/tv";
 import { switchedOff } from "../stats";
@@ -221,6 +222,8 @@ export function Clouds({
 
   const { scenePass, pipeline, glow, history, drops, tv } = useMemo(() => {
     const pipeline = new RenderPipeline(renderer);
+    // Tone mapped and dithered by hand, as its last node (see dithered).
+    pipeline.outputColorTransform = false;
     const scenePass = pass(scene, camera);
     const depth = scenePass.getTextureNode("depth");
     const output = scenePass.getTextureNode("output");
@@ -231,7 +234,7 @@ export function Clouds({
 
     if (!noiseReady || switchedOff("clouds")) {
       const tv = tvScreen(depthOfField(color, depth));
-      pipeline.outputNode = tv.node;
+      pipeline.outputNode = dithered(tv.node);
 
       return { scenePass, pipeline, glow, history: null, drops: null, tv };
     }
@@ -288,7 +291,7 @@ export function Clouds({
 
     if (!raining) {
       const tv = tvScreen(composite);
-      pipeline.outputNode = tv.node;
+      pipeline.outputNode = dithered(tv.node);
 
       return { scenePass, pipeline, glow, history, drops: null, tv };
     }
@@ -316,7 +319,7 @@ export function Clouds({
 
     if (!WET_LENS) {
       const tv = tvScreen(vec4(over(composite.rgb, streaks), 1));
-      pipeline.outputNode = tv.node;
+      pipeline.outputNode = dithered(tv.node);
 
       return { scenePass, pipeline, glow, history, drops, tv };
     }
@@ -332,7 +335,7 @@ export function Clouds({
       })
     );
 
-    pipeline.outputNode = tv.node;
+    pipeline.outputNode = dithered(tv.node);
 
     return { scenePass, pipeline, glow, history, drops, tv };
   }, [renderer, scene, camera, noiseReady, rain, quality, dark, raining]);

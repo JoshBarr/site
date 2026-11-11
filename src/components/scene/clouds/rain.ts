@@ -1,9 +1,14 @@
 import { DataTexture, Vector2, Vector3 } from "three/webgpu";
-import { float, max, mix, smoothstep, texture, uniform } from "three/tsl";
+import { float, max, mix, smoothstep, uniform } from "three/tsl";
 import { overcast } from "../environment";
 import { Conditions, windVector } from "../weather";
 import type { CloudLayerUniforms } from "./density";
-import { coverageMap, coverageMapAt, LOW_ANGLE } from "./coverage";
+import {
+  coverageMap,
+  coverageMapAt,
+  LOW_ANGLE,
+  sampleStepped,
+} from "./coverage";
 import { rainAt, rainDeck, rainShare } from "./rainField";
 
 // Rain falls from the low cloud: from the thick of each cloud, and from all
@@ -72,21 +77,37 @@ const STREAK_SCALE = 1800;
  * region, not its ragged edges, and everywhere under an overcast deck or
  * the deck the gauges close over the rain (./rainField.ts), as hard as
  * they measured it there. Some clouds rain harder than others, and
- * unevenly, which the slant draws out into streaks.
+ * unevenly, which the slant draws out into streaks. In a march, `step` is
+ * how far apart its samples are, m (see coverageMap).
  */
 export function rainfall(
   weather: DataTexture,
   low: CloudLayerUniforms,
   rain: RainUniforms,
-  p
+  p,
+  step: any = null
 ) {
   const base = low.shape.x;
   const fallen = max(base.sub(p.y), 0);
   const source = p.xz.sub(rain.wind.div(rain.fall).mul(fallen));
-  const { broad, map } = coverageMap(weather, source, low.offset, LOW_ANGLE);
+
+  const { broad, map } = coverageMap(
+    weather,
+    source,
+    low.offset,
+    LOW_ANGLE,
+    step
+  );
+
   const threshold = float(1).sub(low.shape.z);
   const raining = smoothstep(threshold, threshold.add(0.15), map);
-  const streaks = texture(weather, source.add(low.offset).div(STREAK_SCALE)).r;
+
+  const streaks = sampleStepped(
+    weather,
+    source.add(low.offset),
+    STREAK_SCALE,
+    step
+  ).r;
 
   return max(raining, overcast, rainDeck(source))
     .mul(rainShare(source))

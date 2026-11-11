@@ -8,6 +8,7 @@ import {
   LinearFilter,
   LinearMipmapLinearFilter,
   NoColorSpace,
+  RedFormat,
   RepeatWrapping,
   RGBAFormat,
   TextureLoader,
@@ -464,23 +465,46 @@ function useSurfaceMaps(index: TileIndex): SurfaceMaps {
       RGBAFormat
     );
 
-    detail.wrapS = detail.wrapT = RepeatWrapping;
-    detail.minFilter = LinearMipmapLinearFilter;
-    detail.magFilter = LinearFilter;
-    detail.generateMipmaps = true;
+    // Its blotches again, on their own: read five times a pixel for tones
+    // too broad to want the crowns' anisotropic filtering, which cost about
+    // 0.3 ms a frame on an M1 across the seven reads.
+    const tone = new DataTexture(
+      new Uint8Array(DETAIL_SIZE * DETAIL_SIZE).fill(128),
+      DETAIL_SIZE,
+      DETAIL_SIZE,
+      RedFormat
+    );
+
+    for (const map of [detail, tone]) {
+      map.wrapS = map.wrapT = RepeatWrapping;
+      map.minFilter = LinearMipmapLinearFilter;
+      map.magFilter = LinearFilter;
+      map.generateMipmaps = true;
+      map.needsUpdate = true;
+    }
+
     detail.anisotropy = 8;
-    detail.needsUpdate = true;
 
     const airfield = createAirfieldMaps(index.manifest);
 
-    return { landcover, landcoverBounds, detail, airfield };
+    return { landcover, landcoverBounds, detail, tone, airfield };
   }, [index]);
 
   useEffect(() => {
     const worker = new Worker(new URL("./detailWorker.ts", import.meta.url));
     worker.onmessage = ({ data }) => {
-      maps.detail.image.data = data.data;
+      const pixels: Uint8Array = data.data;
+      maps.detail.image.data = pixels;
       maps.detail.needsUpdate = true;
+      // The blotches are the detail map's alpha.
+      const blotches = maps.tone.image.data;
+
+      if (blotches) {
+        for (let i = 0; i < blotches.length; i++)
+          blotches[i] = pixels[i * 4 + 3];
+      }
+
+      maps.tone.needsUpdate = true;
       worker.terminate();
     };
 
@@ -490,6 +514,7 @@ function useSurfaceMaps(index: TileIndex): SurfaceMaps {
       worker.terminate();
       maps.landcover.dispose();
       maps.detail.dispose();
+      maps.tone.dispose();
       disposeAirfieldMaps(maps.airfield);
     };
   }, [maps]);
