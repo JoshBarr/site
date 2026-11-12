@@ -36,6 +36,18 @@ export function sampleStepped(
 export const LOW_ANGLE = 0.41;
 export const MID_ANGLE = -0.83;
 
+/** xz as a layer samples its noise: drifted by `offset`, turned by `angle`. */
+export function turned(xz, offset, angle: number) {
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+  const moved = xz.add(offset);
+
+  return vec2(
+    moved.x.mul(c).sub(moved.y.mul(s)),
+    moved.x.mul(s).add(moved.y.mul(c))
+  );
+}
+
 /**
  * Where a layer's clouds are, at xz with the layer's drift `offset`: two
  * scales of coverage map, the finer one turned again, so the pattern doesn't
@@ -50,14 +62,7 @@ export function coverageMap(
   angle: number,
   step: any = null
 ) {
-  const c = Math.cos(angle);
-  const s = Math.sin(angle);
-  const moved = xz.add(offset);
-
-  const rotated = vec2(
-    moved.x.mul(c).sub(moved.y.mul(s)),
-    moved.x.mul(s).add(moved.y.mul(c))
-  );
+  const rotated = turned(xz, offset, angle);
 
   const broad = sampleStepped(weather, rotated, WEATHER_SCALE, step);
 

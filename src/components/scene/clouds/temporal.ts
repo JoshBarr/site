@@ -29,6 +29,7 @@ import {
   vec2,
   vec4,
 } from "three/tsl";
+import { switchedOff } from "../stats";
 
 // Far off, the march's steps are hundreds of metres long, so how much cloud a
 // pixel finds depends on just where its few samples land. As the view moves
@@ -58,6 +59,41 @@ const OWN_BLEND = 0.15;
  * it's blurred, but it's what moves a pixel on between its own.
  */
 const REST_BLEND = 0.04;
+
+// A small cloud, or the thin edge of a big one, the march finds some frames
+// and not others. On a frame none of the marches round a pixel find it, the
+// bounds say there's no cloud, the history's thrown away, and the cloud's
+// edge pops: the clamp turns a little noise into a lot. While the camera's
+// still nothing's being uncovered, so then the history's only eased toward
+// the bounds, and a miss costs a part of the cloud, not all of it.
+// ?off=cloudhold
+
+/**
+ * How far a still camera's history is brought to the bounds each frame,
+ * where it holds more cloud than they do: cloud that's really gone fades in
+ * a few frames. Tried on the /clouds bench: 0.1 flickers a little less
+ * still, and trails for a sixth of a second.
+ */
+const STILL_BOUND = 0.2;
+
+/**
+ * The camera's still while what it sees slides less than this a frame, in
+ * the history's pixels, and moving, with the bounds in full, by MOVING: a
+ * camera following a bus is still, one being dragged round isn't. Judged by
+ * the camera, not pixel by pixel: orbiting, the cloud by the target hardly
+ * slides, while nearer cloud sweeps across it.
+ */
+const STILL = 0.05;
+const MOVING = 0.5;
+
+/** Cloud nearer than this isn't drawn (the march's NEAR_FADE), m. */
+const NEAREST_CLOUD = 600;
+
+/**
+ * And it's been still for this many frames before the history's eased in
+ * full: first the bounds clear up what the move left.
+ */
+const SETTLE = 8;
 
 /** The block's pixels in the order they're marched: far apart in turn. */
 const ORDER = [
@@ -119,6 +155,42 @@ function sharp(map, uv, texel) {
   return sum.div(weights);
 }
 
+const moved = new Matrix4();
+
+/**
+ * How far what `camera` sees has slid since the frame before, in pixels of
+ * a view `height` of them tall: by its turn, by its move, seen against
+ * cloud as near as any's drawn, and by its zoom. `wasWorld` and
+ * `wasProjection` are its world and projection matrices then.
+ */
+export function slideOf(
+  camera: Camera,
+  wasWorld: Matrix4,
+  wasProjection: Matrix4,
+  height: number
+) {
+  const was = wasProjection.elements;
+  const now = camera.projectionMatrix.elements;
+
+  // Where the camera was, in the view it has now.
+  const { elements: m } = moved.multiplyMatrices(
+    camera.matrixWorldInverse,
+    wasWorld
+  );
+
+  const turned = Math.acos(
+    Math.min(Math.max((m[0] + m[5] + m[10] - 1) / 2, -1), 1)
+  );
+
+  const shifted = Math.hypot(m[12], m[13], m[14]) / NEAREST_CLOUD;
+  const zoomed = Math.abs(now[5] / (was[5] || now[5]) - 1);
+
+  // A pixel, in radians, at the middle of the view.
+  const pixel = 2 / (now[5] * height);
+
+  return (turned + shifted + zoomed) / pixel;
+}
+
 class CloudHistoryNode extends Node {
   private current = new RenderTarget(1, 1, {
     depthBuffer: false,
@@ -143,6 +215,9 @@ class CloudHistoryNode extends Node {
   private texel = uniform(new Vector2());
   /** 1 when there's no history to blend: the first frame, or a resize. */
   private reset = uniform(1);
+  /** 0..1, how still the camera's been (see STILL). */
+  private still = uniform(0);
+  private previousWorld = new Matrix4();
   private size = new Vector2();
   private frame = 0;
 
@@ -159,6 +234,8 @@ class CloudHistoryNode extends Node {
     const cameraPosition = uniform(camera.position);
     const cameraWorld = uniform(camera.matrixWorld);
     const projectionInverse = uniform(camera.projectionMatrixInverse);
+
+    const held = !switchedOff("cloudhold");
 
     this.material.name = "CloudHistory";
     this.material.fragmentNode = Fn(() => {
@@ -228,7 +305,22 @@ class CloudHistoryNode extends Node {
         ? sharp(this.history, before, this.texel.mul(0.5))
         : this.history.sample(before);
 
-      const past = kept.clamp(low3, high3);
+      const bounded = kept.clamp(low3, high3);
+      let past: any = bounded;
+
+      if (held) {
+        // The history holds more cloud than any of the marches around it
+        // found this frame, and the scene's not in front of where it'd be.
+        const missed = kept.a
+          .lessThan(low3.a)
+          .and(distance.sample(centre).g.greaterThan(0.5));
+
+        past = mix(
+          kept,
+          bounded,
+          missed.select(mix(1, STILL_BOUND, this.still), 1)
+        );
+      }
 
       const onScreen = before
         .greaterThanEqual(vec2(0))
@@ -265,6 +357,8 @@ class CloudHistoryNode extends Node {
       this.reset.value = 1;
     }
 
+    this.still.value = this.stillness();
+
     rendererState = RendererUtils.resetRendererState(renderer, rendererState);
 
     this.output.value = this.current.texture;
@@ -277,6 +371,7 @@ class CloudHistoryNode extends Node {
     [this.current, this.previous] = [this.previous, this.current];
     this.previousView.value.copy(this.camera.matrixWorldInverse);
     this.previousProjection.value.copy(this.camera.projectionMatrix);
+    this.previousWorld.copy(this.camera.matrixWorld);
     this.reset.value = 0;
     this.offset.value = (this.offset.value + GOLDEN) % 1;
 
@@ -285,6 +380,25 @@ class CloudHistoryNode extends Node {
       this.frame = (this.frame + 1) % ORDER.length;
       this.sub.value.set(...ORDER[this.frame]);
     }
+  }
+
+  /**
+   * How still the camera is, 0..1, by how far its view's slid since the
+   * last frame: falls at once, rises over SETTLE frames.
+   */
+  private stillness() {
+    const slid = slideOf(
+      this.camera,
+      this.previousWorld,
+      this.previousProjection.value,
+      this.current.height
+    );
+
+    // Smoothstep, down from 1.
+    const x = Math.min(Math.max((slid - STILL) / (MOVING - STILL), 0), 1);
+    const still = 1 - x * x * (3 - 2 * x);
+
+    return Math.min(still, this.still.value + 1 / SETTLE);
   }
 
   setup(builder) {
@@ -304,8 +418,9 @@ class CloudHistoryNode extends Node {
 
 /**
  * The clouds' march, `march` (an rtt node), accumulated over frames: read it
- * through getTextureNode(). `distance` is the march's second output, how far
- * off each pixel's cloud is. Advances `offset` (a uniform, 0..1 of a step)
+ * through getTextureNode(). `distance` is the march's second output: in r how
+ * far off each pixel's cloud is, in g whether there's room for any before the
+ * scene. Advances `offset` (a uniform, 0..1 of a step)
  * for the march to start at. With `sub` (a vec2 uniform), the march is taken
  * to be half this history's size each way and to go through one pixel of
  * each 2×2 block a frame, which it sets `sub` to.

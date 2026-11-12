@@ -22,7 +22,7 @@ import {
   vec3,
 } from "three/tsl";
 import { cloudShare } from "./cloudField";
-import { coverageMap, LOW_ANGLE, MID_ANGLE } from "./coverage";
+import { coverageMap, LOW_ANGLE, MID_ANGLE, turned } from "./coverage";
 
 // What the cloud layers are made of, shared by the cloud march and the
 // shadows the clouds cast on the scene.
@@ -137,6 +137,157 @@ export const MID_STYLE: LayerStyle = {
 };
 
 /**
+ * What a layer holds over a point on the ground, whatever the height: the
+ * part of its density that comes from the 2D maps. See layerColumn.
+ */
+export interface LayerColumn {
+  /** 0..1, how cloudy, before it thins with height. */
+  cloudiness: any;
+  /** 0..1, how far the layer's closed into an unbroken deck. */
+  closing: any;
+  /** How far the cloud bodies are pushed about, m. */
+  warp: any;
+}
+
+/**
+ * A layer's column over xz. `lid` and `step` as layerDensity's. A march
+ * reads it once a step and the 3D noise several times along the step
+ * (columnDensity): the maps are read at a mip as coarse as the step, so they
+ * hardly change along it, where the bodies do.
+ */
+export function layerColumn(
+  xz,
+  layer: CloudLayerUniforms,
+  { angle, scale }: LayerStyle,
+  {
+    lid = null,
+    step = null,
+  }: { lid?: ((share: any) => any) | null; step?: any } = {}
+): LayerColumn {
+  const { shape, offset } = layer;
+
+  const { broad, fine, map } = coverageMap(
+    cloudNoise.weather,
+    xz,
+    offset,
+    angle,
+    step
+  );
+
+  // Coverage picks the regions that hold cloud, then fills them: low
+  // cover is a few large clouds, not a scatter of small ones. The soft
+  // edge would still let the map's peaks through at no cover, so the last
+  // few percent fade out to clear sky. Shared out to where the satellite
+  // saw cloud.
+  const share = cloudShare(xz);
+  const coverage = min(shape.z.mul(share), 1);
+
+  const region = smoothstep(
+    float(1).sub(coverage).sub(0.12),
+    float(1).sub(coverage).add(0.12),
+    map
+  ).mul(saturate(coverage.mul(20)));
+
+  return {
+    cloudiness: region.mul(mix(0.55, 0.9, coverage)),
+    closing: lid ? lid(share) : float(0),
+    // The bodies are warped by the coverage map too, breaking up the cells.
+    warp: vec2(broad.g, fine.g)
+      .sub(0.5)
+      .mul(scale * 0.6),
+  };
+}
+
+/**
+ * Sets `density` to the layer's at p, `h` (0..1) of the way up it, given
+ * its column there.
+ */
+function fill(
+  density,
+  p,
+  h,
+  { shape, offset }: CloudLayerUniforms,
+  { flatTop, angle, scale }: LayerStyle,
+  { cloudiness: whole, closing, warp }: LayerColumn,
+  cheap: boolean,
+  erosion: number,
+  lidded: boolean
+) {
+  const { shape: shapeNoise } = cloudNoise;
+
+  // Rounded bases, tapering tops.
+  const profile = smoothstep(0, 0.12, h).mul(smoothstep(1, flatTop, h));
+
+  // Regions narrow with height for rounded tops rather than columns.
+  const cloudiness = whole.mul(float(1).sub(h.mul(0.45)));
+
+  If(cloudiness.greaterThan(0.01).or(closing.greaterThan(0.01)), () => {
+    const drifted = turned(p.xz, offset, angle).add(warp);
+    const base = float(0).toVar();
+
+    // The 3D noise is only read where it can make cloud: the body where
+    // even its densest would pass, the detail where there's body to erode.
+    // Most of a cloudy column is the clear air round its clouds.
+    If(profile.greaterThan(float(1).sub(cloudiness)), () => {
+      const body = texture3D(
+        shapeNoise,
+        vec3(drifted.x, p.y, drifted.y).div(scale)
+      ).r;
+
+      base.assign(
+        saturate(
+          remap(
+            body.mul(profile),
+            float(1).sub(cloudiness),
+            float(1),
+            float(0),
+            float(1)
+          )
+        )
+      );
+    });
+
+    const value = base.toVar();
+
+    If(base.greaterThan(0), () => {
+      // Erode more at the bottom of the cloud for wispy bases.
+      const erode = (amount) =>
+        saturate(
+          remap(
+            base,
+            amount.mul(mix(0.6, 0.35, saturate(h))),
+            float(1),
+            float(0),
+            float(1)
+          )
+        );
+
+      if (!cheap) {
+        const detail = texture3D(
+          shapeNoise,
+          vec3(drifted.x, p.y, drifted.y).div(DETAIL_SCALE)
+        );
+
+        value.assign(
+          erode(
+            detail.g.mul(0.625).add(detail.b.mul(0.25)).add(detail.a.mul(0.125))
+          )
+        );
+      } else if (erosion > 0) {
+        value.assign(erode(float(erosion)));
+      }
+    });
+
+    // Overcast closes the low layer into an unbroken stratus deck.
+    if (lidded) {
+      value.assign(max(value, closing.mul(profile).mul(mix(0.5, 0.8, base))));
+    }
+
+    density.assign(value.mul(shape.w));
+  });
+}
+
+/**
  * Density of one layer at p. Checks the cheap 2D coverage first and only
  * reads the 3D noise where there can be cloud. `cheap` skips the detail
  * erosion, for samples toward the sun; `erosion` then takes off that much
@@ -150,7 +301,7 @@ export const MID_STYLE: LayerStyle = {
 export function layerDensity(
   p,
   layer: CloudLayerUniforms,
-  { flatTop, angle, scale }: LayerStyle,
+  style: LayerStyle,
   {
     lid = null,
     cheap = false,
@@ -165,102 +316,37 @@ export function layerDensity(
     when?: any;
   } = {}
 ) {
-  const { shape, offset } = layer;
-  const { shape: shapeNoise, weather } = cloudNoise;
+  const { shape } = layer;
   const density = float(0).toVar();
   const h = p.y.sub(shape.x).div(shape.y.sub(shape.x));
   const within = h.greaterThan(0).and(h.lessThan(1));
 
   If(when ? when.and(within) : within, () => {
-    // Rounded bases, tapering tops.
-    const profile = smoothstep(0, 0.12, h).mul(smoothstep(1, flatTop, h));
+    const column = layerColumn(p.xz, layer, style, { lid, step });
 
-    const { rotated, broad, fine, map } = coverageMap(
-      weather,
-      p.xz,
-      offset,
-      angle,
-      step
-    );
+    fill(density, p, h, layer, style, column, cheap, erosion, lid !== null);
+  });
 
-    // Coverage picks the regions that hold cloud, then fills them: low
-    // cover is a few large clouds, not a scatter of small ones. Regions
-    // narrow with height for rounded tops rather than columns. The soft
-    // edge would still let the map's peaks through at no cover, so the last
-    // few percent fade out to clear sky. Shared out to where the satellite
-    // saw cloud.
-    const share = cloudShare(p.xz);
-    const coverage = min(shape.z.mul(share), 1);
+  return density;
+}
 
-    const region = smoothstep(
-      float(1).sub(coverage).sub(0.12),
-      float(1).sub(coverage).add(0.12),
-      map
-    ).mul(saturate(coverage.mul(20)));
+/**
+ * layerDensity at p, of a `column` read already (layerColumn) somewhere
+ * near p. `lidded` if it was read with a lid.
+ */
+export function columnDensity(
+  p,
+  layer: CloudLayerUniforms,
+  style: LayerStyle,
+  column: LayerColumn,
+  lidded = false
+) {
+  const { shape } = layer;
+  const density = float(0).toVar();
+  const h = p.y.sub(shape.x).div(shape.y.sub(shape.x));
 
-    const cloudiness = region
-      .mul(mix(0.55, 0.9, coverage))
-      .mul(float(1).sub(h.mul(0.45)));
-
-    const closing = lid ? lid(share) : float(0);
-
-    If(cloudiness.greaterThan(0.01).or(closing.greaterThan(0.01)), () => {
-      // Warp the bodies by the coverage map too, breaking up the cells.
-      const drifted = rotated.add(
-        vec2(broad.g, fine.g)
-          .sub(0.5)
-          .mul(scale * 0.6)
-      );
-
-      const body = texture3D(
-        shapeNoise,
-        vec3(drifted.x, p.y, drifted.y).div(scale)
-      ).r;
-
-      const base = saturate(
-        remap(
-          body.mul(profile),
-          float(1).sub(cloudiness),
-          float(1),
-          float(0),
-          float(1)
-        )
-      );
-
-      // Erode more at the bottom of the cloud for wispy bases.
-      const erode = (amount) =>
-        saturate(
-          remap(
-            base,
-            amount.mul(mix(0.6, 0.35, saturate(h))),
-            float(1),
-            float(0),
-            float(1)
-          )
-        );
-
-      let value: any = base;
-
-      if (!cheap) {
-        const detail = texture3D(
-          shapeNoise,
-          vec3(drifted.x, p.y, drifted.y).div(DETAIL_SCALE)
-        );
-
-        value = erode(
-          detail.g.mul(0.625).add(detail.b.mul(0.25)).add(detail.a.mul(0.125))
-        );
-      } else if (erosion > 0) {
-        value = erode(float(erosion));
-      }
-
-      // Overcast closes the low layer into an unbroken stratus deck.
-      if (lid) {
-        value = max(value, closing.mul(profile).mul(mix(0.5, 0.8, base)));
-      }
-
-      density.assign(value.mul(shape.w));
-    });
+  If(h.greaterThan(0).and(h.lessThan(1)), () => {
+    fill(density, p, h, layer, style, column, false, 0, lidded);
   });
 
   return density;

@@ -9,6 +9,7 @@ import {
   float,
   fract,
   getViewPosition,
+  int,
   max,
   min,
   mix,
@@ -30,9 +31,13 @@ import { hazeColor, hazeTransmittance, phase } from "../haze";
 import { cloudGlowAtNight, hazeGlowAtNight } from "../skyglow";
 import {
   CloudLayerUniforms,
+  columnDensity,
   deckLid,
   EXTINCTION,
+  LayerColumn,
+  layerColumn,
   layerDensity,
+  LayerStyle,
   LOW_STYLE,
   MID_STYLE,
   remap,
@@ -45,6 +50,8 @@ import { switchedOff } from "../stats";
 export interface CloudQuality {
   /** Steps along the view ray. */
   steps: number;
+  /** Most samples of the cloud bodies to a step, where there's cloud. */
+  substeps: number;
   /** Steps toward the sun at each sample, for self-shadowing. */
   lightSteps: number;
   /** Render size relative to the canvas. */
@@ -57,6 +64,7 @@ export interface CloudQuality {
 
 export const CLOUDS_DESKTOP: CloudQuality = {
   steps: 112,
+  substeps: 3,
   lightSteps: 4,
   resolutionScale: 0.5,
   rainSteps: 24,
@@ -65,6 +73,7 @@ export const CLOUDS_DESKTOP: CloudQuality = {
 
 export const CLOUDS_MOBILE: CloudQuality = {
   steps: 64,
+  substeps: 2,
   lightSteps: 3,
   resolutionScale: 0.35,
   rainSteps: 12,
@@ -79,6 +88,12 @@ const NEAR_FADE = 600;
 
 /** Step length as a fraction of distance from the camera. */
 const STEP_GROWTH = 0.035;
+
+/**
+ * A step's samples of the cloud bodies are taken where its column's at
+ * least this cloudy: under it there's next to none to find.
+ */
+const WORTH_SAMPLING = 0.1;
 
 /** Rain is marched this far; haze hides it beyond. */
 const RAIN_DISTANCE = 25000;
@@ -119,7 +134,8 @@ const POWDER = 0.5;
 /**
  * Raymarches the cloud layers for each screen pixel, stopping at the scene
  * depth. Writes two outputs: (scattered light, transmittance), to composite
- * with scene * a + rgb; and in r, how far off what it shows is, m (see
+ * with scene * a + rgb; and in r, how far off what it shows is, m, in g, 1
+ * where the ray's in the layers at all before it meets the scene (see
  * temporal), for a render target with two textures.
  */
 export function createCloudNode({
@@ -171,18 +187,76 @@ export function createCloudNode({
 
   const midCloud = mid.shape.z.greaterThan(0);
 
+  // An overcast deck closes where the satellite saw cloud.
+  const lid = (xz) => (share) => max(deckLid.mul(min(share, 1)), rainDeck(xz));
+
   /** Both layers' density at p, for a march whose samples are `step` apart, m. */
   const density = (p, step, cheap = false) =>
     layerDensity(p, low, LOW_STYLE, {
-      // An overcast deck closes where the satellite saw cloud.
-      lid: (share) => max(deckLid.mul(min(share, 1)), rainDeck(p.xz)),
+      lid: lid(p.xz),
       cheap,
       step,
       when: lowCloud,
     }).add(layerDensity(p, mid, MID_STYLE, { cheap, step, when: midCloud }));
 
-  // Set by the march, written to the second output.
+  // A step is hundreds of metres long far off, and cloud that thick is
+  // opaque: one sample to a step finds a small cloud, or a big one's edge,
+  // some frames and not others, and it flickers however the frames are
+  // averaged. So the step's stretch of ray gets several samples. Only of
+  // the 3D noise, though: the 2D maps are read at a mip as coarse as the
+  // step, so once a step (the layer's column) does for all of them.
+  const substeps = switchedOff("cloudsteps") ? 1 : quality.substeps;
+
+  const layers: [CloudLayerUniforms, LayerStyle, any, boolean][] = [
+    [low, LOW_STYLE, lowCloud, true],
+    [mid, MID_STYLE, midCloud, false],
+  ];
+
+  /**
+   * Each layer's column at p, the middle of a stretch of ray `step` long
+   * along `direction`: read if any of the stretch is within the layer.
+   */
+  const columnsAt = (p, direction, step): LayerColumn[] =>
+    layers.map(([layer, style, when, lidded]) => {
+      const column = {
+        cloudiness: float(0).toVar(),
+        closing: float(0).toVar(),
+        warp: vec2(0).toVar(),
+      };
+
+      const climb = direction.y.mul(step).mul(0.5).abs();
+
+      const reaches = p.y
+        .add(climb)
+        .greaterThan(layer.shape.x)
+        .and(p.y.sub(climb).lessThan(layer.shape.y));
+
+      If(when.and(reaches), () => {
+        const read = layerColumn(p.xz, layer, style, {
+          lid: lidded ? lid(p.xz) : null,
+          step,
+        });
+
+        column.cloudiness.assign(read.cloudiness);
+        column.closing.assign(read.closing);
+        column.warp.assign(read.warp);
+      });
+
+      return column;
+    });
+
+  /** Both layers' density at p, of their columns. */
+  const densityOf = (p, columns: LayerColumn[]) =>
+    layers
+      .map(([layer, style, , lidded], i) =>
+        columnDensity(p, layer, style, columns[i], lidded)
+      )
+      .reduce((sum: any, each) => sum.add(each));
+
+  // Set by the march, written to the second output: how far off what it
+  // shows is, and whether there's any room for cloud before the scene.
   const distance = property("float", "cloudDistance");
+  const room = property("float", "cloudRoom");
 
   const march = Fn(() => {
     // Where on screen the ray goes: through this pixel, or through this
@@ -267,33 +341,38 @@ export function createCloudNode({
       const dt = stepFor(tNear).toVar();
       t.addAssign(dt.mul(jitter));
 
-      Loop(quality.steps, () => {
-        If(t.greaterThan(tFar).or(transmittance.lessThan(0.01)), () => {
-          Break();
-        });
+      // Negative until a step's marched toward the sun.
+      const toSun = float(-1).toVar();
 
-        const p = cameraPosition.add(direction.mul(t));
+      /** A sample at `at` along the ray, standing for `length` of it. */
+      const sample = (at, length, columns: LayerColumn[]) => {
+        const p = cameraPosition.add(direction.mul(at));
 
         // Thin out right around the camera so it never sits in a white wall,
         // and toward the end of the march so the layer has no hard horizon.
-        const d = density(p, dt)
-          .mul(smoothstep(NEAR_FADE * 0.25, NEAR_FADE, t))
-          .mul(smoothstep(MAX_DISTANCE, MAX_DISTANCE * 0.6, t));
+        const d = densityOf(p, columns)
+          .mul(smoothstep(NEAR_FADE * 0.25, NEAR_FADE, at))
+          .mul(smoothstep(MAX_DISTANCE, MAX_DISTANCE * 0.6, at));
 
-        If(d.greaterThan(0.001), () => {
+        // Not past the scene: a step's samples lie either side of it.
+        If(d.greaterThan(0.001).and(at.lessThanEqual(tFar)), () => {
           If(firstHit.lessThan(0), () => {
-            firstHit.assign(t);
+            firstHit.assign(at);
           });
 
-          // Optical depth toward the sun, in growing steps.
-          const toSun = float(0).toVar();
-          let stride = 40;
+          // Optical depth toward the sun, in growing steps. Once a step,
+          // from the first of its samples to find cloud: the one that shows
+          // most, and the rest are lit as it is.
+          If(toSun.lessThan(0), () => {
+            toSun.assign(0);
+            let stride = 40;
 
-          for (let i = 0; i < quality.lightSteps; i++) {
-            const q = p.add(sunDirection.mul(stride * (i + 0.5)));
-            toSun.addAssign(density(q, dt, true).mul(stride));
-            stride *= 2;
-          }
+            for (let i = 0; i < quality.lightSteps; i++) {
+              const q = p.add(sunDirection.mul(stride * (i + 0.5)));
+              toSun.addAssign(density(q, dt, true).mul(stride));
+              stride *= 2;
+            }
+          });
 
           // The sun through the cloud, scattered once or in octaves.
           const sunward = scattering
@@ -326,13 +405,60 @@ export function createCloudNode({
             .add(cloudGlowAtNight(p).mul(below.mul(below)));
 
           const sigma = d.mul(EXTINCTION);
-          const step = exp(sigma.mul(dt).negate());
+          const step = exp(sigma.mul(length).negate());
           // Energy-conserving: light scattered over the step, attenuated.
           const shown = float(1).sub(step).mul(transmittance);
           scattered.addAssign(luminance.mul(shown));
-          depthSum.addAssign(t.mul(shown));
+          depthSum.addAssign(at.mul(shown));
           transmittance.mulAssign(step);
         });
+      };
+
+      Loop(quality.steps, () => {
+        If(t.greaterThan(tFar).or(transmittance.lessThan(0.01)), () => {
+          Break();
+        });
+
+        toSun.assign(-1);
+
+        const columns = columnsAt(
+          cameraPosition.add(direction.mul(t)),
+          direction,
+          dt
+        );
+
+        if (substeps === 1) {
+          sample(t, dt, columns);
+        } else {
+          // As many as keep the samples MIN_STEP apart, so near the camera
+          // it's still the one.
+          const cloudy = columns
+            .map(({ cloudiness }) => cloudiness)
+            .reduce((most, each) => max(most, each))
+            .greaterThan(WORTH_SAMPLING);
+
+          const count = int(
+            cloudy.select(dt.div(MIN_STEP).floor().clamp(1, substeps), 1)
+          ).toVar();
+
+          const part = dt.div(float(count)).toVar();
+          const start = t.sub(dt.mul(0.5)).toVar();
+
+          // Spread evenly over the step's stretch, the column in its middle.
+          // SAFETY: a loop within a loop needs its own variable's name,
+          // which LoopNode takes and its types leave out.
+          const each: any = {
+            start: int(0),
+            end: count,
+            type: "int",
+            condition: "<",
+            name: "s",
+          };
+
+          Loop(each, ({ s }: any) => {
+            sample(start.add(part.mul(float(s).add(0.5))), part, columns);
+          });
+        }
 
         t.addAssign(dt);
         dt.assign(stepFor(t));
@@ -452,8 +578,10 @@ export function createCloudNode({
       cloudOpacity.greaterThan(0.02).select(depthSum.div(cloudOpacity), behind)
     );
 
+    room.assign(tFar.greaterThan(tNear).select(1, 0));
+
     return vec4(scattered, transmittance);
   })();
 
-  return outputStruct(march, vec4(distance, 0, 0, 1));
+  return outputStruct(march, vec4(distance, room, 0, 1));
 }
