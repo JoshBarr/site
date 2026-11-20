@@ -9,8 +9,10 @@ elsewhere both are fetched a tile at a time, in parallel, and their
 difference cached. Building footprints from OpenStreetMap (the terrain
 build's cache) are cut out, and the scene's own towers, turbines and
 lighthouses with the blades the lidar caught mid-turn, and Transpower's
-pylons, substations and the conductors between them, then each crown is a
-local maximum of the smoothed canopy, its radius from the watershed around it.
+pylons, substations and the conductors between them, and the highways'
+bridge decks (public/roads/roads.json, if the traffic build's written it),
+then each crown is a local maximum of the smoothed canopy, its radius from
+the watershed around it.
 
 Each tree's ground is the published terrain's under it, from the finest
 level there, so trunks stand on the 8m terrain as well as the 2m.
@@ -57,6 +59,7 @@ CACHE_DIR = ROOT_DIR / ".cache" / "trees"
 CHM_DIR = CACHE_DIR / "chm"
 SITES_TS = ROOT_DIR / "src" / "components" / "scene" / "landmarks" / "sites.ts"
 GRID_TS = ROOT_DIR / "src" / "components" / "scene" / "power" / "grid.ts"
+ROADS_JSON = ROOT_DIR / "public" / "roads" / "roads.json"
 
 _spec = importlib.util.spec_from_file_location(
     "terrain", ROOT_DIR / "scripts" / "terrain" / "build_tiles.py"
@@ -586,6 +589,57 @@ def port_yards(grid, shape):
     return mask
 
 
+# Highway lanes, m, as build_roads.mjs has them, and how far past the
+# outer lanes a deck is cleared: its shoulder and parapet, and a sample.
+HIGHWAY_LANE = 3.5
+HIGHWAY_TOWN_LANE = 3.2
+DECK_MARGIN = 4.0
+
+
+def highway_decks(grid, shape):
+    """
+    1 over the highways' bridges and the approaches lifted with them: a
+    deck's edge is a drop of its whole height, as rough as any crown, and
+    the scene lays the decks itself.
+    """
+    mask = np.zeros(shape, dtype=np.uint8)
+    if not ROADS_JSON.exists():
+        print(f"  no {ROADS_JSON.name}: the highways' decks aren't cleared")
+        return mask
+    roads = json.loads(ROADS_JSON.read_text())
+    bridge = roads["flags"]["bridge"]
+    decks = []
+    for carriageway in roads["carriageways"].values():
+        points = np.array(carriageway["points"]).reshape(-1, 3)[:, :2]
+        lifted = np.zeros(len(points), dtype=bool)
+        for first, *under in carriageway.get("ground", []):
+            lifted[first : first + len(under)] = True
+        spans = carriageway["spans"]
+        for k, (start, _, lanes, flags, limit) in enumerate(spans):
+            end = spans[k + 1][0] if k + 1 < len(spans) else len(points)
+            half = lanes * (HIGHWAY_LANE if limit > 50 else HIGHWAY_TOWN_LANE) / 2 + DECK_MARGIN
+            for i in range(start, min(end, len(points) - 1)):
+                if not (flags & bridge or (lifted[i] and lifted[i + 1])):
+                    continue
+                (ea, na), (eb, nb) = points[i], points[i + 1]
+                length = np.hypot(eb - ea, nb - na)
+                if length < 1e-6:
+                    continue
+                # Along a little past each end, so bends leave no gaps.
+                ax, ay = (eb - ea) / length * 2, (nb - na) / length * 2
+                ox, oy = -(nb - na) / length * half, (eb - ea) / length * half
+                corners = [
+                    (ea - ax + ox, na - ay + oy),
+                    (eb + ax + ox, nb + ay + oy),
+                    (eb + ax - ox, nb + ay - oy),
+                    (ea - ax - ox, na - ay - oy),
+                ]
+                decks.append(({"type": "Polygon", "coordinates": [corners + corners[:1]]}, 1))
+    if decks:
+        rasterize(decks, out=mask, transform=grid, all_touched=True)
+    return mask
+
+
 OSM_SUBSTATIONS_QUERY = """
 [out:json][timeout:300][bbox:{s},{w},{n},{e}];
 way["power"="substation"];
@@ -659,6 +713,7 @@ def build():
     built = footprints(grid, (rows, cols))
     built |= port_yards(grid, (rows, cols))
     built |= substations(grid, (rows, cols))
+    built |= highway_decks(grid, (rows, cols))
     towers, corridors = power_grid()
     sites = landmark_sites() + towers
     print(f"  clearing {len(sites)} landmarks and towers, and under {len(corridors)} spans")

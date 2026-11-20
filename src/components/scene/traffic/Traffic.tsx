@@ -38,6 +38,7 @@ import {
 import { TileIndex } from "../terrain/manifest";
 import { pixelAngle } from "../landmarks/common";
 import { hazeTransmittance } from "../haze";
+import { castsNearShadow } from "../landmarks/nearShadow";
 import { distantDim, lampGlow, rowShare } from "../lamps";
 import {
   ASPHALT,
@@ -131,9 +132,9 @@ function Surfaces({ roads }: { roads: Roads }) {
       group: new Group(),
       material,
       chunks: createRoadChunks(roads).map(
-        (chunk): typeof chunk & { mesh: Mesh | null } => ({
+        (chunk): typeof chunk & { meshes: Mesh[] | null } => ({
           ...chunk,
-          mesh: null,
+          meshes: null,
         })
       ),
     };
@@ -141,7 +142,10 @@ function Surfaces({ roads }: { roads: Roads }) {
 
   useEffect(
     () => () => {
-      for (const chunk of chunks) chunk.mesh?.geometry.dispose();
+      for (const chunk of chunks) {
+        for (const mesh of chunk.meshes ?? []) mesh.geometry.dispose();
+      }
+
       group.clear();
       material.dispose();
     },
@@ -156,14 +160,17 @@ function Surfaces({ roads }: { roads: Roads }) {
     for (const chunk of chunks) {
       const distance = chunk.box.distanceToPoint(eye);
 
-      if (chunk.mesh) {
-        chunk.mesh.visible = distance < ROAD_RANGE;
+      if (chunk.meshes) {
+        for (const mesh of chunk.meshes) {
+          mesh.visible = distance < ROAD_RANGE;
 
-        if (distance > ROAD_RANGE * 2) {
-          group.remove(chunk.mesh);
-          chunk.mesh.geometry.dispose();
-          chunk.mesh = null;
+          if (distance > ROAD_RANGE * 2) {
+            group.remove(mesh);
+            mesh.geometry.dispose();
+          }
         }
+
+        if (distance > ROAD_RANGE * 2) chunk.meshes = null;
       } else if (distance < nearest) {
         nearest = distance;
         next = chunk;
@@ -171,9 +178,23 @@ function Surfaces({ roads }: { roads: Roads }) {
     }
 
     if (next) {
-      next.mesh = new Mesh(next.build(), material);
-      next.mesh.receiveShadow = true;
-      group.add(next.mesh);
+      const { ground, decks } = next.build();
+      next.meshes = [];
+
+      if (ground) {
+        const mesh = new Mesh(ground, material);
+        mesh.receiveShadow = true;
+        next.meshes.push(mesh);
+      }
+
+      // A deck's off the ground: its shadow falls on what's under it.
+      if (decks) {
+        const mesh = new Mesh(decks, material);
+        castsNearShadow(mesh);
+        next.meshes.push(mesh);
+      }
+
+      group.add(...next.meshes);
     }
   });
 

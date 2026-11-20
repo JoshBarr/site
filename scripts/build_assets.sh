@@ -7,6 +7,11 @@
 #
 # Steps:
 #   terrain    public/terrain: height tiles, water, shore (LINZ DEM + OSM)
+#   traffic    public/roads/roads.json (OSM + NZTA), its bridge decks then
+#              lifted to the lidar's heights. The trees step clears the
+#              canopy the lidar made of the decks, and the buildings step
+#              leaves out the council's models of them: when a bridge
+#              changes, run trees, landcover and buildings again
 #   trees      public/trees: lidar-found trees (needs terrain's caches)
 #   landcover  public/terrain/landcover.png, with the trees' canopy folded in
 #   farland    public/farland/land.bin: the South Island on the horizon, a
@@ -19,7 +24,8 @@
 #              heights, for past the city (needs the trees' caches)
 #   cablecar   public/rail/cablecar.json: the cable car's track (OSM)
 #   buildings  public/buildings (WCC I3S, and the footprints past it; less
-#              what's on the cable car's track)
+#              what's on the cable car's track and the highways' own
+#              structures)
 #   heroes     src/components/scene/buildings/heroes.ts: floodlit landmarks (OSM)
 #   airport    public/airport + src/components/scene/airport/airfield.ts
 #   landmarks  src/components/scene/landmarks/sites.ts
@@ -28,7 +34,6 @@
 #              lines, their heights from the lidar, and the Cook Strait
 #              cables. The trees step reads it, to clear what the lidar
 #              made of them: when it changes, run trees and landcover again
-#   traffic    public/roads/roads.json (OSM + NZTA)
 #   signs      public/roads/signs.json: the signs along the highways there's
 #              evidence for (OSM, NZTA), on roads.json's carriageways; what
 #              for, in scripts/traffic/signs.evidence.json
@@ -49,7 +54,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-ALL=(terrain trees landcover farland wind-stations wind footprints cablecar buildings heroes airport landmarks port power traffic signs tunnels buses trains stars)
+ALL=(terrain traffic trees landcover farland wind-stations wind footprints cablecar buildings heroes airport landmarks port power signs tunnels buses trains stars)
 VENV=.venv-terrain
 PY="$VENV/bin/python"
 
@@ -83,11 +88,13 @@ run() {
   echo "=== $step done in $((SECONDS - start))s"
 }
 
-if wants terrain || wants trees || wants landcover || wants farland || wants wind-stations || wants wind || wants footprints || wants power; then
+if wants terrain || wants traffic || wants trees || wants landcover || wants farland || wants wind-stations || wants wind || wants footprints || wants power; then
   python_env
 fi
 
 wants terrain && run terrain "$PY" -I scripts/terrain/build_tiles.py
+wants traffic && run traffic node scripts/traffic/build_roads.mjs
+wants traffic && run decks "$PY" -I scripts/traffic/build_decks.py
 wants trees && run trees "$PY" -I scripts/trees/build_trees.py
 wants landcover && run landcover "$PY" -I scripts/terrain/build_tiles.py landcover
 wants farland && run farland "$PY" -I scripts/farland/build_farland.py
@@ -101,7 +108,6 @@ wants airport && run airport node scripts/airport/build_airfield.mjs
 wants landmarks && run landmarks node scripts/landmarks/build_sites.mjs
 wants port && run port node scripts/port/build_port.mjs
 wants power && run power "$PY" -I scripts/power/build_power.py
-wants traffic && run traffic node scripts/traffic/build_roads.mjs
 wants signs && run signs node scripts/traffic/build_signs.mjs
 wants tunnels && run tunnels node scripts/tunnels/build_tunnels.mjs
 wants buses && run buses node scripts/buses/build_routes.mjs

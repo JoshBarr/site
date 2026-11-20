@@ -11,7 +11,8 @@
 // along its leg, and legs by their end points. Heights are read from the
 // terrain tiles in public/terrain (so run this after build_tiles.py),
 // smoothed along the road, and carried straight from end to end over
-// bridges and through tunnels.
+// bridges and through tunnels. Run build_decks.py after it: that lifts the
+// bridges' decks to where the lidar found them.
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";

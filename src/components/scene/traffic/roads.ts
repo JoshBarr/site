@@ -22,6 +22,8 @@ interface CarriagewayFile {
   junctions: [number, number][];
   links: [number, number, number][];
   legs: [number, number, number][];
+  /** Lifted runs: [first point, the bare earth under each from there, m…]. */
+  ground?: number[][];
   into?: [string, number];
   from?: [string, number];
 }
@@ -64,6 +66,12 @@ export class Carriageway {
   /** World x/z to the right of the way it runs, at each point. */
   readonly rightX: Float32Array;
   readonly rightZ: Float32Array;
+  /**
+   * How far the surface is above the ground at each point, m as drawn: 0
+   * where the road's laid on it, more on a deck the lidar placed (see
+   * scripts/traffic/build_decks.py).
+   */
+  readonly clear: Float32Array;
   /** From each point to the next: this way's lanes, and the road's. */
   readonly lanes: Uint8Array;
   readonly total: Uint8Array;
@@ -114,6 +122,16 @@ export class Carriageway {
     }
 
     this.length = this.s[count - 1];
+
+    this.clear = new Float32Array(count);
+
+    for (const [first, ...under] of file.ground ?? []) {
+      under.forEach((ground, k) => {
+        const i = first + k;
+
+        this.clear[i] = Math.max(this.y[i] - ROAD_TOP - ground * scale, 0);
+      });
+    }
 
     this.rightX = new Float32Array(count);
     this.rightZ = new Float32Array(count);

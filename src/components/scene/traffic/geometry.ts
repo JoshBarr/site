@@ -2,9 +2,11 @@ import { Box3, BufferAttribute, BufferGeometry, Vector3 } from "three/webgpu";
 import type { Carriageway, Roads } from "./roads";
 
 // The highways' surfaces, low poly, in chunks: each carriageway's lanes as
-// a strip a little above the ground, with shoulders sunk into it and decks
-// over bridges. Nothing's laid through tunnels: those have their own floors
-// (see tunnels/). Lane markings are drawn by the material from `mark`.
+// a strip a little above the ground, with shoulders sunk into it, and decks
+// over bridges, on piers where there's room under them and walled in at
+// their abutments. Nothing's laid through tunnels: those have their own
+// floors (see tunnels/). Lane markings are drawn by the material from
+// `mark`.
 
 /** Parts of the road and vehicles, for their `part` attribute. */
 export const ASPHALT = 0;
@@ -27,15 +29,37 @@ const SKIRT = 1.2;
 const DECK = 1.4;
 const PARAPET = 0.9;
 
+/**
+ * Further above the ground than its skirts reach, m, the road's on a
+ * structure, whether or not the map calls it a bridge: the bare earth dips
+ * at an abutment, and the road doesn't.
+ */
+const LIFTED = SKIRT;
+
+/**
+ * A deck this near the ground, m, is walled in down to it: its abutments.
+ * Higher, it stands on piers this far apart, m along, each this share of
+ * the carriageway across and this long, sunk this far into the ground.
+ */
+const ABUTMENT = 4;
+const PIER_SPACING = 32;
+const PIER_ACROSS = 0.6;
+const PIER_ALONG = 1.6;
+const SUNK = 2;
+
 /** Road built in square chunks this wide, m, each on its own. */
 const CHUNK = 1500;
 
 type Point = [number, number, number];
 
-/** A square of road: its world bounds, and its geometry when wanted. */
+/**
+ * A square of road: its world bounds, and its geometry when wanted, the
+ * road on the ground apart from the decks, which cast shadows. Either's
+ * null where the square has none.
+ */
 export interface RoadChunk {
   box: Box3;
-  build(): BufferGeometry;
+  build(): { ground: BufferGeometry | null; decks: BufferGeometry | null };
 }
 
 interface Segment {
@@ -69,6 +93,8 @@ class Builder {
   }
 
   geometry() {
+    if (!this.position.length) return null;
+
     const geometry = new BufferGeometry();
     geometry.setAttribute(
       "position",
@@ -115,9 +141,87 @@ const at = (
   road.z[i] + road.rightZ[i] * lateral,
 ];
 
-function buildSegment(b: Builder, roads: Roads, { road, i }: Segment) {
+/** How far down a deck's sides go at point i, m: to the ground, near it. */
+const sideDepth = (road: Carriageway, i: number) =>
+  road.clear[i] < ABUTMENT ? Math.max(DECK, road.clear[i] + SUNK) : DECK;
+
+/**
+ * Piers under the deck from point i to the next, wherever one's due along
+ * the carriageway and the deck's clear of its abutments.
+ */
+function buildPiers(b: Builder, road: Carriageway, i: number) {
+  const j = i + 1;
+  const length = road.s[j] - road.s[i];
+
+  for (
+    let s = Math.ceil(road.s[i] / PIER_SPACING) * PIER_SPACING;
+    s < road.s[j];
+    s += PIER_SPACING
+  ) {
+    const t = (s - road.s[i]) / length;
+    const mix = (a: Float32Array) => a[i] + (a[j] - a[i]) * t;
+    const clear = mix(road.clear);
+
+    if (clear < ABUTMENT) continue;
+
+    const width = road.lanes[i] * road.laneWidth[i];
+    const middle = road.kerbAt(i) + width / 2;
+    const across = (width * PIER_ACROSS) / 2;
+    const along = PIER_ALONG / 2;
+    // Along the road, and to its right.
+    const ax = (road.x[j] - road.x[i]) / length;
+    const az = (road.z[j] - road.z[i]) / length;
+    const rx = mix(road.rightX);
+    const rz = mix(road.rightZ);
+    const x = mix(road.x) + rx * middle;
+    const y = mix(road.y);
+    const z = mix(road.z) + rz * middle;
+
+    const corner = (r: number, a: number, up: number): Point => [
+      x + rx * r * across + ax * a * along,
+      y + up,
+      z + rz * r * across + az * a * along,
+    ];
+
+    const top = -DECK;
+    const bottom = -clear - SUNK;
+
+    const ring: [number, number][] = [
+      [-1, -1],
+      [1, -1],
+      [1, 1],
+      [-1, 1],
+    ];
+
+    ring.forEach(([r0, a0], k) => {
+      const [r1, a1] = ring[(k + 1) % ring.length];
+
+      b.quad(
+        CONCRETE,
+        corner(r0, a0, bottom),
+        corner(r1, a1, bottom),
+        corner(r1, a1, top),
+        corner(r0, a0, top)
+      );
+    });
+  }
+}
+
+function buildSegment(
+  ground: Builder,
+  decks: Builder,
+  roads: Roads,
+  { road, i }: Segment
+) {
   const { bridge, twoWay } = roads.flags;
   const j = i + 1;
+
+  const structure =
+    (road.flags[i] & bridge) !== 0 ||
+    road.clear[i] > LIFTED ||
+    road.clear[j] > LIFTED;
+
+  const b = structure ? decks : ground;
   const ei = edges(road, i, twoWay);
   const ej = edges(road, j, twoWay);
   const w = road.laneWidth[i];
@@ -158,16 +262,21 @@ function buildSegment(b: Builder, roads: Roads, { road, i }: Segment) {
   // The surface.
   strip(ASPHALT, ei.left, 0, ej.left, 0, ei.right, 0, ej.right, 0);
 
-  if (road.flags[i] & bridge) {
+  if (structure) {
     // Parapets on the outer edges, the deck's sides and underneath.
     const sides: [number, number][] = [[ei.left, ej.left]];
 
     if (!ei.shared) sides.push([ei.right, ej.right]);
 
+    const di = -sideDepth(road, i);
+    const dj = -sideDepth(road, j);
+
     for (const [a, c] of sides) {
       strip(CONCRETE, a, 0, c, 0, a, PARAPET, c, PARAPET);
-      strip(CONCRETE, a, -DECK, c, -DECK, a, 0, c, 0);
+      strip(CONCRETE, a, di, c, dj, a, 0, c, 0);
     }
+
+    buildPiers(b, road, i);
 
     strip(
       CONCRETE,
@@ -233,7 +342,11 @@ export function createRoadChunks(roads: Roads): RoadChunk[] {
   const grow = (cell: { box: Box3 }, road: Carriageway, i: number) => {
     const r = 20;
     cell.box.expandByPoint(
-      corner.set(road.x[i] - r, road.y[i] - DECK - 2, road.z[i] - r)
+      corner.set(
+        road.x[i] - r,
+        road.y[i] - Math.max(DECK, road.clear[i]) - SUNK,
+        road.z[i] - r
+      )
     );
     cell.box.expandByPoint(
       corner.set(road.x[i] + r, road.y[i] + PARAPET, road.z[i] + r)
@@ -258,11 +371,14 @@ export function createRoadChunks(roads: Roads): RoadChunk[] {
   return [...cells.values()].map(({ box, segments }) => ({
     box,
     build: () => {
-      const b = new Builder();
+      const ground = new Builder();
+      const decks = new Builder();
 
-      for (const segment of segments) buildSegment(b, roads, segment);
+      for (const segment of segments) {
+        buildSegment(ground, decks, roads, segment);
+      }
 
-      return b.geometry();
+      return { ground: ground.geometry(), decks: decks.geometry() };
     },
   }));
 }
@@ -315,7 +431,7 @@ export function createCarGeometry() {
   box(BODY, 0.5, 0.14, 0.56, [-0.5, -0.5], [0.5, 0.48]);
   box(GLASS, 0.47, 0.56, 1, [-0.4, -0.3], [0.24, 0.08], 0.42);
 
-  return b.geometry();
+  return b.geometry()!;
 }
 
 /** A unit truck, as the car: a cab, and a box behind it. */
@@ -349,5 +465,5 @@ export function createTruckGeometry() {
   box(GLASS, 0.49, 0.5, 0.78, 0.36, 0.5);
   box(BOX, 0.5, 0.15, 1, -0.5, 0.31);
 
-  return b.geometry();
+  return b.geometry()!;
 }

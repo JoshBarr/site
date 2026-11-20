@@ -20,6 +20,14 @@
 // nearly all on its track (public/rail/cablecar.json, so build that first)
 // is left out.
 //
+// They take in the motorway's own structures too: the Thorndon overbridge
+// as four solid blocks, the Ngauranga flyovers, the viaducts through
+// Shell Gully. The scene lays the highways itself (public/roads/roads.json,
+// so build that first), lanes, traffic and decks at the lidar's heights,
+// and a block there buries them: any model with a stretch of its roof on a
+// highway's lanes, at the road's level, is left out. A bridge that crosses
+// over a highway is well above it, and stays.
+//
 // Each building keeps its roof, simplified, and gets new walls dropped
 // straight down from the roof's outline to below the ground. The source's
 // walls (window reveals, ledges, balconies) are most of its triangles and
@@ -83,6 +91,7 @@ const OUT_DIR = path.join(ROOT, "public/buildings");
 const CACHE_DIR = path.join(ROOT, ".cache/buildings");
 const FOOTPRINTS = path.join(CACHE_DIR, "footprints.json");
 const CABLE_CAR = path.join(ROOT, "public/rail/cablecar.json");
+const ROADS = path.join(ROOT, "public/roads/roads.json");
 
 /**
  * A building with this share of its roof within `ON_TRACK` m of the cable
@@ -90,6 +99,21 @@ const CABLE_CAR = path.join(ROOT, "public/rail/cablecar.json");
  */
 const ON_TRACK = 5;
 const ON_TRACK_SHARE = 0.9;
+
+/**
+ * A model with this much roof (m², in plan) within `BESIDE_LANES` m of a
+ * highway's lanes and `ROAD_LEVEL` m of its surface is the highway's own
+ * structure. The models' roofs are a few big triangles, placed by their
+ * centres, so this is coarse: but the highway's are thousands of m², and
+ * no other building has 50.
+ */
+const HIGHWAY_ROOF = 500;
+const BESIDE_LANES = 3;
+const ROAD_LEVEL = 3;
+
+/** Highway lanes, m, as build_roads.mjs has them: open road, and town. */
+const LANE = 3.5;
+const TOWN_LANE = 3.2;
 
 /**
  * A footprint whose centre is in a cell of this size (m) that a council model
@@ -823,6 +847,91 @@ async function loadCableCarTrack() {
   return segments;
 }
 
+/** Squares the highways' segments are looked up by, m. */
+const HIGHWAY_CELL = 100;
+
+/**
+ * The highways out of their tunnels, as segments { a, b, half }: each
+ * end's [e, n, height] and half the road's width, by the HIGHWAY_CELL
+ * square each starts in.
+ */
+async function loadHighways() {
+  const roads = JSON.parse(await readFile(ROADS, "utf8"));
+  const grid = new Map();
+
+  for (const { points: p, spans } of Object.values(roads.carriageways)) {
+    const count = p.length / 3;
+
+    // Each span: [from, this way's lanes, the road's, flags, limit].
+    spans.forEach(([from, , lanes, flags, limit], k) => {
+      if (flags & roads.flags.tunnel) return;
+
+      const to = Math.min(spans[k + 1]?.[0] ?? count, count - 1);
+      const half = (lanes * (limit > 50 ? LANE : TOWN_LANE)) / 2;
+
+      for (let i = from; i < to; i++) {
+        const a = [p[i * 3], p[i * 3 + 1], p[i * 3 + 2]];
+        const b = [p[i * 3 + 3], p[i * 3 + 4], p[i * 3 + 5]];
+
+        const key = `${Math.floor(a[0] / HIGHWAY_CELL)},${Math.floor(a[1] / HIGHWAY_CELL)}`;
+
+        if (!grid.has(key)) grid.set(key, []);
+        grid.get(key).push({ a, b, half });
+      }
+    });
+  }
+
+  return grid;
+}
+
+/**
+ * How much of `b`'s roof is a highway's, m² in plan: over its lanes (or
+ * just beside them) and at its level, each triangle by its centre.
+ */
+function onHighway(b, highways) {
+  const { positions: p, roof } = b;
+  let on = 0;
+
+  for (let t = 0; t < roof.length; t += 3) {
+    const [a, c, d] = [roof[t], roof[t + 1], roof[t + 2]];
+    const e = (p[a * 3] + p[c * 3] + p[d * 3]) / 3;
+    const n = (p[a * 3 + 1] + p[c * 3 + 1] + p[d * 3 + 1]) / 3;
+    const h = (p[a * 3 + 2] + p[c * 3 + 2] + p[d * 3 + 2]) / 3 + b.shift;
+    const ce = Math.floor(e / HIGHWAY_CELL);
+    const cn = Math.floor(n / HIGHWAY_CELL);
+    let nearest = Infinity;
+    let road = 0;
+
+    for (let x = ce - 1; x <= ce + 1; x++) {
+      for (let y = cn - 1; y <= cn + 1; y++) {
+        for (const s of highways.get(`${x},${y}`) ?? []) {
+          const de = s.b[0] - s.a[0];
+          const dn = s.b[1] - s.a[1];
+
+          const along =
+            ((e - s.a[0]) * de + (n - s.a[1]) * dn) / (de * de + dn * dn || 1);
+
+          const u = Math.min(Math.max(along, 0), 1);
+
+          const beside =
+            Math.hypot(e - s.a[0] - u * de, n - s.a[1] - u * dn) - s.half;
+
+          if (beside < nearest) {
+            nearest = beside;
+            road = s.a[2] + (s.b[2] - s.a[2]) * u;
+          }
+        }
+      }
+    }
+
+    if (nearest < BESIDE_LANES && Math.abs(h - road) < ROAD_LEVEL) {
+      on += Math.abs(triangleNormal(p, a, c, d)[2]) / 2;
+    }
+  }
+
+  return on;
+}
+
 /**
  * A footprint's flat roof, `height` above its ground, in the same form as
  * prepareBuilding's. Null when the outline won't triangulate.
@@ -1021,6 +1130,16 @@ async function main() {
   const beside = buildings.filter((b) => !onTrack(b, track));
   console.log(`${buildings.length - beside.length} on the cable car's track`);
   buildings = beside;
+
+  // And the highways' own, the same way.
+  const highways = await loadHighways();
+
+  const off = buildings.filter(
+    (b) => b.footprint || onHighway(b, highways) < HIGHWAY_ROOF
+  );
+
+  console.log(`${buildings.length - off.length} the highways' own structures`);
+  buildings = off;
 
   await rm(OUT_DIR, { recursive: true, force: true });
   const manifestLevels = [];
