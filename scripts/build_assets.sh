@@ -20,10 +20,16 @@
 #              what's on the cable car's track)
 #   heroes     src/components/scene/buildings/heroes.ts: floodlit landmarks (OSM)
 #   airport    public/airport + src/components/scene/airport/airfield.ts
-#   buses      public/buses/routes.json (Metlink GTFS)
 #   landmarks  src/components/scene/landmarks/sites.ts
 #   port       src/components/scene/port/terminal.ts
+#   power      src/components/scene/power/grid.ts: Transpower's towers and
+#              lines, their heights from the lidar, and the Cook Strait
+#              cables. The trees step reads it, to clear what the lidar
+#              made of them: when it changes, run trees and landcover again
 #   traffic    public/roads/roads.json (OSM + NZTA)
+#   tunnels    public/tunnels/tunnels.json: the road tunnels (the highways'
+#              from roads.json, the rest OSM)
+#   buses      public/buses/routes.json (Metlink GTFS), through the tunnels
 #   trains     public/rail/network.json
 #   stars      src/components/scene/sky/stars.ts (d3-celestial)
 #
@@ -37,7 +43,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-ALL=(terrain trees landcover wind-stations wind footprints cablecar buildings heroes airport buses landmarks port traffic trains stars)
+ALL=(terrain trees landcover wind-stations wind footprints cablecar buildings heroes airport landmarks port power traffic tunnels buses trains stars)
 VENV=.venv-terrain
 PY="$VENV/bin/python"
 
@@ -71,7 +77,7 @@ run() {
   echo "=== $step done in $((SECONDS - start))s"
 }
 
-if wants terrain || wants trees || wants landcover || wants wind-stations || wants wind || wants footprints; then
+if wants terrain || wants trees || wants landcover || wants wind-stations || wants wind || wants footprints || wants power; then
   python_env
 fi
 
@@ -85,10 +91,12 @@ wants cablecar && run cablecar node scripts/trains/build_cablecar.mjs
 wants buildings && run buildings node scripts/buildings/build_tiles.mjs
 wants heroes && run heroes node scripts/buildings/build_heroes.mjs
 wants airport && run airport node scripts/airport/build_airfield.mjs
-wants buses && run buses node scripts/buses/build_routes.mjs
 wants landmarks && run landmarks node scripts/landmarks/build_sites.mjs
 wants port && run port node scripts/port/build_port.mjs
+wants power && run power "$PY" -I scripts/power/build_power.py
 wants traffic && run traffic node scripts/traffic/build_roads.mjs
+wants tunnels && run tunnels node scripts/tunnels/build_tunnels.mjs
+wants buses && run buses node scripts/buses/build_routes.mjs
 wants trains && run trains node scripts/trains/build_rail.mjs
 wants stars && run stars node scripts/sky/build_stars.mjs
 

@@ -17,27 +17,22 @@ import {
   Vector3,
 } from "three/webgpu";
 import {
-  abs,
   attribute,
   cameraPosition,
   clamp,
   cos,
   dot,
   float,
-  fract,
-  fwidth,
   instancedBufferAttribute,
   max,
   min,
   mix,
   positionGeometry,
   pow,
-  round,
   select,
   sin,
   smoothstep,
   sqrt,
-  step,
   vec3,
 } from "three/tsl";
 import { TileIndex } from "../terrain/manifest";
@@ -52,10 +47,11 @@ import {
   createRoadChunks,
   createTruckGeometry,
   GLASS,
-  MOUTH,
 } from "./geometry";
+import { roadColor } from "./markings";
 import { loadRoads, Place, Roads } from "./roads";
 import { highways } from "./shared";
+import { seenUnderground } from "../tunnels/reveal";
 import { Traffic as TrafficSim } from "./sim";
 import { overrideFromUrl } from "./speeds";
 import { useHolidays } from "./useHolidays";
@@ -74,15 +70,7 @@ const VEHICLE_RANGE = 14000;
 const MAX_VEHICLES = 24000;
 const MAX_VEHICLES_MOBILE = 9000;
 
-const ROAD = new Color(0x464646);
-const LINES = new Color(0xc8c8c8);
 const CONCRETE_TONE = new Color(0x7a7a7a);
-
-/** Lane markings, m: half a line's width, lane width, and the dashes. */
-const LINE_HALF = 0.075;
-const LANE_M = 3.4;
-const DASH = 12;
-const DASH_ON = 0.25;
 
 /**
  * Far off, vehicles are drawn at least this many pixels long, up to this
@@ -133,48 +121,10 @@ function Surfaces({ roads }: { roads: Roads }) {
     const isPart = (p: number) =>
       part.greaterThan(p - 0.5).and(part.lessThan(p + 0.5));
 
-    // Lines at whole lanes from the kerb: solid at the edges, dashed
-    // between lanes and down the middle of a two-way road.
-    const across = mark.x;
-    const along = mark.y;
-    const lanes = mark.z;
-    const k = clamp(round(across), 0, lanes);
-    const distance = abs(across.sub(k)).mul(LANE_M);
-    const blur = fwidth(across).mul(LANE_M).add(1e-4);
-
-    const cover = smoothstep(
-      blur.add(LINE_HALF),
-      float(LINE_HALF).sub(blur),
-      distance
-    ).mul(min(float(LINE_HALF * 2).div(blur), 1));
-
-    const dashed = k
-      .greaterThan(0.5)
-      .and(k.lessThan(lanes.sub(0.5)).or(mark.w.greaterThan(0.5)));
-
-    const dash = mix(
-      step(fract(along.div(DASH)), DASH_ON),
-      float(DASH_ON),
-      clamp(
-        fwidth(along)
-          .div(DASH * DASH_ON)
-          .sub(0.5),
-        0,
-        1
-      )
-    );
-
-    const line = cover.mul(select(dashed, dash, float(1)));
-    const road = vec3(ROAD.r, ROAD.g, ROAD.b);
-    const lines = vec3(LINES.r, LINES.g, LINES.b);
     material.colorNode = select(
       isPart(ASPHALT),
-      mix(road, lines, line),
-      select(
-        isPart(MOUTH),
-        vec3(0.004),
-        vec3(CONCRETE_TONE.r, CONCRETE_TONE.g, CONCRETE_TONE.b)
-      )
+      roadColor(mark),
+      vec3(CONCRETE_TONE.r, CONCRETE_TONE.g, CONCRETE_TONE.b)
     );
 
     return {
@@ -286,7 +236,8 @@ function createFleet(geometry: BufferGeometry, capacity: number) {
       select(isPart(GLASS), vec3(0.03), vec3(0.02))
     )
   );
-  const mesh = new Mesh(geometry, material);
+  // With a bus followed through a tunnel, the traffic in it shows too.
+  const mesh = seenUnderground(new Mesh(geometry, material));
   mesh.count = 0;
   mesh.frustumCulled = false;
 

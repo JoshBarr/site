@@ -432,10 +432,37 @@ export const SceneControls: React.FC<{
   // so a list capped by it is measured at full length and the too-tall
   // positioner is pushed up the screen, away from the toolbar.
   const [room, setRoom] = useState<number | null>(null);
+  const frame = useRef<HTMLDivElement>(null);
+  const positioner = useRef<HTMLDivElement>(null);
+
+  // A press outside an open panel only shuts it: it goes no further than the
+  // document, so the scene never sees it to stop a flight to a place, or a
+  // vehicle being followed. Base UI's own listeners on the document still
+  // hear it and shut the panel. Added before any panel opens, so this runs
+  // first, while the panel a touch shuts at once is still open.
+  useEffect(() => {
+    const press = (e: PointerEvent) => {
+      if (!panels.isOpen || !(e.target instanceof Node)) return;
+
+      if (
+        frame.current?.contains(e.target) ||
+        positioner.current?.contains(e.target)
+      ) {
+        return;
+      }
+
+      e.stopPropagation();
+    };
+
+    document.addEventListener("pointerdown", press, { capture: true });
+
+    return () =>
+      document.removeEventListener("pointerdown", press, { capture: true });
+  }, []);
 
   return (
     <Tooltip.Provider delay={500}>
-      <div className={styles.Frame} style={{ height }}>
+      <div ref={frame} className={styles.Frame} style={{ height }}>
         <TimeTravel open={travelling}>
           <div className={cx(styles.Theme, styles.Bar)}>
             <Replaying />
@@ -562,6 +589,7 @@ export const SceneControls: React.FC<{
         {({ payload }) => (
           <Popover.Portal>
             <Popover.Positioner
+              ref={positioner}
               side="top"
               align="end"
               sideOffset={GAP}

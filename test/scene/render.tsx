@@ -5,6 +5,7 @@ import { http, HttpResponse } from "msw/http";
 import { ImageLoader, Object3D, WebGPURenderer } from "three/webgpu";
 import { vi } from "vitest";
 import type { Aircraft } from "../../src/lib/flights";
+import type { Train } from "../../src/lib/trains";
 import { STALE } from "../../src/lib/traffic";
 import { loadManifest } from "../../src/components/scene/terrain/manifest";
 import type { Conditions } from "../../src/components/scene/weather";
@@ -39,9 +40,9 @@ class IdleWorker extends EventTarget {
 
 /**
  * The site as the scene sees it: the data and tiles in public/, read from
- * disk, and the live APIs with nothing moving but `aircraft`.
+ * disk, and the live APIs with nothing moving but `aircraft` and `trains`.
  */
-function serve(aircraft: Aircraft[]) {
+function serve(aircraft: Aircraft[], trains: Train[]) {
   server.use(
     http.get(`${ORIGIN}/api/flights`, () =>
       HttpResponse.json({ time: Date.now(), aircraft })
@@ -50,7 +51,7 @@ function serve(aircraft: Aircraft[]) {
       HttpResponse.json({ time: Date.now(), vessels: [] })
     ),
     http.get(`${ORIGIN}/api/trains`, () =>
-      HttpResponse.json({ time: Date.now(), trains: [] })
+      HttpResponse.json({ time: Date.now(), trains })
     ),
     http.get(`${ORIGIN}/api/buses`, () =>
       HttpResponse.json({ time: Date.now(), buses: [] })
@@ -135,7 +136,11 @@ export function shown(object: Object3D) {
  * what's in it; `until` runs frames while tiles and data arrive; `state` is
  * the scene's, with its camera and controls.
  */
-export async function renderScene(time: Date, aircraft: Aircraft[] = []) {
+export async function renderScene(
+  time: Date,
+  aircraft: Aircraft[] = [],
+  trains: Train[] = []
+) {
   vi.stubGlobal("Worker", IdleWorker);
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 
@@ -147,7 +152,7 @@ export async function renderScene(time: Date, aircraft: Aircraft[] = []) {
     return image;
   });
 
-  serve(aircraft);
+  serve(aircraft, trains);
   const index = await loadManifest();
   const probe: Probed = {};
 

@@ -8,8 +8,9 @@ high-detail core that's its level 7 mosaic and a cached DSM on the same grid;
 elsewhere both are fetched a tile at a time, in parallel, and their
 difference cached. Building footprints from OpenStreetMap (the terrain
 build's cache) are cut out, and the scene's own towers, turbines and
-lighthouses with the blades the lidar caught mid-turn, then each crown is a local maximum of the
-smoothed canopy, its radius from the watershed around it.
+lighthouses with the blades the lidar caught mid-turn, and Transpower's
+pylons, substations and the conductors between them, then each crown is a
+local maximum of the smoothed canopy, its radius from the watershed around it.
 
 Each tree's ground is the published terrain's under it, from the finest
 level there, so trunks stand on the 8m terrain as well as the 2m.
@@ -55,6 +56,7 @@ OUT_DIR = ROOT_DIR / "public" / "trees"
 CACHE_DIR = ROOT_DIR / ".cache" / "trees"
 CHM_DIR = CACHE_DIR / "chm"
 SITES_TS = ROOT_DIR / "src" / "components" / "scene" / "landmarks" / "sites.ts"
+GRID_TS = ROOT_DIR / "src" / "components" / "scene" / "power" / "grid.ts"
 
 _spec = importlib.util.spec_from_file_location(
     "terrain", ROOT_DIR / "scripts" / "terrain" / "build_tiles.py"
@@ -184,6 +186,36 @@ BLADE_CLEAR = 12.0
 # this many samples out from it.
 BLADE_GROW = 2
 
+# The scene draws Transpower's towers and lines itself too
+# (src/components/scene/power/, from grid.ts), and the lidar caught those as
+# well: the steelwork, and the conductors as ridges a sample or two wide
+# from tower to tower, tall enough to pass for rows of trees. How far each
+# of grid.ts's structure types reaches from its axis, m: (lines of 220 kV
+# and up, the rest).
+POWER_REACH = {
+    "D": (8.5, 4.5),
+    "T": (8.5, 4.5),
+    "S": (8.0, 3.5),
+    "DP": (2.5, 2.5),
+    "SP": (2.5, 2.5),
+    "PI": (4.5, 4.5),
+}
+POWER_HIGH_KV = 220
+# A termination ("X") is a gantry in a switchyard, among busbars and
+# breakers as tall as it: everything's cleared this far around it, m.
+# (OpenStreetMap's substations are cleared whole, but don't take in all of
+# Haywards.)
+GANTRY_CLEAR = 22.0
+# Everything's cleared this far past a tower's reach, and the canopy under
+# a span is opened (below) this far past its conductors, m.
+TOWER_MARGIN = 3.0
+SPAN_MARGIN = 2.5
+# Under a span only canopy at least this many samples across is kept: a
+# conductor's ridge isn't, and the bush it crosses is.
+SPAN_OPENING = 3
+# Substations smaller than this are kiosks, not switchyards, m².
+MIN_SUBSTATION = 400.0
+
 # Fractions of each tile's trees, cumulative, stored as separate files: a
 # distant tile only fetches the first.
 BANDS = [1 / 64, 1 / 16, 1 / 4, 1]
@@ -234,6 +266,75 @@ def clear_landmarks(chm, window, grid, sites):
         if blade.any():
             blade = ndimage.binary_dilation(blade, iterations=BLADE_GROW) & (distance <= rotor)
         patch[(distance <= footprint) | blade] = 0
+
+
+def power_grid():
+    """
+    Transpower's structures as landmark sites (easting, northing, footprint,
+    no rotor), and the ground under each span: (corner points, bounds).
+    """
+    text = GRID_TS.read_text()
+    # (easting, northing, reach), a gantry's reach None.
+    structures = [
+        (
+            float(e),
+            float(n),
+            POWER_REACH[kind][0 if float(kv) >= POWER_HIGH_KV else 1] if kind != "X" else None,
+        )
+        for e, n, kind, kv in re.findall(
+            r'^  \[([\d.]+), ([\d.]+), -?[\d.]+, [\d.]+, "(\w+)", ([\d.]+)\],$', text, re.M
+        )
+    ]
+    spans = [
+        (int(a), int(b))
+        for a, b in re.findall(r"^  \[(\d+), (\d+), [\d.]+, -?[\d.]+\],$", text, re.M)
+    ]
+    if not structures or not spans:
+        raise SystemExit(f"no structures or spans in {GRID_TS}")
+    sites = [
+        (e, n, GANTRY_CLEAR if reach is None else reach + TOWER_MARGIN, 0) for e, n, reach in structures
+    ]
+    corridors = []
+    for a, b in spans:
+        (ea, na, ra), (eb, nb, rb) = structures[a], structures[b]
+        length = np.hypot(eb - ea, nb - na)
+        # To a gantry, the conductors are as far apart as they left the tower.
+        half = max(ra or 0, rb or 0) + SPAN_MARGIN
+        # Across the span, to its left.
+        ox, oy = -(nb - na) / length * half, (eb - ea) / length * half
+        corners = [(ea + ox, na + oy), (eb + ox, nb + oy), (eb - ox, nb - oy), (ea - ox, na - oy)]
+        xs, ys = zip(*corners)
+        corridors.append((corners, (min(xs), min(ys), max(xs), max(ys))))
+    return sites, corridors
+
+
+def clear_wires(chm, window, grid, corridors):
+    """
+    Opens the canopy under the spans crossing a window of the tree grid, in
+    place: what's narrower than SPAN_OPENING samples goes, down to whatever
+    it stands on.
+    """
+    res = grid.a
+    west = grid.c + window[1].start * res
+    north = grid.f - window[0].start * res
+    south = north - chm.shape[0] * res
+    east = west + chm.shape[1] * res
+    crossing = [
+        ({"type": "Polygon", "coordinates": [corners + corners[:1]]}, 1)
+        for corners, (w, s, e, n) in corridors
+        if w < east and e > west and s < north and n > south
+    ]
+    if not crossing:
+        return
+    under = rasterize(
+        crossing,
+        out_shape=chm.shape,
+        transform=grid * Affine.translation(window[1].start, window[0].start),
+        dtype=np.uint8,
+        all_touched=True,
+    ).astype(bool)
+    opened = ndimage.grey_opening(chm, size=(SPAN_OPENING, SPAN_OPENING))
+    chm[under] = opened[under]
 
 
 def tiles():
@@ -485,6 +586,33 @@ def port_yards(grid, shape):
     return mask
 
 
+OSM_SUBSTATIONS_QUERY = """
+[out:json][timeout:300][bbox:{s},{w},{n},{e}];
+way["power"="substation"];
+out geom qt;
+"""
+
+
+def substations(grid, shape):
+    """
+    1 over substations' switchyards: busbars, gantries and transformers
+    stand as tall as trees, and as rough.
+    """
+    mask = np.zeros(shape, dtype=np.uint8)
+    yards = []
+    for element in terrain.osm_elements("osm_substations", OSM_SUBSTATIONS_QUERY):
+        points = terrain.to_nztm([(p["lon"], p["lat"]) for p in element.get("geometry", [])])
+        if len(points) < 4 or points[0] != points[-1]:
+            continue
+        xs, ys = np.array(points).T
+        area = abs(np.dot(xs[:-1], ys[1:]) - np.dot(xs[1:], ys[:-1])) / 2
+        if area >= MIN_SUBSTATION:
+            yards.append(({"type": "Polygon", "coordinates": [points]}, 1))
+    if yards:
+        rasterize(yards, out=mask, transform=grid)
+    return mask
+
+
 def tile_bounds(tx, ty):
     """NZTM west and north edges, and size, of a TILE_LEVEL tile."""
     rw, _, _, rn = terrain.root_bounds()
@@ -530,8 +658,10 @@ def build():
     print(f"  footprints over {cols}x{rows}")
     built = footprints(grid, (rows, cols))
     built |= port_yards(grid, (rows, cols))
-    sites = landmark_sites()
-    print(f"  clearing {len(sites)} landmarks")
+    built |= substations(grid, (rows, cols))
+    towers, corridors = power_grid()
+    sites = landmark_sites() + towers
+    print(f"  clearing {len(sites)} landmarks and towers, and under {len(corridors)} spans")
     canopy = np.zeros((rows, cols), dtype=np.uint8)
     res = grid.a
     # Sample centres: column c is at west + (c + 0.5) * res.
@@ -547,6 +677,7 @@ def build():
         row = ty
         chm, window = chm_tile(tx, ty)
         clear_landmarks(chm, window, grid, sites)
+        clear_wires(chm, window, grid, corridors)
         tile_built = built[window]
         west, north, size = tile_bounds(tx, ty)
 

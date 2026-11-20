@@ -52,6 +52,16 @@ export const MAP_CREDITS: Credit[] = [
     licence: CC_BY,
   },
   {
+    what: "pylons and power lines",
+    who: [
+      {
+        name: "Transpower New Zealand",
+        href: "https://data-transpower.opendata.arcgis.com",
+      },
+    ],
+    licence: CC_BY,
+  },
+  {
     what: "map data and building footprints",
     who: [
       {

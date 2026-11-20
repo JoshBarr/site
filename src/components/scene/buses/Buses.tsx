@@ -25,6 +25,7 @@ import {
 } from "../follow/store";
 import { createModelMaterial, isNear, NearModels } from "../models/lod";
 import { highways } from "../traffic/shared";
+import { seenUnderground } from "../tunnels/reveal";
 import type { RoadUser } from "../traffic/sim";
 import { createBusGeometry } from "./model";
 import { BusRoutes, loadBusRoutes } from "./routes";
@@ -124,7 +125,11 @@ function createBuses() {
     vec3(LIT_WINDOWS.r, LIT_WINDOWS.g, LIT_WINDOWS.b).mul(windowsLit.mul(0.7)),
     vec3(0)
   );
-  const mesh = new InstancedMesh(createCarGeometry(), material, MAX_BUSES);
+
+  const mesh = seenUnderground(
+    new InstancedMesh(createCarGeometry(), material, MAX_BUSES)
+  );
+
   // Instances move every frame; their bounds would always be stale.
   mesh.frustumCulled = false;
   mesh.count = 0;
@@ -136,6 +141,8 @@ function createBuses() {
     near.material,
     MAX_DETAILED
   );
+
+  seenUnderground(detailed.mesh);
 
   return {
     mesh,

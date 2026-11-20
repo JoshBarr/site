@@ -71,6 +71,7 @@ import { Wind, WIND_DESKTOP, WIND_MOBILE } from "./wind/Wind";
 import type { TileCache } from "./terrain/TileCache";
 import { CLOUDS_DESKTOP, CLOUDS_MOBILE } from "./clouds/cloudNode";
 import { Landmarks } from "./landmarks/Landmarks";
+import { Power } from "./power/Power";
 import {
   Buildings,
   BUILDINGS_DESKTOP,
@@ -84,6 +85,9 @@ import { Railway } from "./trains/Railway";
 import { CableCar } from "./cablecar/CableCar";
 import { Buses } from "./buses/Buses";
 import { Traffic } from "./traffic/Traffic";
+import { underground } from "./tunnels/bores";
+import { seeThrough } from "./tunnels/reveal";
+import { Tunnels } from "./tunnels/Tunnels";
 import { AirfieldLights } from "./airport/AirfieldLights";
 import { Sky } from "./sky/Sky";
 import {
@@ -327,6 +331,28 @@ const PROBE = 0.25;
 
 /** Of a followed vehicle's length, the radius cleared of fog around it. */
 const CLEARING = 0.7;
+
+/**
+ * A followed vehicle's ends count as in a tunnel this far to either side of
+ * it, m: they're found straight ahead of and behind its middle, and
+ * tunnels curve.
+ */
+const END_SLACK = 4;
+
+/**
+ * Following through a tunnel, the camera this near the ground under it, m
+ * over as low as it may go, is being held up out of the hill: the shot
+ * lifts.
+ */
+const ON_THE_GROUND = 2;
+
+/**
+ * And while it is, it's kept this far over the ground, m, coming up to
+ * that over OVER_TREES_EASE seconds: on top of the hill a tunnel's under,
+ * it would be in among the trees there, looking down through their crowns.
+ */
+const OVER_TREES = 50;
+const OVER_TREES_EASE = 1.2;
 
 /**
  * Handing back from somewhere out of the orbit's bounds (following an
@@ -586,13 +612,18 @@ function Controls({
     []
   );
 
+  /** Further over the ground than usual the rig keeps the camera, m. */
+  const overTrees = useRef(0);
+
   const rig = useMemo(
     () =>
       new FollowRig(
         (e, n) => nztmToWorld(manifest, e, n),
         (x, z) =>
           Math.max(
-            (heightAt.current?.(x, z) ?? 0) + GROUND_CLEARANCE,
+            (heightAt.current?.(x, z) ?? 0) +
+              GROUND_CLEARANCE +
+              overTrees.current,
             seaFloor.current
           )
       ),
@@ -1289,6 +1320,7 @@ function Controls({
       cloudsSeen.value = scope.clouds;
       clearRadius.value = 0;
       clearAround.value.set(0, -1e7, 0);
+      seeThrough(null);
 
       const {
         position: p,
@@ -1349,18 +1381,56 @@ function Controls({
     [rig, orbit, handBack, land, boundary, heightAt, renderer]
   );
 
+  // Whether any of what's followed is in a tunnel: its middle, or either
+  // end. The ground's cut away around it there (see tunnels/reveal.ts).
+  const buried = useCallback(() => {
+    if (!rig.ground) return false;
+    const reach = rig.length / 2;
+    const ahead = [Math.sin(rig.facing), -Math.cos(rig.facing)];
+
+    return [-1, 0, 1].some(
+      (end) =>
+        underground.inside(
+          rig.at.x + ahead[0] * reach * end,
+          rig.at.y,
+          rig.at.z + ahead[1] * reach * end,
+          end ? END_SLACK : 0
+        ) > 0
+    );
+  }, [rig]);
+
   // Every PROBE seconds, whether what's followed is hidden behind something,
   // from the depth the scene was drawn with: its middle and ends, two of
   // three behind something nearer and it is. The rig lifts over it.
   const probing = useRef({ wait: 0, busy: false });
 
   const probe = useCallback(
-    (camera: PerspectiveCamera, delta: number, byHand: boolean) => {
+    (
+      camera: PerspectiveCamera,
+      delta: number,
+      byHand: boolean,
+      inTunnel: boolean
+    ) => {
       const p = probing.current;
       p.wait -= delta;
 
       if (p.busy || p.wait > 0 || byHand || !rig.ground) return;
       p.wait = PROBE;
+
+      if (inTunnel) {
+        // Seen through the ground, wherever the camera is: it lifts only
+        // while the hill's holding it up out of where the shot would be,
+        // looking along the ground, and stays as high till it's out.
+        const { x, y, z } = camera.position;
+        const ground = heightAt.current?.(x, z) ?? 0;
+
+        if (y - ground < GROUND_CLEARANCE + overTrees.current + ON_THE_GROUND) {
+          rig.hidden(true, PROBE);
+        }
+
+        return;
+      }
+
       const reach = rig.length * 0.4;
       const ahead = [Math.sin(rig.facing), -Math.cos(rig.facing)];
 
@@ -1396,7 +1466,7 @@ function Controls({
           p.busy = false;
         });
     },
-    [rig, renderer]
+    [rig, renderer, heightAt]
   );
 
   useFrame((_, delta) => {
@@ -1464,14 +1534,22 @@ function Controls({
       handBack();
     }
 
-    // The followed vehicle out of the fog, and over anything hiding it.
+    // The followed vehicle out of the fog, over anything hiding it, and
+    // seen through the ground in a tunnel.
     if (shot && rig.tracking) {
       clearAround.value.copy(rig.at);
       clearRadius.value = rig.length * CLEARING;
-      probe(camera, delta, Boolean(around));
+      const inTunnel = buried();
+      seeThrough(inTunnel ? rig.at : null, rig.length);
+      probe(camera, delta, Boolean(around), inTunnel);
+      overTrees.current +=
+        ((inTunnel ? OVER_TREES : 0) - overTrees.current) *
+        (1 - Math.exp(-delta / OVER_TREES_EASE));
     } else {
       clearRadius.value = 0;
       clearAround.value.set(0, -1e7, 0);
+      seeThrough(null);
+      overTrees.current = 0;
     }
 
     const f = flight.current;
@@ -1774,6 +1852,7 @@ export const LAYERS = [
   "buildings",
   "trees",
   "landmarks",
+  "power",
   "airfield",
   "sky",
   "quakes",
@@ -1781,6 +1860,7 @@ export const LAYERS = [
   "vessels",
   "cablecar",
   "traffic",
+  "tunnels",
   "buses",
   "flights",
 ] as const;
@@ -1956,6 +2036,7 @@ export function Scene({
       {shown("landmarks") && (
         <Landmarks index={index} wind={conditions.wind} lights={lights} />
       )}
+      {shown("power") && <Power index={index} />}
       {shown("buildings") && (
         <Buildings
           terrain={index}
@@ -1978,6 +2059,7 @@ export function Scene({
       {shown("traffic") && (
         <Traffic index={index} lights={lights} time={time} />
       )}
+      {shown("tunnels") && <Tunnels index={index} />}
       {shown("buses") && (
         <Buses index={index} heightAt={heightAt} lights={lights} />
       )}

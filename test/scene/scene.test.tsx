@@ -9,6 +9,7 @@ import {
 } from "three/webgpu";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Aircraft } from "../../src/lib/flights";
+import type { Train } from "../../src/lib/trains";
 import {
   follow,
   getSnapshot,
@@ -67,6 +68,29 @@ function taxiing(): Aircraft {
     fixes: [
       [1751180, 5422800, null, now - 60_000, 8, 4, 0],
       [1751214, 5423280, null, now, 8, 4, 0],
+    ],
+  };
+}
+
+/**
+ * A Kāpiti Line train standing half way through the first Tawa tunnel, for
+ * the last two minutes: trains are drawn a minute behind.
+ */
+function underground(): Train {
+  const now = Date.now();
+  const at: [number, number] = [1751499.7, 5432185.3];
+
+  return {
+    id: "4001",
+    line: "KPL",
+    direction: 0,
+    position: at,
+    bearing: 30,
+    time: now,
+    trail: [
+      [...at, now - 120_000],
+      [...at, now - 60_000],
+      [...at, now],
     ],
   };
 }
@@ -151,6 +175,9 @@ describe("the scene", { timeout: 30_000 }, () => {
       "headlights",
       "tail lights",
       "railway track",
+      "rail tunnels",
+      "road tunnels",
+      "tunnel cutaway",
       "trains",
       "buses",
       "ships",
@@ -285,6 +312,42 @@ describe("the scene", { timeout: 30_000 }, () => {
     // Down from its cruise, under the cloud.
     expect(camera.position.y).toBeLessThan(UNDER_DECK + 0.01);
     expect(c.getTarget(new Vector3()).y).toBeLessThan(camera.position.y);
+  });
+
+  it("cuts the ground away round a train followed through a tunnel", async () => {
+    scene = await renderScene(NOON, [], [underground()]);
+    const { drawn, until, state } = scene;
+    await until(() => getSnapshot().counts.train > 0);
+
+    const [cut] = drawn("tunnel cutaway");
+
+    // Shut, with nothing followed.
+    expect(cut.scale.x).toBe(0);
+
+    setCut(true);
+    await act(async () => follow("train"));
+    await frames(60);
+
+    const { camera } = state();
+
+    // Open round its middle, past both its ends, with a floor under the
+    // track and its top over the roofs.
+    expect(cut.scale.x).toBeGreaterThan(subject.length / 2);
+    expect(cut.position.x).toBeCloseTo(subject.x, 3);
+    expect(cut.position.z).toBeCloseTo(subject.z, 3);
+    expect(cut.position.y).toBeLessThan(subject.y);
+    expect(cut.position.y + cut.scale.y).toBeGreaterThan(subject.y + 4);
+
+    // The camera's up on the hill over the tunnel, clear of its trees,
+    // looking down through it.
+    expect(camera.position.y - subject.y).toBeGreaterThan(50);
+
+    // Let go of, it closes up.
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    await frames(60);
+
+    expect(getSnapshot().following).toBeNull();
+    expect(cut.scale.x).toBe(0);
   });
 
   it("hands back from a shot on the ground stepped back far enough to turn", async () => {

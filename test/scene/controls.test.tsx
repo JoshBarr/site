@@ -337,6 +337,33 @@ describe("the scene's controls", () => {
     });
   });
 
+  it("shut an open panel on a press outside it, without the scene seeing the press", async () => {
+    const pressed = vi.fn();
+
+    const { user } = setup(
+      <>
+        <div data-testid="scene" onPointerDown={pressed} />
+        <Controls />
+      </>
+    );
+
+    const scene = screen.getByTestId("scene");
+    const native = vi.fn();
+
+    scene.addEventListener("pointerdown", native, { capture: true });
+
+    await open(user, "Places");
+    await user.click(scene);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(native).not.toHaveBeenCalled();
+    expect(pressed).not.toHaveBeenCalled();
+
+    // With the panel shut, the scene has its presses back.
+    await user.click(scene);
+    expect(native).toHaveBeenCalledOnce();
+    expect(pressed).toHaveBeenCalledOnce();
+  });
+
   it("open and close the time-travel drawer", async () => {
     const { user } = setup();
     const button = screen.getByRole("button", { name: "Time travel" });

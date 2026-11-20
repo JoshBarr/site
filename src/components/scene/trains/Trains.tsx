@@ -40,6 +40,7 @@ import { pixelAngle } from "../landmarks/common";
 import { castsNearShadow } from "../landmarks/nearShadow";
 import { hazeTransmittance } from "../haze";
 import { TrailMaterial } from "../trailMaterial";
+import { seenUnderground } from "../tunnels/reveal";
 import { createCarGeometry, ROOF, WINDOWS, BODY } from "./geometry";
 import { Point, RAIL_TOP, RailNetwork } from "./network";
 import {
@@ -156,7 +157,11 @@ function createCars() {
     vec3(LIT_WINDOWS.r, LIT_WINDOWS.g, LIT_WINDOWS.b).mul(windowsLit.mul(0.7)),
     vec3(0)
   );
-  const mesh = new InstancedMesh(createCarGeometry(), material, MAX_CARS);
+
+  const mesh = seenUnderground(
+    new InstancedMesh(createCarGeometry(), material, MAX_CARS)
+  );
+
   // Instances move every frame; their bounds would always be stale.
   mesh.frustumCulled = false;
   mesh.count = 0;
@@ -195,6 +200,8 @@ function createDetailedCars() {
       MAX_DETAILED
     ),
   };
+
+  for (const model of Object.values(models)) seenUnderground(model.mesh);
 
   /** A car's model, and whether it's turned round, by its place in the train. */
   const modelFor = (car: Run["cars"][number], index: number) => {

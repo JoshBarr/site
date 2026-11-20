@@ -225,7 +225,7 @@ function createFaces(spec: LatticeTowerSpec) {
 }
 
 /** Coverage of a line `width` wide at distance `d`, `pixel` metres a pixel. */
-function line(d, width: number, pixel) {
+function line(d, width, pixel) {
   const half = float(width).mul(0.5);
   // Thinner than a pixel: drawn a pixel wide, but proportionally fainter.
   const drawn = max(half, pixel.mul(0.5));
@@ -242,39 +242,41 @@ const MIN_PIXELS = 1.2;
  */
 const CLUTTER = 1.8;
 
-function createLatticeMaterial(spec: LatticeTowerSpec, msaa: boolean) {
-  const material = new MeshStandardNodeMaterial({
-    roughness: 0.7,
-    metalness: 0,
-    side: DoubleSide,
-  });
+/**
+ * A lattice face's half-width at a fragment, from its `lattice` (across the
+ * face from its centre, and up from the section's foot, m) and `frame`
+ * (half-widths at foot and top, section height, panel count).
+ */
+export function latticeHalfWidth(lattice, frame) {
+  return mix(frame.x, frame.y, lattice.y.div(frame.z));
+}
 
-  const lattice = attribute("lattice", "vec2");
-  const frame = attribute("frame", "vec4");
+/**
+ * How far a face `halfWidth` across is widened about its centre line to
+ * stay MIN_PIXELS wide, where a pixel is `metresPerPixel`: 1 up close.
+ */
+export function latticeWiden(halfWidth, metresPerPixel) {
+  return max(float(1), metresPerPixel.mul(MIN_PIXELS).div(halfWidth.mul(2)));
+}
+
+/**
+ * The share of a lattice face that's steel at a fragment, 0..1: its legs
+ * down each edge (`leg` wide, m), a horizontal between panels and X-bracing
+ * corner to corner across each (`brace` wide), drawn with analytic
+ * antialiasing; and, once the panels are too small on screen to resolve,
+ * the fraction of them that's steel.
+ */
+export function latticeSteel(lattice, frame, leg, brace) {
   const s = lattice.x;
   const y = lattice.y;
-  const halfWidth = mix(frame.x, frame.y, y.div(frame.z));
-
-  // Far off, widen the faces to stay a pixel wide (they'd drop out between
-  // samples) and spread their coverage thinner to match.
-  const world = modelWorldMatrix.mul(vec4(positionGeometry, 1)).xyz;
-  const metresPerPixel = cameraPosition.distance(world).mul(pixelAngle);
-
-  const widen = max(
-    float(1),
-    metresPerPixel.mul(MIN_PIXELS).div(halfWidth.mul(2))
-  );
-
-  material.positionNode = positionGeometry.mul(vec3(widen, 1, widen));
-  // The shadow pass sees the tower from the sun: true size.
-  material.castShadowPositionNode = positionGeometry;
+  const halfWidth = latticeHalfWidth(lattice, frame);
 
   // Metres per pixel across the face (up it, really: widening stretches s).
   const pixel = max(max(fwidth(s), fwidth(y)), 1e-4);
 
   const legs = line(
-    abs(halfWidth.sub(abs(s)).sub(spec.leg / 2)),
-    spec.leg,
+    abs(halfWidth.sub(abs(s)).sub(float(leg).mul(0.5))),
+    leg,
     pixel
   );
 
@@ -283,7 +285,7 @@ function createLatticeMaterial(spec: LatticeTowerSpec, msaa: boolean) {
 
   const horizontals = line(
     min(f, float(1).sub(f)).mul(panelHeight),
-    spec.brace,
+    brace,
     pixel
   );
 
@@ -296,7 +298,7 @@ function createLatticeMaterial(spec: LatticeTowerSpec, msaa: boolean) {
   );
 
   const slant = panelHeight.div(diagonalLength);
-  const diagonal = (d) => line(d.mul(halfWidth).mul(slant), spec.brace, pixel);
+  const diagonal = (d) => line(d.mul(halfWidth).mul(slant), brace, pixel);
 
   const bracing = max(
     diagonal(abs(u.sub(across))),
@@ -308,34 +310,31 @@ function createLatticeMaterial(spec: LatticeTowerSpec, msaa: boolean) {
   // Once panels are a few pixels tall the pattern can't be resolved: use the
   // fraction of each panel that's steel instead.
   const solidity = min(
-    float(spec.leg)
+    float(leg)
       .div(halfWidth)
-      .add(float(spec.brace).div(panelHeight))
-      .add(
-        float(spec.brace).mul(diagonalLength).div(halfWidth.mul(panelHeight))
-      )
+      .add(float(brace).div(panelHeight))
+      .add(float(brace).mul(diagonalLength).div(halfWidth.mul(panelHeight)))
       .mul(CLUTTER),
     1
   );
 
   const unresolved = smoothstep(0.12, 0.5, pixel.div(panelHeight));
-  const steel = mix(pattern, solidity, unresolved);
-  const coverage = steel.div(widen);
 
-  if (spec.bands) {
-    const { colour, height, count } = spec.bands;
-    const fromTop = float(towerHeight(spec)).sub(positionGeometry.y);
-    const band = floor(fromTop.div(height));
-    const painted = mod(band, 2).equal(0).and(band.lessThan(count));
-    material.colorNode = mix(
-      uniform(new Color(spec.colour)),
-      uniform(new Color(colour)),
-      painted.select(float(1), float(0))
-    );
-  } else {
-    material.color = new Color(spec.colour);
-  }
+  return mix(pattern, solidity, unresolved);
+}
 
+/**
+ * Draws a material's faces as so much `steel` (0..1 at each fragment), and
+ * `coverage` of each pixel (the steel, thinned where the face is widened):
+ * partial coverage in the picture, a share of the texels in the shadow map.
+ * `msaa`: whether the canvas multisamples.
+ */
+export function coverWithSteel(
+  material: MeshStandardNodeMaterial,
+  steel,
+  coverage,
+  msaa: boolean
+) {
   const noise = interleavedGradientNoise(screenCoordinate.xy);
   // In the shadow map, keep each texel's share of steel; filtering averages
   // that back into a partial shadow.
@@ -351,6 +350,45 @@ function createLatticeMaterial(spec: LatticeTowerSpec, msaa: boolean) {
     material.opacityNode = coverage;
     material.alphaTestNode = noise.mul(0.98).add(0.01);
   }
+}
+
+function createLatticeMaterial(spec: LatticeTowerSpec, msaa: boolean) {
+  const material = new MeshStandardNodeMaterial({
+    roughness: 0.7,
+    metalness: 0,
+    side: DoubleSide,
+  });
+
+  const lattice = attribute("lattice", "vec2");
+  const frame = attribute("frame", "vec4");
+
+  // Far off, widen the faces to stay a pixel wide (they'd drop out between
+  // samples) and spread their coverage thinner to match.
+  const world = modelWorldMatrix.mul(vec4(positionGeometry, 1)).xyz;
+  const metresPerPixel = cameraPosition.distance(world).mul(pixelAngle);
+  const widen = latticeWiden(latticeHalfWidth(lattice, frame), metresPerPixel);
+
+  material.positionNode = positionGeometry.mul(vec3(widen, 1, widen));
+  // The shadow pass sees the tower from the sun: true size.
+  material.castShadowPositionNode = positionGeometry;
+
+  const steel = latticeSteel(lattice, frame, spec.leg, spec.brace);
+
+  if (spec.bands) {
+    const { colour, height, count } = spec.bands;
+    const fromTop = float(towerHeight(spec)).sub(positionGeometry.y);
+    const band = floor(fromTop.div(height));
+    const painted = mod(band, 2).equal(0).and(band.lessThan(count));
+    material.colorNode = mix(
+      uniform(new Color(spec.colour)),
+      uniform(new Color(colour)),
+      painted.select(float(1), float(0))
+    );
+  } else {
+    material.color = new Color(spec.colour);
+  }
+
+  coverWithSteel(material, steel, steel.div(widen), msaa);
 
   return material;
 }

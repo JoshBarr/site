@@ -10,9 +10,12 @@ import {
 import { sceneNow, useSeek } from "../clock";
 import { castsNearShadow } from "../landmarks/nearShadow";
 import { createModelMaterial } from "../models/lod";
+import { switchedOff } from "../stats";
 import { TileIndex } from "../terrain/manifest";
 import { RAIL_TOP } from "../trains/network";
 import { Tracks } from "../trains/Railway";
+import { railBores } from "../tunnels/bores";
+import { Bores } from "../tunnels/Tunnels";
 import { orient } from "../trains/run";
 import { createRunTrails } from "../trains/Trains";
 import { CAR, createCableCarGeometry } from "./model";
@@ -52,6 +55,12 @@ const MAX_TRAIL_SEGMENTS = 4096;
 
 /** Above the railhead, m: inside the car, so it comes out behind it. */
 const TRAIL_HEIGHT = 1.6;
+
+/**
+ * The line's tunnels: from a track to the wall, and the floor to the crown,
+ * m. A car's 2.5 m wide; the rest is a guess.
+ */
+const BORE = { half: 2, height: 4.6 };
 
 /**
  * Behind a car its trail fades out by age, s: whole at the car, gone this
@@ -292,11 +301,16 @@ export function CableCar({
     loadCableCarLine(index).then(setLine, (e) => console.error(e));
   }, [index]);
 
-  if (!line) return null;
+  const bores = useMemo(() => line && railBores(line.network, BORE), [line]);
+
+  if (!line || !bores) return null;
 
   return (
     <>
       <Tracks network={line.network} />
+      {!switchedOff("tunnels") && (
+        <Bores bores={bores} name="cable car tunnels" lined={false} />
+      )}
       <Terminal index={index} line={line} lights={lights} />
       {timetable && <Cars line={line} timetable={timetable} lights={lights} />}
     </>

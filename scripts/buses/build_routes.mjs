@@ -12,7 +12,9 @@
 //
 // Heights are read from the terrain tiles in public/terrain (so run this
 // after build_tiles.py): bare earth, with dips under bridges filled and
-// ridges over tunnels cut by limiting the grade, then smoothed.
+// rises cut by limiting the grade, then smoothed. Through a road tunnel
+// (public/tunnels/tunnels.json, so run it after build_tunnels.mjs too) a
+// route keeps to the tunnel's floor, and to the middle of it.
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -26,6 +28,7 @@ const ROOT = path.resolve(
 );
 
 const TERRAIN = path.join(ROOT, "public/terrain");
+const TUNNELS = path.join(ROOT, "public/tunnels/tunnels.json");
 const OUT_DIR = path.join(ROOT, "public/buses");
 
 const GTFS = "https://static.opendata.metlink.org.nz/v1/gtfs/full.zip";
@@ -41,9 +44,23 @@ const SAMPLE_SPREAD = 2.5;
 
 /**
  * Steepest grade a road is let climb or fall: steeper and it's the DEM
- * dropping under a bridge or rising over a tunnel.
+ * dropping under a bridge, or rising up a bank beside the road.
  */
 const GRADE = 0.2;
+
+/**
+ * A road this near a tunnel's line, m, running this nearly the way it does
+ * (as a cosine), goes through it: a street crossing over the hill doesn't.
+ */
+const IN_TUNNEL = 6;
+const ALONG_TUNNEL = 0.8;
+
+/**
+ * Out from a portal, a road's brought onto the tunnel's line over this
+ * far, m: a timetable's shape and the map's tunnel are a metre or three
+ * apart, and a bus would come in through the wall.
+ */
+const APPROACH = 40;
 
 /** Rounds of smoothing between neighbouring points. */
 const SMOOTHING = 8;
@@ -315,6 +332,108 @@ for (let i = 0; i < nodes.length; i++) {
   }
 }
 
+// --- Tunnels: a road through one keeps to its line, and its floor. ---
+
+const tunnels = JSON.parse(await readFile(TUNNELS, "utf8")).tunnels.map(
+  ({ points }) => {
+    const line = [];
+
+    for (let i = 0; i < points.length; i += 3) {
+      line.push(points.slice(i, i + 3));
+    }
+
+    const along = [0];
+
+    for (let i = 1; i < line.length; i++) {
+      along.push(along[i - 1] + distance(line[i - 1], line[i]));
+    }
+
+    return { line, along, length: along[along.length - 1] };
+  }
+);
+
+/**
+ * Where the point `p` of a road is in a tunnel, or on its way into one,
+ * given the ways the road runs there (unit vectors): how far to the right
+ * of the tunnel's line, which way that is, how far out from the portal (0
+ * inside), and the floor's height inside. Null if it's in neither.
+ */
+function tunnelAt(p, directions) {
+  let best = null;
+
+  for (const { line, along, length } of tunnels) {
+    for (let i = 1; i < line.length; i++) {
+      const a = line[i - 1];
+      const b = line[i];
+      const l = distance(a, b);
+
+      if (l < 1e-6) continue;
+      const te = (b[0] - a[0]) / l;
+      const tn = (b[1] - a[1]) / l;
+      const s = (p[0] - a[0]) * te + (p[1] - a[1]) * tn;
+
+      // The line runs straight on out of each portal.
+      if (s < (i === 1 ? -APPROACH : 0)) continue;
+
+      if (s > (i === line.length - 1 ? l + APPROACH : l)) continue;
+      const lateral = (p[0] - a[0]) * tn - (p[1] - a[1]) * te;
+
+      if (Math.abs(lateral) > IN_TUNNEL) continue;
+
+      if (
+        !directions.some(([e, n]) => Math.abs(e * te + n * tn) > ALONG_TUNNEL)
+      )
+        continue;
+
+      if (best && Math.abs(lateral) >= Math.abs(best.lateral)) continue;
+      const at = along[i - 1] + s;
+      const out = Math.max(-at, at - length, 0);
+
+      best = {
+        lateral,
+        right: [tn, -te],
+        out,
+        floor:
+          out > 0
+            ? null
+            : a[2] + (b[2] - a[2]) * Math.min(Math.max(s / l, 0), 1),
+      };
+    }
+  }
+
+  return best;
+}
+
+/**
+ * `p` on the line of the tunnel it's in, and brought over to it by degrees
+ * on the way in; where it was, with no `tunnel`.
+ */
+function onLine(p, tunnel) {
+  if (!tunnel) return p;
+  const by = -tunnel.lateral * (1 - tunnel.out / APPROACH);
+
+  return [p[0] + tunnel.right[0] * by, p[1] + tunnel.right[1] * by];
+}
+
+// The shapes' own points first, each by where it was, so every shape
+// through one still shares it. (The points put between them are moved as
+// heights are found, below: a shape may have none from portal to portal.)
+{
+  const mapped = nodes.map((p) => [...p]);
+
+  mapped.forEach((p, i) => {
+    const directions = [...neighbours[i]].flatMap((n) => {
+      const l = distance(p, mapped[n]);
+
+      return l > 1e-6
+        ? [[(mapped[n][0] - p[0]) / l, (mapped[n][1] - p[1]) / l]]
+        : [];
+    });
+
+    nodes[i] = onLine(p, tunnelAt(p, directions));
+  });
+}
+
 /** A shape as the chains it takes, 1-based, negative where it goes back. */
 function chainsOf(run) {
   const refs = [];
@@ -410,21 +529,23 @@ async function sampleHeights(points, start, end) {
 }
 
 /**
- * Heights no steeper than GRADE between the ends, which stay put: dips
- * filled from either side (bridges), then rises cut (tunnels), then
- * smoothed.
+ * Heights no steeper than GRADE between the ends, which stay put, as do
+ * any that are `fixed` (a tunnel's floor): dips filled from either side
+ * (bridges), then rises cut (banks), then smoothed.
  */
-function limitGrade(points, sampled) {
+function limitGrade(points, sampled, fixed) {
   const h = [...sampled];
   const last = h.length - 1;
   const gaps = points.slice(1).map((p, i) => distance(points[i], p));
 
   const pass = (pick, sign) => {
     for (let i = 1; i < last; i++) {
+      if (fixed[i]) continue;
       h[i] = pick(h[i], h[i - 1] + sign * GRADE * gaps[i - 1]);
     }
 
     for (let i = last - 1; i > 0; i--) {
+      if (fixed[i]) continue;
       h[i] = pick(h[i], h[i + 1] + sign * GRADE * gaps[i]);
     }
   };
@@ -435,7 +556,7 @@ function limitGrade(points, sampled) {
 
   for (let round = 0; round < SMOOTHING; round++) {
     smoothed = smoothed.map((x, i) =>
-      i === 0 || i === last
+      i === 0 || i === last || fixed[i]
         ? x
         : (smoothed[i - 1] + 2 * x + smoothed[i + 1]) / 4
     );
@@ -527,8 +648,21 @@ const renumber = (ref) => {
 
 const roads = [];
 
+/** Chains through each tunnel, for the tally. */
+let tunnelled = 0;
+
 for (const chain of order) {
-  const points = resample(chain.map((i) => nodes[i]));
+  const mapped = resample(chain.map((i) => nodes[i]));
+
+  const through = mapped.map((p, i) => {
+    const a = mapped[Math.max(i - 1, 0)];
+    const b = mapped[Math.min(i + 1, mapped.length - 1)];
+    const l = distance(a, b) || 1;
+
+    return tunnelAt(p, [[(b[0] - a[0]) / l, (b[1] - a[1]) / l]]);
+  });
+
+  const points = mapped.map((p, i) => onLine(p, through[i]));
 
   const sampled = await sampleHeights(
     points,
@@ -536,7 +670,17 @@ for (const chain of order) {
     await heightAtJunction(chain[chain.length - 1])
   );
 
-  const heights = limitGrade(points, sampled);
+  // Through a tunnel, its floor: not the hill over it.
+  const floors = through.map((tunnel) => tunnel?.floor ?? null);
+
+  if (floors.some((floor) => floor !== null)) tunnelled++;
+
+  const heights = limitGrade(
+    points,
+    sampled.map((h, i) => floors[i] ?? h),
+    floors.map((floor) => floor !== null)
+  );
+
   roads.push(simplify(points.map(([e, n], i) => [e, n, heights[i]])));
 }
 
@@ -616,7 +760,8 @@ const km = roads.reduce(
 );
 
 console.log(
-  `${chains.length} chains (${(km / 1000).toFixed(0)} km, ${pointCount} points), ` +
+  `${chains.length} chains (${(km / 1000).toFixed(0)} km, ${pointCount} points; ` +
+    `${tunnelled} through ${tunnels.length} tunnels), ` +
     `${shapes.length} shapes (${raw.size} in the timetable, ${dropped} off ` +
     `the map), ${Object.keys(out).length} routes; ` +
     `${(json.length / 1024).toFixed(0)} KB`

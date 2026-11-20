@@ -3,13 +3,12 @@ import type { Carriageway, Roads } from "./roads";
 
 // The highways' surfaces, low poly, in chunks: each carriageway's lanes as
 // a strip a little above the ground, with shoulders sunk into it and decks
-// over bridges, and a headwall with a dark mouth where it goes into a
-// tunnel. Lane markings are drawn by the material from `mark`.
+// over bridges. Nothing's laid through tunnels: those have their own floors
+// (see tunnels/). Lane markings are drawn by the material from `mark`.
 
 /** Parts of the road and vehicles, for their `part` attribute. */
 export const ASPHALT = 0;
 const CONCRETE = 1;
-export const MOUTH = 2;
 export const BODY = 3;
 export const GLASS = 4;
 const DARK = 5;
@@ -28,14 +27,6 @@ const SKIRT = 1.2;
 const DECK = 1.4;
 const PARAPET = 0.9;
 
-/** A tunnel mouth's height, and its headwall's, above the road, m. */
-const MOUTH_HEIGHT = 5.5;
-const HEADWALL = 8;
-
-/** Headwalls stand out this far either side of the road, and down. */
-const WING = 2;
-const FOOTING = 2;
-
 /** Road built in square chunks this wide, m, each on its own. */
 const CHUNK = 1500;
 
@@ -50,14 +41,6 @@ export interface RoadChunk {
 interface Segment {
   road: Carriageway;
   i: number;
-}
-
-interface Portal {
-  road: Carriageway;
-  /** The point at the tunnel's mouth. */
-  i: number;
-  /** Which way out of the tunnel it faces: 1 back along, -1 on along. */
-  facing: number;
 }
 
 class Builder {
@@ -227,69 +210,18 @@ function buildSegment(b: Builder, roads: Roads, { road, i }: Segment) {
   }
 }
 
-function buildPortal(b: Builder, roads: Roads, { road, i, facing }: Portal) {
-  const e = edges(road, i, roads.flags.twoWay);
-  const outer = e.left - WING;
-  const inner = e.shared ? e.right : e.right + WING;
-  // Pushed out of the tunnel a little, so it stands in front of the mouth.
-  const k = Math.min(Math.max(i, 0), road.count - 1);
-
-  const tx =
-    road.x[Math.min(k + 1, road.count - 1)] - road.x[Math.max(k - 1, 0)];
-
-  const tz =
-    road.z[Math.min(k + 1, road.count - 1)] - road.z[Math.max(k - 1, 0)];
-
-  const l = Math.hypot(tx, tz) || 1;
-  const ox = (tx / l) * facing * 0.5;
-  const oz = (tz / l) * facing * 0.5;
-
-  const p = (lateral: number, up: number): Point => {
-    const [x, y, z] = at(road, i, lateral, up);
-
-    return [x + ox, y, z + oz];
-  };
-
-  const wall = (part: number, a: number, c: number, lo: number, hi: number) =>
-    b.quad(part, p(a, lo), p(c, lo), p(c, hi), p(a, hi));
-
-  wall(MOUTH, e.left, e.right, -0.2, MOUTH_HEIGHT);
-  wall(CONCRETE, outer, e.left, -FOOTING, HEADWALL);
-
-  if (!e.shared) wall(CONCRETE, e.right, inner, -FOOTING, HEADWALL);
-  wall(CONCRETE, e.left, e.right, MOUTH_HEIGHT, HEADWALL);
-
-  // Its top.
-  const back = (lateral: number): Point => {
-    const [x, y, z] = p(lateral, HEADWALL);
-
-    return [x - ox * 2, y, z - oz * 2];
-  };
-
-  b.quad(
-    CONCRETE,
-    p(outer, HEADWALL),
-    p(inner, HEADWALL),
-    back(inner),
-    back(outer)
-  );
-}
-
-/** Every carriageway's surface and tunnel mouths, in chunks. */
+/** Every carriageway's surface out of the tunnels, in chunks. */
 export function createRoadChunks(roads: Roads): RoadChunk[] {
   const { tunnel } = roads.flags;
 
-  const cells = new Map<
-    string,
-    { box: Box3; segments: Segment[]; portals: Portal[] }
-  >();
+  const cells = new Map<string, { box: Box3; segments: Segment[] }>();
 
   const cellAt = (x: number, z: number) => {
     const key = `${Math.floor(x / CHUNK)},${Math.floor(z / CHUNK)}`;
     let cell = cells.get(key);
 
     if (!cell) {
-      cell = { box: new Box3(), segments: [], portals: [] };
+      cell = { box: new Box3(), segments: [] };
       cells.set(key, cell);
     }
 
@@ -301,32 +233,16 @@ export function createRoadChunks(roads: Roads): RoadChunk[] {
   const grow = (cell: { box: Box3 }, road: Carriageway, i: number) => {
     const r = 20;
     cell.box.expandByPoint(
-      corner.set(road.x[i] - r, road.y[i] - FOOTING - 2, road.z[i] - r)
+      corner.set(road.x[i] - r, road.y[i] - DECK - 2, road.z[i] - r)
     );
     cell.box.expandByPoint(
-      corner.set(road.x[i] + r, road.y[i] + HEADWALL, road.z[i] + r)
+      corner.set(road.x[i] + r, road.y[i] + PARAPET, road.z[i] + r)
     );
   };
 
   for (const road of roads.carriageways) {
     for (let i = 0; i < road.count - 1; i++) {
-      const inTunnel = (road.flags[i] & tunnel) !== 0;
-      const before = i > 0 && (road.flags[i - 1] & tunnel) !== 0;
-
-      // Mouths: where it goes in, and comes out.
-      if (inTunnel && !before && i > 0) {
-        const cell = cellAt(road.x[i], road.z[i]);
-        cell.portals.push({ road, i, facing: -1 });
-        grow(cell, road, i);
-      }
-
-      if (!inTunnel && before) {
-        const cell = cellAt(road.x[i], road.z[i]);
-        cell.portals.push({ road, i, facing: 1 });
-        grow(cell, road, i);
-      }
-
-      if (inTunnel) continue;
+      if (road.flags[i] & tunnel) continue;
 
       const cell = cellAt(
         (road.x[i] + road.x[i + 1]) / 2,
@@ -339,14 +255,12 @@ export function createRoadChunks(roads: Roads): RoadChunk[] {
     }
   }
 
-  return [...cells.values()].map(({ box, segments, portals }) => ({
+  return [...cells.values()].map(({ box, segments }) => ({
     box,
     build: () => {
       const b = new Builder();
 
       for (const segment of segments) buildSegment(b, roads, segment);
-
-      for (const portal of portals) buildPortal(b, roads, portal);
 
       return b.geometry();
     },

@@ -10,10 +10,15 @@ import { ObstructionLights } from "./ObstructionLights";
 import { turbineLights } from "./turbineLights";
 import { E_44, SWT_2_3_82 } from "./turbineModels";
 import { Wind, WindTurbines } from "./WindTurbines";
+import type { Span, Structure, StructureType } from "../power/grid";
+import { layOut } from "../power/network";
+import { Pylons } from "../power/Pylons";
+import { Wires } from "../power/Wires";
 import { applyToneMapping } from "../tone";
 
-// Standalone bench for the landmark assets: each on flat ground, with the
-// wind, time and light under control. /landmarks
+// Standalone bench for the landmark assets, and a line of each kind of
+// pylon: each on flat ground, with the wind, time and light under control.
+// /landmarks
 
 type Point = [number, number, number];
 
@@ -30,6 +35,50 @@ const FARM: Point[] = [
   [420, 0, 180],
   [660, 0, 230],
 ];
+
+/**
+ * Each kind of Transpower's structures (see ../power/towers.ts), with a
+ * typical height: [type, kV, height m].
+ */
+const PYLONS: [StructureType, number, number][] = [
+  ["D", 220, 44],
+  ["D", 110, 29],
+  ["S", 220, 19],
+  ["S", 110, 23],
+  ["D", 350, 34],
+  ["DP", 110, 24],
+  ["SP", 110, 19],
+  ["PI", 110, 15],
+];
+
+/** Where the first pylon of each line stands, and how the lines are laid. */
+const PYLONS_AT: Point = [-200, 0, 500];
+const PYLON_SPAN = 320;
+const PYLON_LINES = 80;
+
+/**
+ * A short line of each kind, side by side: three of it, and a gantry to
+ * land on. Eastings stand in for x, northings for z.
+ */
+const GRID = (() => {
+  const structures: Structure[] = [];
+  const spans: Span[] = [];
+
+  PYLONS.forEach(([type, kv, height], line) => {
+    const z = PYLONS_AT[2] + line * PYLON_LINES;
+
+    for (let i = 0; i < 4; i++) {
+      const x = PYLONS_AT[0] + Math.min(i, 2.5) * PYLON_SPAN;
+
+      if (i > 0) spans.push([structures.length - 1, structures.length, 0.5, 0]);
+      structures.push(
+        i < 3 ? [x, z, 0, height, type, kv] : [x, z, 0, 0, "X", kv]
+      );
+    }
+  });
+
+  return { structures, spans };
+})();
 
 const VIEWS = new Map(
   Object.entries({
@@ -56,6 +105,30 @@ const VIEWS = new Map(
     "Siemens nacelle": [
       [330, 75, -80],
       [300, 68, -120],
+    ],
+    Pylons: [
+      [-420, 70, 780],
+      [120, 20, 760],
+    ],
+    "Pylons, 220 kV": [
+      [60, 30, 440],
+      [120, 24, 500],
+    ],
+    "Pylons, flat 220 kV": [
+      [70, 16, 610],
+      [120, 14, 660],
+    ],
+    "Pylons, HVDC": [
+      [50, 24, 770],
+      [120, 22, 820],
+    ],
+    "Pylons, poles": [
+      [70, 16, 1010],
+      [120, 12, 960],
+    ],
+    "Pylons, gantries": [
+      [520, 30, 700],
+      [600, 8, 780],
     ],
     "Everything, 2 km": [
       [500, 250, 2000],
@@ -153,6 +226,11 @@ function Assets({ settings }: { settings: Settings }) {
 
   const brooklyn = useMemo(() => [BROOKLYN], []);
 
+  const grid = useMemo(
+    () => layOut(GRID.structures, GRID.spans, (x, z, y) => [x, y, z], 1),
+    []
+  );
+
   const lights = useMemo(
     () => [
       ...turbineLights(SWT_2_3_82, FARM),
@@ -179,6 +257,8 @@ function Assets({ settings }: { settings: Settings }) {
         timeScale={settings.timeScale}
       />
       <ObstructionLights lights={lights} />
+      <Pylons towers={grid.towers} />
+      <Wires wires={grid.wires} />
     </>
   );
 }
