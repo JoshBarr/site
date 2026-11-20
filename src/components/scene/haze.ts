@@ -35,9 +35,26 @@ const hazeTint = uniform(new Color("#4a4a4a"));
 /** The haze's own grey, lit by the sky alone. */
 export const hazeGrey = mix(skyHorizon, hazeTint, 0.5);
 
-/** Koschmieder: visibility is where contrast falls to 2% (ln 50 ≈ 3.912). */
+/**
+ * The visibility the weather reports is the meteorological optical range:
+ * where a dark object's contrast falls to 5% (ln 20 ≈ 3.0), which is what
+ * the airport's sensor measures and the WMO defines it by. Koschmieder's 2%
+ * (ln 50 ≈ 3.912), which the scene used before, made every reading's haze
+ * 30% thicker than it was: a 9 km morning came out flat and glaring.
+ * ?off=mor goes back to it.
+ */
+const CONTRAST = (() => {
+  const off = new URLSearchParams(globalThis.location?.search ?? "")
+    .get("off")
+    ?.split(",")
+    .includes("mor");
+
+  return off ? Math.log(50) : Math.log(20);
+})();
+
+/** Extinction at sea level, per metre, for a reported visibility in metres. */
 export function hazeDensityForVisibility(visibility: number) {
-  return 3.912 / Math.max(visibility, 200);
+  return CONTRAST / Math.max(visibility, 200);
 }
 
 /** Optical depth of the haze along a straight path between two points. */

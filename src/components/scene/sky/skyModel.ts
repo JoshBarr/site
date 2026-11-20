@@ -99,8 +99,14 @@ const MAX_EXPOSURE = 400;
  * the haze side-on to the reference sun is as bright as that was (0.095 of
  * the model's 0.197), and the model has the say over how it changes from
  * there. ?veil= tries another.
+ *
+ * Half was the default until a grey 9 km morning (2026-11-21) came out flat
+ * and glaring: at 0.4 the hills keep their relief and the far shore its
+ * edge under a deck, and the darker band 0.35 left at the horizon is
+ * softer (a faint step still shows there on a clear day).
+ * ?veil=0.5 is the old look.
  */
-const VEIL = 0.5;
+const VEIL = 0.4;
 
 const hazeVeil = (() => {
   let veil: number | null = null;

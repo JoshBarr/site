@@ -8,6 +8,7 @@ const EVENING = "2026-11-10T06:20:00Z"; // 19:20, the sun ~8° up
 const DUSK = "2026-11-10T07:45:00Z"; // 20:45, just under
 const TWILIGHT = "2026-11-10T07:32:00Z"; // 20:32, the sun ~2° under
 const NIGHT = "2026-11-10T10:30:00Z"; // 23:30
+const MORNING = "2026-11-09T19:45:00Z"; // 08:45, the sun ~30° up
 
 const CLEAR = "cloud=0";
 const HALF = "cloud=50";
@@ -19,6 +20,12 @@ const RAIN = "cloud=90&rain=4";
  * sky and the low sun, without the mist the recorded evening had.
  */
 const FINE = "cloud=0&rain=0&vis=30000";
+
+/**
+ * A grey morning: the airport's sensor reading 9 km under a broken deck, as
+ * on 2026-11-21, when the scene looked flat and glaring.
+ */
+const HAZY = "cloud=75&rain=0&vis=9000";
 
 /**
  * Every shot holds the clock (and with it the cloud's drift) and the wind,
@@ -51,6 +58,11 @@ const LIST = [
   ["overview-evening-fine", "overview", EVENING, FINE],
   ["overview-twilight-fine", "overview", TWILIGHT, FINE],
   ["mt-victoria-evening-fine", "mt-victoria", EVENING, FINE],
+  // A hazy morning, for the haze's thickness and glare.
+  ["overview-morning-hazy", "overview", MORNING, HAZY],
+  ["kaukau-morning-hazy", "kaukau", MORNING, HAZY],
+  ["west-wind-morning-hazy", "west-wind", MORNING, HAZY],
+  ["petone-morning-hazy", "petone", MORNING, HAZY],
   // A northerly gale, for the sea's lee calms.
   ["harbour-noon-gale", "harbour", NOON, CLEAR, GALE],
   ["oriental-bay-noon-gale", "oriental-bay", NOON, CLEAR, GALE],
