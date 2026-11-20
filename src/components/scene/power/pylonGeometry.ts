@@ -26,6 +26,7 @@ import {
   latticeSteel,
   latticeWiden,
 } from "../landmarks/latticeGeometry";
+import { gridDims, gridGlow, gridLight } from "./energise";
 import type {
   BridgeSpec,
   CageSpec,
@@ -509,7 +510,8 @@ const BOLDEST = 3.5;
 /**
  * The one material every tower's drawn with. Each stands by its instance's
  * `place` (world position of its foot, and its turn about the vertical)
- * and `tall` (its body's height over BODY). `msaa`: whether the canvas
+ * and `stands` (its body's height over BODY; then how hard its line's
+ * working, 0..1, and whether it's the HVDC link's, for when the grid's lit). `msaa`: whether the canvas
  * multisamples, for the lattice's partial coverage.
  */
 export function createTowerMaterial(msaa: boolean) {
@@ -520,7 +522,8 @@ export function createTowerMaterial(msaa: boolean) {
   });
 
   const place = attribute("place", "vec4");
-  const tall = attribute("tall", "float");
+  const stands = attribute("stands", "vec3");
+  const tall = stands.x;
   const lattice = attribute("lattice", "vec4");
   const frame = attribute("frame", "vec4");
   const widenBy = attribute("widen", "vec4");
@@ -577,11 +580,19 @@ export function createTowerMaterial(msaa: boolean) {
       )
     );
 
+  // Lit when the grid is (see energise.ts): worked out a vertex, the light's
+  // front being a kilometre deep.
+  // The link's pulses run along its wires at night, not up its towers.
+  const glow: any = varying(
+    gridGlow(world, { level: stands.y, link: stands.z }, true)
+  );
+
   material.colorNode = mix(
     uniform(new Color(STEEL)),
     uniform(new Color(INSULATOR)),
     lattice.z
-  );
+  ).mul(gridDims(glow));
+  material.emissiveNode = gridLight(glow);
   coverWithSteel(material, steel, steel.div(widen), msaa);
 
   return material;

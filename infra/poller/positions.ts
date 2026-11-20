@@ -10,6 +10,7 @@ import { HISTORY } from "../../src/lib/flights";
 import { foldFlights } from "../../src/lib/flightStore";
 import { withObserved } from "../../src/lib/metar";
 import { positions } from "../../src/lib/positions";
+import { toRadar } from "../../src/lib/radarGrid";
 import { foldTrains } from "../../src/lib/trainStore";
 import { foldVessels } from "../../src/lib/vesselStore";
 import type { Feed, makeFeeds } from "./feeds";
@@ -64,17 +65,22 @@ export const publisher = ({ logs, routes }: Feeds) =>
         flights: logs.flights.polls,
         vessels: logs.vessels.polls,
         traffic: logs.traffic.polls,
+        signs: logs.signs.polls,
         weather: logs.weather.polls,
         quakes: logs.quakes.polls,
         tide: logs.tide.polls,
         rain: logs.rain.polls,
+        grid: logs.grid.polls,
         wind: logs.wind.polls,
         metar: logs.metar.polls,
         clouds: logs.clouds.polls,
+        waves: logs.waves.polls,
+        radar: logs.radar.polls,
       });
 
       const now = yield* Clock.currentTimeMillis;
       const traffic = polls.traffic.at(-1);
+      const signs = polls.signs.at(-1);
       const forecast = polls.weather.at(-1)?.data;
 
       const body = positions.parse({
@@ -85,14 +91,21 @@ export const publisher = ({ logs, routes }: Feeds) =>
         aircraft: foldFlights(polls.flights, routes, now - HISTORY),
         vessels: foldVessels(polls.vessels, now),
         traffic: traffic ? { fetched: traffic.sk, ...traffic.data } : null,
+        signs: signs ? { fetched: signs.sk, ...signs.data } : null,
         weather: forecast
           ? withObserved(forecast, polls.metar.at(-1)?.data, now)
           : null,
         quakes: polls.quakes.at(-1)?.data.quakes ?? [],
         tide: polls.tide.at(-1)?.data ?? null,
         rain: polls.rain.at(-1)?.data ?? null,
+        grid: polls.grid.at(-1)?.data ?? null,
         wind: polls.wind.at(-1)?.data ?? null,
         clouds: polls.clouds.at(-1)?.data ?? null,
+        waves: polls.waves.at(-1)?.data ?? null,
+        radar: toRadar(
+          polls.radar.map(({ data }) => data),
+          now
+        ).scans,
       });
 
       const data = gzipSync(JSON.stringify(body));

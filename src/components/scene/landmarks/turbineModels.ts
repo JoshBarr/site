@@ -113,6 +113,37 @@ export function windAtHub(model: TurbineModel, surfaceWind: number) {
   return surfaceWind * (model.hubHeight / REFERENCE_HEIGHT) ** SHEAR;
 }
 
+/** Sending out less than this of what it can, a farm's not generating. */
+const GENERATING = 0.005;
+
+/**
+ * The steady hub wind a turbine would be sending `share` of its rated power
+ * out in (0..1), for when a farm's output is known (see power/flow.ts) and
+ * the wind over its ridge is only `estimate`d: its controller then runs as
+ * it would in that wind. Power goes as the cube of the wind from cut-in to
+ * rated. Sending nothing, it's parked, whatever the wind: becalmed, shut
+ * down in a storm or switched off look the same from here. At full power
+ * the wind's the estimate, if that's over rated and short of a storm.
+ */
+export function windForOutput(
+  model: TurbineModel,
+  share: number,
+  estimate: number
+) {
+  // Well under cut-in, and under where a running one stops.
+  if (share < GENERATING) return Math.min(estimate, model.cutIn * 0.6);
+
+  if (share >= 1) {
+    return Math.min(Math.max(estimate, model.rated), model.cutOut - 5);
+  }
+
+  const cube = (speed: number) => speed ** 3;
+
+  return Math.cbrt(
+    cube(model.cutIn) + share * (cube(model.rated) - cube(model.cutIn))
+  );
+}
+
 /** Fully feathered: blades edge-on to the wind. */
 export const FEATHERED = (85 * Math.PI) / 180;
 

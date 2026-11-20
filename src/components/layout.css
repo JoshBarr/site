@@ -1502,45 +1502,13 @@ a {
   will-change: transform;
 }
 
-/*
-  Just below the fill's top edge, at the page's right gutter, so it comes to
-  rest under the floating header as the fill reaches the top. It's below the
-  page at first, so it's faded in once the fill has room for it. The scene,
-  and so the fill, is the large viewport's height.
-*/
-.hero__loading-edge {
-  position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
-  padding-top: 8px;
-  text-align: right;
-  opacity: 0;
-  transform: translateY(max(calc(var(--rest) * 100vh), 56px));
-  transform: translateY(max(calc(var(--rest) * 100lvh), 56px));
-  transition:
-    transform var(--glide),
-    opacity 0.4s ease;
-  will-change: transform;
-}
-
-.hero__loading-edge--room {
-  opacity: 1;
-}
-
+/* The percentage in the intro's heading, kept from shifting as it counts. */
 .hero__loading-count {
-  font:
-    500 12px/1 var(--font-mono),
-    ui-monospace,
-    monospace;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.04em;
-  color: rgba(255, 255, 255, 0.45);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .hero__loading-fill,
-  .hero__loading-edge {
+  .hero__loading-fill {
     transition: none;
   }
 

@@ -1513,12 +1513,16 @@ describe("publishing the positions", () => {
       aircraft: [],
       vessels: [],
       traffic: null,
+      signs: null,
       weather: null,
       quakes: [],
       tide: null,
       rain: null,
+      grid: null,
       wind: null,
       clouds: null,
+      waves: null,
+      radar: [],
     });
   });
 

@@ -41,7 +41,13 @@ import {
   dropFraction,
   rainfallAt,
 } from "./rain";
-import { PlacedGauge, rainField, setRainField } from "./rainField";
+import {
+  PlacedGauge,
+  type RadarRates,
+  rainField,
+  setRainField,
+  stepRainField,
+} from "./rainField";
 import { cloudHistory } from "./temporal";
 import { lensWetness, updateLensWetness, wetLens } from "./wetLens";
 import { useRenderer } from "../renderer";
@@ -62,6 +68,9 @@ const DRIFT_SPEED = 2;
 const MID_SPEED = 1.6;
 const CIRRUS_SPEED = 3;
 const CIRRUS_VEER = 25;
+
+/** How often the radar's showers are carried on downwind, ms. */
+const RAIN_STEP = 1000;
 
 /** Water on the lens in rain. Off until it looks like water. */
 const WET_LENS = false;
@@ -174,14 +183,16 @@ function applyConditions(
  * that. Takes over the frame from react-three-fiber. `night` (0..1) makes
  * lights glow, under the clouds. `hidden` leaves the cloud and rain out, the
  * light still as dull as the cover makes it, for looking down through them.
- * With `gauges`, the rain's where and as hard as they measure it
- * (./rainField.ts), whatever the forecast says; without, it's the forecast's.
+ * With `gauges` or the `radar`'s scans, the rain's where and as hard as
+ * they measure it (./rainField.ts), whatever the forecast says; without,
+ * it's the forecast's.
  * With what the satellite `seen`, the cloud's where it saw it
  * (./cloudField.ts).
  */
 export function Clouds({
   conditions: forecast,
   gauges = null,
+  radar = null,
   seen = null,
   quality,
   night = 0,
@@ -189,6 +200,7 @@ export function Clouds({
 }: {
   conditions: Conditions;
   gauges?: PlacedGauge[] | null;
+  radar?: RadarRates[] | null;
   seen?: SeenClouds | null;
   quality: CloudQuality;
   night?: number;
@@ -221,8 +233,45 @@ export function Clouds({
     return () => clearInterval(timer);
   }, [seen]);
 
-  // The field's a shared texture, filled as the gauges change.
-  const measured = useMemo(() => setRainField(gauges), [gauges]);
+  // The field's a shared texture, filled as the gauges and the radar's
+  // scans change. Showers with no scans to follow drift on the wind aloft.
+  const { speed: aloft, direction: aloftFrom } = forecast.windAloft;
+
+  const filled = useMemo(() => {
+    const [x, z] = windVector(aloft, aloftFrom);
+
+    return {
+      hardest: setRainField(
+        gauges,
+        radar && { scans: radar, now: sceneNow(), drift: [x, z] }
+      ),
+    };
+  }, [gauges, radar, aloft, aloftFrom]);
+
+  // Between scans the radar's showers drift on, a little at a time: the
+  // hardest rate changes as they cross the map's edge.
+  const [drifted, setDrifted] = useState<{
+    of: typeof filled;
+    hardest: number | null;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!radar) return;
+
+    const timer = setInterval(() => {
+      const hardest = stepRainField(sceneNow());
+
+      setDrifted((last) =>
+        last?.of === filled && last.hardest === hardest
+          ? last
+          : { of: filled, hardest }
+      );
+    }, RAIN_STEP);
+
+    return () => clearInterval(timer);
+  }, [filled, radar]);
+
+  const measured = drifted?.of === filled ? drifted.hardest : filled.hardest;
 
   const conditions = useMemo(
     () =>

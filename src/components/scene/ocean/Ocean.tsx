@@ -58,6 +58,7 @@ import {
 import { useRenderer } from "../renderer";
 import { switchedOff } from "../stats";
 import { loadSeaWind, openWind, seaWindiness } from "./seaWind";
+import { readDepths, seaStanding, setIncoming } from "./shelterMap";
 import { windVector } from "../weather";
 
 export interface OceanQuality {
@@ -176,17 +177,22 @@ function createMaterial(
   // Waves shoal and die in shallow water.
   const shoaling = smoothstep(0.3, 10, depthAt(world));
 
-  // How built-up the sea is here, against the open sea, for the cascades
-  // after the swell (./seaWind.ts): 1 for the swell, which the lee doesn't
-  // calm. Worked out per vertex and passed down.
+  // How built-up the sea is here, against the open sea. The longest
+  // cascade is the open sea's: the wind's lee doesn't calm it, but land in
+  // its way does (./shelterMap.ts). The cascades after it are the wind's
+  // (./seaWind.ts). Worked out per vertex and passed down.
   const gusting = !switchedOff("seawind");
+  const sheltering = !switchedOff("shelter");
 
-  const windiness: any = gusting
-    ? varying(seaWindiness(world, rootSize))
-    : vec2(1);
+  const local: any = varying(
+    vec3(
+      sheltering ? seaStanding(world, rootSize) : float(1),
+      gusting ? seaWindiness(world, rootSize) : vec2(1)
+    )
+  );
 
   const builtUp = (c: number) =>
-    c === 0 ? float(1) : c === 1 ? windiness.x : windiness.y;
+    c === 0 ? local.x : c === 1 ? local.y : local.z;
 
   let displacement: any = vec3(0);
   cascades.forEach(({ size }, c) => {
@@ -411,7 +417,28 @@ export function Ocean({
   }, [index, quality, water, supported, camera]);
 
   useEffect(() => {
-    simulation?.setConditions(conditions);
+    const { maxDepth = 30, encoding } = index.manifest.water ?? {};
+
+    readDepths(water.image, index.manifest.rootSize, (byte) => {
+      const v = byte / 255;
+
+      return (encoding === "sqrt" ? v * v : v) * maxDepth;
+    });
+  }, [water, index]);
+
+  useEffect(() => {
+    const sea = simulation?.setConditions(conditions);
+
+    // A sea that's measured has come from elsewhere; the wind's own grows
+    // back past the land, over its fetch.
+    if (sea) {
+      setIncoming({
+        open: sea.open,
+        from: sea.from,
+        length: sea.length,
+        grows: conditions.sea ? undefined : conditions.fetch,
+      });
+    }
 
     const [x, z] = windVector(conditions.windSpeed, conditions.windDirection);
     openWind.value.set(x, z);

@@ -101,16 +101,19 @@ export class OceanSimulation {
     this.build();
   }
 
+  /** Builds the sea for `conditions`; gives back what it's made of. */
   setConditions(conditions: OceanConditions) {
-    const { h0, waves } = buildSpectrum(this.size, this.cascades, conditions);
+    const spectrum = buildSpectrum(this.size, this.cascades, conditions);
 
     for (const [node, data] of [
-      [this.h0, h0],
-      [this.waves, waves],
+      [this.h0, spectrum.h0],
+      [this.waves, spectrum.waves],
     ] as const) {
       node.value.array.set(data);
       node.value.needsUpdate = true;
     }
+
+    return spectrum;
   }
 
   update(renderer: WebGPURenderer, time: number) {

@@ -24,7 +24,6 @@ import {
   float,
   fog,
   max,
-  mix,
   positionWorld,
   positionWorldDirection,
   smoothstep,
@@ -36,11 +35,9 @@ import {
   hazeColor,
   hazeDensity,
   hazeDensityForVisibility,
-  hazeGrey,
   hazeHeight,
   hazeTransmittance,
   hazeTransmittanceBetween,
-  hazeGlowToward,
   outsideClearing,
 } from "./haze";
 import { hazeGlowAtNight } from "./skyglow";
@@ -61,8 +58,11 @@ import * as environment from "./environment";
 import { Ocean, OCEAN_DESKTOP, OCEAN_MOBILE } from "./ocean/Ocean";
 import { useTide } from "./ocean/tide";
 import { type Gauge, useRainGauges } from "./rainGauges";
+import { useRadar } from "./radar";
+import type { RadarRates } from "./clouds/rainField";
 import { Quakes } from "./quakes/Quakes";
-import { OceanConditions, significantHeight } from "./ocean/spectrum";
+import { OceanConditions, openHeight } from "./ocean/spectrum";
+import { seaConditions, useSwell } from "./ocean/swell";
 import { Clouds } from "./clouds/Clouds";
 import { useMeasuredWind } from "./wind/stations";
 import type { SeenClouds } from "./clouds/cloudField";
@@ -70,7 +70,9 @@ import { useSeenClouds } from "./clouds/seenClouds";
 import { Wind, WIND_DESKTOP, WIND_MOBILE } from "./wind/Wind";
 import type { TileCache } from "./terrain/TileCache";
 import { CLOUDS_DESKTOP, CLOUDS_MOBILE } from "./clouds/cloudNode";
+import { FarLand } from "./farland/FarLand";
 import { Landmarks } from "./landmarks/Landmarks";
+import { toggleGrid, towersAt } from "./power/energise";
 import { Power } from "./power/Power";
 import {
   Buildings,
@@ -85,17 +87,16 @@ import { Railway } from "./trains/Railway";
 import { CableCar } from "./cablecar/CableCar";
 import { Buses } from "./buses/Buses";
 import { Traffic } from "./traffic/Traffic";
+import { Signs } from "./traffic/signs/Signs";
 import { underground } from "./tunnels/bores";
 import { seeThrough } from "./tunnels/reveal";
 import { Tunnels } from "./tunnels/Tunnels";
 import { AirfieldLights } from "./airport/AirfieldLights";
 import { Sky } from "./sky/Sky";
+import { skyAlong } from "./sky/backdrop";
 import {
-  nightSky,
   showSky,
   skyFor,
-  skyOnCloud,
-  skyRadiance,
   skyStage,
   type Sky as SkyModel,
 } from "./sky/skyModel";
@@ -160,9 +161,6 @@ const TARGET_ALTITUDE = 150;
 /** The usual start, or under the low cloud if its base is lower. */
 const startAltitude = (deck: number | null) => ceilingFor(deck, START_ALTITUDE);
 
-/** Sky samples reach this far for the city's glow, m. */
-const SKYGLOW_DISTANCE = 20000;
-
 /**
  * Haze over everything (fog on every material, and the sky), plus a fade
  * toward the edges of the terrain root so the map dissolves instead of ending.
@@ -197,74 +195,16 @@ function Atmosphere({
       max(haze, edgeFade).mul(outsideClearing(positionWorld))
     );
 
-    // Sky: zenith to horizon, hazier toward the horizon, glowing and with a
-    // small disc toward the sun, and the moon. Under a deck it goes flat
-    // grey: the clouds hide it, but the water's reflection (which leaves them
-    // out) shows it.
+    // The sky (./sky/backdrop.ts), with a small disc toward the sun, and the
+    // moon.
     const direction = positionWorldDirection;
     const toward = dot(direction, environment.sunDirection);
-
-    const greys = mix(
-      environment.skyHorizon,
-      mix(environment.skyZenith, environment.skyHorizon, environment.overcast),
-      smoothstep(0, 0.35, direction.y)
-    );
-
-    const gradient = greys.mul(environment.skyBrightness);
-
-    const horizon = float(1).sub(smoothstep(0, 0.25, max(direction.y, 0)));
 
     const disc = smoothstep(0.99996, 0.99999, toward)
       .mul(environment.sunIntensity.mul(3))
       .mul(float(1).sub(environment.moonlit));
 
-    const far = cameraPosition.add(direction.mul(SKYGLOW_DISTANCE));
-
-    // From the sky model (?sky=): the day's sky is its own, hazy horizon,
-    // glow round the sun and all, going over to the deck's underside as the
-    // cloud closes; the old greys are what's left of the sky at night, and
-    // the glow the moon's. Under the horizon there's no sky, only the haze
-    // the far sea's lost in.
-    const modelled = () => {
-      // The sky goes over to the haze toward the horizon, as the old sky
-      // did: far cloud and far hills fade into that, and it's darker than
-      // the model's sky there (the old haze, or the model's at its veil). A
-      // brighter sky behind them showed as a band under the cloud.
-      const lost = smoothstep(0, -0.02, direction.y);
-      const hazed = max(lost, horizon.mul(0.8));
-
-      // The deck's underside, lost in the haze toward the horizon.
-      const deck = mix(
-        hazeColor(direction),
-        skyOnCloud(0).add(
-          environment.overcast.mul(environment.sunIntensity).mul(1.2)
-        ),
-        hazeTransmittance(cameraPosition, far)
-      );
-
-      return mix(
-        mix(skyRadiance(direction), deck, environment.overcast)
-          .add(mix(greys, hazeGrey, horizon.mul(0.8)).mul(nightSky))
-          .add(hazeGlowToward(toward, 0.15).mul(environment.moonlit)),
-        hazeColor(direction),
-        hazed
-      );
-    };
-
-    const air = skyStage()
-      ? modelled()
-      : mix(gradient, hazeColor(direction), horizon.mul(0.8)).add(
-          hazeGlowToward(toward, 0.15)
-        );
-
-    const sky = air
-      .add(disc)
-      .add(moonDisc(direction))
-      .add(
-        hazeGlowAtNight(cameraPosition, far).mul(
-          float(1).sub(hazeTransmittance(cameraPosition, far))
-        )
-      );
+    const sky = skyAlong(direction).add(disc).add(moonDisc(direction));
 
     // The water's mirror sees the low cloud's base in it (./clouds/mirrored).
     scene.backgroundNode = switchedOff("mirrorclouds")
@@ -312,6 +252,9 @@ const CLICK_TIME = 500;
 
 /** Pixels from a vehicle that a tap picks it: fingers are blunter than a mouse. */
 const TAP_REACH = 24;
+
+/** Of the points whose depth is read for a click, those kept for pylons. */
+const TOWERS = 8;
 
 /**
  * Something drawn nearer than a vehicle by more than half its length, and
@@ -590,7 +533,7 @@ function Controls({
 
   // Crests rarely top the significant height, so that's enough headroom.
   const seaFloor = useRef(0);
-  seaFloor.current = SEA_CLEARANCE + significantHeight(sea);
+  seaFloor.current = SEA_CLEARANCE + openHeight(sea);
 
   // Views the scene puts the camera in, not walked or dragged there, and the
   // arcs it flies between them, stay under a low deck.
@@ -924,7 +867,8 @@ function Controls({
       still();
     };
 
-    // Clicking a vehicle (not dragging, and with one finger) follows it.
+    // Clicking a vehicle (not dragging, and with one finger) follows it;
+    // a pylon, and the grid lights up or goes dark.
     // Presses end on the window: they may be let go off the map.
     const pointers = new Set<number>();
     let disposed = false;
@@ -937,32 +881,39 @@ function Controls({
       took: boolean;
     } | null = null;
 
-    // The nearest vehicle to the pointer that isn't behind anything.
-    const vehicleUnder = async (e: PointerEvent) => {
+    // The nearest vehicle to the pointer that isn't behind anything, or
+    // failing one, the nearest pylon.
+    const under = async (e: PointerEvent) => {
       const camera = controls.current?.camera;
 
       // Nothing on the map to pick while it's looking through the telescope.
       if (!(camera instanceof PerspectiveCamera) || scope.active) return null;
       const rect = element.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      const y = 1 - ((e.clientY - rect.top) / rect.height) * 2;
+      const reach = e.pointerType === "touch" ? TAP_REACH : undefined;
 
-      const sightings = vehiclesAt(
-        camera,
-        ((e.clientX - rect.left) / rect.width) * 2 - 1,
-        1 - ((e.clientY - rect.top) / rect.height) * 2,
-        rect.height,
-        e.pointerType === "touch" ? TAP_REACH : undefined,
-        (at) => hazeTransmittanceBetween(camera.position, at) > FAINTEST
-      ).slice(0, DEPTH_POINTS);
+      const clear = (at: Vector3) =>
+        hazeTransmittanceBetween(camera.position, at) > FAINTEST;
+
+      const vehicles = vehiclesAt(camera, x, y, rect.height, reach, clear);
+      const towers = towersAt(camera, x, y, rect.height, reach, clear);
+
+      // Vehicles first: one in front of a pylon is what was meant.
+      const sightings = [
+        ...vehicles.slice(0, DEPTH_POINTS - Math.min(towers.length, TOWERS)),
+        ...towers,
+      ].slice(0, DEPTH_POINTS);
 
       if (!sightings.length) return null;
       const scene = await sceneDepthsAt(renderer, camera, sightings);
 
-      const seen = sightings.find(
-        ({ depth, length }, i) =>
-          !scene || scene[i] >= depth - length / 2 - depth * HIDDEN_BY
+      return (
+        sightings.find(
+          ({ depth, length }, i) =>
+            !scene || scene[i] >= depth - length / 2 - depth * HIDDEN_BY
+        ) ?? null
       );
-
-      return seen?.vehicle ?? null;
     };
 
     const down = (e: PointerEvent) => {
@@ -999,8 +950,11 @@ function Controls({
       // Only a click: the rig carries on as it was.
       if (p.took) putBack();
 
-      vehicleUnder(e).then((vehicle) => {
-        if (vehicle && !disposed) followVehicle(vehicle);
+      under(e).then((seen) => {
+        if (!seen || disposed) return;
+
+        if ("vehicle" in seen) followVehicle(seen.vehicle);
+        else toggleGrid(seen.tower);
       }, console.error);
     };
 
@@ -1046,10 +1000,10 @@ function Controls({
       }
 
       looking = true;
-      vehicleUnder(e)
-        .then((vehicle) => {
+      under(e)
+        .then((seen) => {
           if (pointers.size || disposed || edgeCursor(edge.current)) return;
-          element.style.cursor = vehicle ? "pointer" : "";
+          element.style.cursor = seen ? "pointer" : "";
         }, console.error)
         .finally(() => {
           looking = false;
@@ -1816,22 +1770,6 @@ function Sun({
   );
 }
 
-/**
- * Sea state from the wind. Fetch, the open water the wind has blown across,
- * depends on where it comes from: southerlies arrive off the Southern Ocean,
- * northerlies through Cook Strait.
- */
-function seaConditions({ wind }: Conditions): OceanConditions {
-  const southerly = wind.direction > 120 && wind.direction < 240;
-
-  return {
-    windSpeed: wind.speed,
-    windDirection: wind.direction,
-    fetch: southerly ? 500000 : 80000,
-    swell: southerly ? 0.6 : 0.3,
-  };
-}
-
 function useIsMobile() {
   const [mobile, setMobile] = useState(false);
   useEffect(() => {
@@ -1849,6 +1787,7 @@ function useIsMobile() {
  */
 export const LAYERS = [
   "ocean",
+  "farland",
   "buildings",
   "trees",
   "landmarks",
@@ -1860,6 +1799,7 @@ export const LAYERS = [
   "vessels",
   "cablecar",
   "traffic",
+  "signs",
   "tunnels",
   "buses",
   "flights",
@@ -1891,6 +1831,7 @@ export function Scene({
   index,
   conditions,
   gauges = null,
+  radar = null,
   seen = null,
   time,
   mobile,
@@ -1900,6 +1841,8 @@ export function Scene({
   conditions: Conditions;
   /** The rain gauges, null to go by the forecast. */
   gauges?: Gauge[] | null;
+  /** The rain radar's scans, null to go by the gauges alone. */
+  radar?: RadarRates[] | null;
   /** Where the satellite saw cloud, null to spread it evenly. */
   seen?: SeenClouds | null;
   time: Date;
@@ -1917,7 +1860,14 @@ export function Scene({
     if (wind) setWindShown(true);
   }, [wind]);
   const sun = useMemo(() => sunPosition(time), [time]);
-  const sea = useMemo(() => seaConditions(conditions), [conditions]);
+  // The open sea as the wave buoy has it, over the wind's guess at it.
+  const swell = useSwell();
+
+  const sea = useMemo(
+    () => seaConditions(conditions.wind, swell),
+    [conditions.wind, swell]
+  );
+
   // The day's light from the sky model, unless the page asks for less (?sky=).
   const stage = skyStage();
 
@@ -2032,6 +1982,7 @@ export function Scene({
           />
         </Suspense>
       )}
+      {shown("farland") && <FarLand index={index} time={time} />}
       {shown("quakes") && <Quakes index={index} />}
       {shown("landmarks") && (
         <Landmarks index={index} wind={conditions.wind} lights={lights} />
@@ -2059,6 +2010,7 @@ export function Scene({
       {shown("traffic") && (
         <Traffic index={index} lights={lights} time={time} />
       )}
+      {shown("signs") && <Signs index={index} lights={lights} />}
       {shown("tunnels") && <Tunnels index={index} />}
       {shown("buses") && (
         <Buses index={index} heightAt={heightAt} lights={lights} />
@@ -2085,6 +2037,7 @@ export function Scene({
       <Clouds
         conditions={conditions}
         gauges={placed}
+        radar={radar}
         seen={seen}
         quality={mobile ? CLOUDS_MOBILE : CLOUDS_DESKTOP}
         night={lights}
@@ -2115,8 +2068,11 @@ function Ticker({ fps }: { fps: number }) {
   return null;
 }
 
-/** The Canvas's camera; the controls move its near plane with height. */
-export const CAMERA = { fov: DEFAULT_FOV, near: 5, far: 80000 };
+/**
+ * The Canvas's camera; the controls move its near plane with height. It sees
+ * as far as the South Island's ranges on the horizon (./farland).
+ */
+export const CAMERA = { fov: DEFAULT_FOV, near: 5, far: 250000 };
 
 export const WellingtonScene: React.FC<{
   /** False clears the sky (and its rain) whatever the forecast says. */
@@ -2134,6 +2090,7 @@ export const WellingtonScene: React.FC<{
   const measured = useRainGauges();
   // No clouds, no rain.
   const gauges = clouds ? measured : null;
+  const radar = useRadar();
   const seen = useSeenClouds();
   // The wind at sea, as the weather stations have it.
   const blowing = useMeasuredWind(forecast.wind);
@@ -2198,6 +2155,7 @@ export const WellingtonScene: React.FC<{
             index={index}
             conditions={conditions}
             gauges={gauges}
+            radar={clouds ? radar : null}
             seen={clouds ? seen : null}
             time={time}
             mobile={mobile}

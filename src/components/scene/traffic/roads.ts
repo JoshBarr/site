@@ -359,10 +359,29 @@ export class Roads {
 
 const cellKey = (cx: number, cz: number) => (cx + 32768) * 65536 + cz + 32768;
 
-export async function loadRoads(index: TileIndex): Promise<Roads> {
+async function fetchRoads(index: TileIndex): Promise<Roads> {
   const response = await fetch(`${ROADS_URL}/roads.json`);
 
   if (!response.ok) throw new Error(`roads: ${response.status}`);
 
   return new Roads(await response.json(), index);
+}
+
+const loaded = new WeakMap<TileIndex, Promise<Roads>>();
+
+/**
+ * The highways over `index`'s terrain: fetched once, however many layers
+ * ask (the traffic, and the signs along it). A failed fetch is tried again
+ * by whoever asks next.
+ */
+export function loadRoads(index: TileIndex): Promise<Roads> {
+  let roads = loaded.get(index);
+
+  if (!roads) {
+    roads = fetchRoads(index);
+    loaded.set(index, roads);
+    roads.catch(() => loaded.delete(index));
+  }
+
+  return roads;
 }

@@ -14,6 +14,12 @@ const TOP_SPEED = 45;
 /** Track found beyond the first and last fixes, for cars to stand on, m. */
 const EXTEND = 120;
 
+/**
+ * Track found on past the last fix, m: as far as a train gets in the time
+ * a level crossing has to be flashing before it (see crossingWatch.ts).
+ */
+const AHEAD = 1200;
+
 /** Fixes this far apart, m, say which way a train's going. */
 const MOVED = 20;
 
@@ -294,7 +300,8 @@ export function follow(
     at.push({ s: along, time });
   }
 
-  // Track either side of the fixes, for the cars to stand on.
+  // Track either side of the fixes, for the cars to stand on, and further
+  // ahead, for what the train's coming to.
   const forward = direction(
     flat(points[points.length - 2] ?? points[0]),
     flat(points[points.length - 1])
@@ -307,7 +314,7 @@ export function follow(
   ];
 
   const behind = network.extend(first, backward, EXTEND).slice(1);
-  const ahead = network.extend(last, forward, EXTEND).slice(1);
+  const ahead = network.extend(last, forward, AHEAD).slice(1);
   const end = s[s.length - 1];
   let back = 0;
   behind.forEach((p, k) => {

@@ -45,6 +45,10 @@ export default class Poller extends AWS.Lambda.Function<Poller>()(
       Config.option
     );
 
+    // The Electricity Authority's, for each substation's load: without one,
+    // the grid's polled without them.
+    const emiKey = yield* Config.Redacted("LIVE_EMI_KEY").pipe(Config.option);
+
     const table = yield* Live;
 
     const live = LiveTable.of({
@@ -71,6 +75,10 @@ export default class Poller extends AWS.Lambda.Function<Poller>()(
 
       if (Option.isSome(openWatersToken)) {
         process.env.OPENWATERS_TOKEN = Redacted.value(openWatersToken.value);
+      }
+
+      if (Option.isSome(emiKey)) {
+        process.env.LIVE_EMI_KEY = Redacted.value(emiKey.value);
       }
     });
 

@@ -65,6 +65,14 @@ function serve(aircraft: Aircraft[], trains: Train[]) {
         legs: {},
       })
     ),
+    // One message sign showing a travel time, the rest blank.
+    http.get(`${ORIGIN}/api/signs`, () =>
+      HttpResponse.json({
+        time: Date.now(),
+        fetched: Date.now(),
+        messages: { 385: "J'VILLE [jl4]12[nl]WGTN CBD [jl4]19" },
+      })
+    ),
     http.get(`${ORIGIN}/*`, async ({ request }) => {
       const path = decodeURIComponent(new URL(request.url).pathname);
 

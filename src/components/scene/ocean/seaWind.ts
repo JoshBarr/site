@@ -26,8 +26,9 @@ import { FIELD_SCALE, loadWindField } from "../wind/field";
 // Wellington's harbour isn't: lee shores lie glassy while gusts streak the
 // open water. The land's wind field (../wind/field.ts) slows and turns the
 // wind; how much open water lies upwind (the fetch) is how far the waves
-// have had to grow. Together they scale the finer cascades. The swell came
-// from far off and passes the lee unchanged.
+// have had to grow. Together they scale the finer cascades. The longest
+// cascade is the open sea's, come from far off: the wind's lee doesn't calm
+// it, but the land in its way does (./shelterMap.ts).
 
 /** The field's cells a side, as scripts/wind/build_wind.py writes it. */
 const SIZE = 512;

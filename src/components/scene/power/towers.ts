@@ -296,7 +296,7 @@ export const SPECS: Record<TowerKind, TowerSpec> = {
 };
 
 /** The link runs at ±350 kV; nothing else here is over 220. */
-const HVDC_KV = 350;
+export const HVDC_KV = 350;
 
 /** Which shape a structure of Transpower's type takes, on a line of `kv`. */
 export function kindOf(type: StructureType, kv: number): TowerKind {

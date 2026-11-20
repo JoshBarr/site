@@ -14,6 +14,7 @@ import {
 } from "../port/craneGeometry";
 import { CRANES, WHARF_BEARING, YARD } from "../port/terminal";
 import { nztmToWorld, TileIndex } from "../terrain/manifest";
+import { useGridFlow } from "../power/flow";
 import { verticalScale } from "../terrain/Terrain";
 import { obstructionLights, usePixelAngle } from "./common";
 import { LatticeTower, towerLights } from "./LatticeTower";
@@ -199,9 +200,26 @@ export function Landmarks({
 
   useEffect(() => addFocusSubjects(placed.focus), [placed]);
 
+  // What the two farms are sending out, where the grid says: West Wind's
+  // turbines, then Mill Creek's, as they're placed.
+  const { farms } = useGridFlow();
+
+  const output = useMemo(
+    () => [
+      ...WEST_WIND.map(() => farms.westWind),
+      ...MILL_CREEK.map(() => farms.millCreek),
+    ],
+    [farms.westWind, farms.millCreek]
+  );
+
   return (
     <>
-      <WindTurbines model={SWT_2_3_82} positions={placed.siemens} wind={wind} />
+      <WindTurbines
+        model={SWT_2_3_82}
+        positions={placed.siemens}
+        wind={wind}
+        output={output}
+      />
       <WindTurbines model={E_44} positions={placed.brooklyn} wind={wind} />
       <LatticeTower spec={KAUKAU_TOWER} position={placed.kaukau} />
       <LatticeTower spec={MT_VICTORIA_TOWER} position={placed.mtVictoria} />

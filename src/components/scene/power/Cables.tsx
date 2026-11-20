@@ -14,11 +14,13 @@ import {
   mix,
   positionGeometry,
   transformNormalToView,
+  varying,
   vec3,
 } from "three/tsl";
 import { seaLevel } from "../environment";
 import { nztmToWorld, TileIndex } from "../terrain/manifest";
 import { verticalScale } from "../terrain/Terrain";
+import { gridGlow, gridLight, LINK } from "./energise";
 import { CABLES } from "./grid";
 import { createRibbonGeometry, hangRibbon } from "./ribbon";
 
@@ -54,6 +56,14 @@ const PROUD = 0.4;
 const WIDTH = 3;
 const MAX_PIXELS = 1;
 
+/**
+ * Lit with the grid, this much of the towers' light comes up through the
+ * sea, where the cable's own need be no more than LIT_MOST times theirs
+ * for it.
+ */
+const LIT_SHOWS = 0.35;
+const LIT_MOST = 5;
+
 /** Pale, to show through the water; a real one's black. */
 const COLOUR = "#959e99";
 
@@ -84,11 +94,22 @@ function createCableMaterial() {
   const steepness = toCamera.y.div(toCamera.length()).clamp(0, 1);
   const sunk = max(log(shows).mul(-SEA_CLEAR).mul(steepness), SUNK);
 
-  material.positionNode = ribbon.position.add(
-    vec3(0, max(floor.mul(verticalScale).add(PROUD), seaLevel.sub(sunk)), 0)
-  );
+  const height = max(floor.mul(verticalScale).add(PROUD), seaLevel.sub(sunk));
+
+  material.positionNode = ribbon.position.add(vec3(0, height, 0));
   // Lit as the sea floor is: from above.
   material.normalNode = transformNormalToView(vec3(0, 1, 0));
+
+  // And with the grid, when it is (see energise.ts). The sea would take
+  // nearly all of that light too: so it's brighter by what the water over
+  // it takes, as near as LIT_MOST allows, and comes through as LIT_SHOWS.
+  const through = exp(
+    max(seaLevel.sub(height), 0).div(max(steepness, 0.01)).div(-SEA_CLEAR)
+  );
+
+  material.emissiveNode = gridLight(
+    varying(gridGlow(ribbon.position, LINK))
+  ).mul(varying(float(LIT_SHOWS).div(through).clamp(1, LIT_MOST)));
 
   return material;
 }

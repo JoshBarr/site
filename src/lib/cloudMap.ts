@@ -115,7 +115,7 @@ export function himawariPixel(lat: number, lon: number, height = 0) {
 }
 
 /** NZTM easting and northing back to latitude and longitude, degrees. */
-function fromNztm(easting: number, northing: number): [number, number] {
+export function fromNztm(easting: number, northing: number): [number, number] {
   let lat = -41.3;
   let lon = 174.8;
   const step = 1e-5;

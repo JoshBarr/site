@@ -4,30 +4,37 @@ import * as Ref from "effect/Ref";
 import { fetchCloudMap } from "../../src/lib/cloudMap";
 import { HISTORY, type RouteEnd } from "../../src/lib/flights";
 import { fetchAirspace, LatLon, lookupRoutes } from "../../src/lib/flightStore";
+import { fetchGridFlow } from "../../src/lib/gridFlow";
 import {
   buses,
   clouds,
   flights,
+  grid,
   headings,
   type LiveData,
   type LiveRecord,
   metar,
   quakes,
+  radar,
   rain,
   routePrefix,
   routes,
+  signs,
   tide,
   toRecord,
   traffic,
   trains,
   vessels,
+  waves,
   weather,
   windStations,
 } from "../../src/lib/liveRecords";
 import { fetchMetar } from "../../src/lib/metar";
 import { fetchBuses, fetchTrains } from "../../src/lib/metlink";
-import { fetchTraffic } from "../../src/lib/nzta";
+import { fetchSigns, fetchTraffic } from "../../src/lib/nzta";
 import { fetchQuakes } from "../../src/lib/quakes";
+import { fetchRadar } from "../../src/lib/radar";
+import { RADAR_FRAME, RADAR_KEPT } from "../../src/lib/radarGrid";
 import { fetchGaugeSites, fetchRainfall } from "../../src/lib/rainGauges";
 import { fetchMeanLevel, fetchTide } from "../../src/lib/tide";
 import { onMap, TRAIL } from "../../src/lib/trains";
@@ -37,6 +44,7 @@ import {
   UNDER_WAY,
   type Vessel,
 } from "../../src/lib/vessels";
+import { fetchWaves } from "../../src/lib/waves";
 import { forecastHour, getConditions } from "../../src/lib/weather";
 import { fetchWind } from "../../src/lib/windStations";
 import type { LiveBucket } from "./positions";
@@ -54,13 +62,17 @@ type LogCollection =
   | typeof flights
   | typeof vessels
   | typeof traffic
+  | typeof signs
   | typeof weather
   | typeof quakes
   | typeof tide
   | typeof rain
+  | typeof radar
   | typeof windStations
   | typeof metar
-  | typeof clouds;
+  | typeof waves
+  | typeof clouds
+  | typeof grid;
 
 interface Spec<L extends LogCollection> {
   log: L;
@@ -396,6 +408,47 @@ const vesselsFeed = Effect.gen(function* () {
  */
 const WEATHER_EVERY = 30 * 60_000;
 
+/** How often NZTA's message signs are asked, ms: the travel times on them move every few minutes. */
+const SIGNS_EVERY = 2 * 60_000;
+
+/** Unchanged, they're written again this often, ms: what's stored is then known not to be stale. */
+const SIGNS_AGAIN = 10 * 60_000;
+
+// Written when any sign's message has changed, and every ten minutes
+// regardless. NZTA answers in two seconds or so, while other feeds sleep.
+const signsFeed = Effect.gen(function* () {
+  // When they were last asked, by this container.
+  const asked = yield* Ref.make(-Infinity);
+
+  return yield* feed({
+    log: signs,
+    every: 60_000,
+    offset: 15_000,
+    window: 0,
+    poll: (previous) =>
+      Effect.gen(function* () {
+        const now = yield* Clock.currentTimeMillis;
+
+        if (now - (yield* Ref.get(asked)) < SIGNS_EVERY) return null;
+
+        // A cold container goes by the last write: no sooner than asked.
+        if (previous && now - previous.sk < SIGNS_EVERY) return null;
+
+        // Failing, it's asked again in two minutes, not one.
+        yield* Ref.set(asked, now);
+
+        const fetched = yield* Effect.tryPromise(fetchSigns);
+
+        return previous &&
+          now - previous.sk < SIGNS_AGAIN &&
+          JSON.stringify(previous.data.messages) ===
+            JSON.stringify(fetched.messages)
+          ? null
+          : fetched;
+      }),
+  });
+});
+
 /** How often the tide gauge is asked, ms: the tide's carried on between. */
 const TIDE_EVERY = 5 * 60_000;
 
@@ -492,6 +545,79 @@ const METAR_EVERY = 5 * 60_000;
 /** How often SLIDER's asked for a newer scan, ms: Himawari's every 10 min. */
 const CLOUDS_EVERY = 2 * 60_000;
 
+/**
+ * How often the wave buoy's asked after, ms: it reports every half hour,
+ * and the sea's slow to change.
+ */
+const WAVES_EVERY = 10 * 60_000;
+
+const wavesFeed = Effect.gen(function* () {
+  // When it was last asked: a reading's stored once, so the newest stored
+  // doesn't say.
+  const asked = yield* Ref.make(-Infinity);
+
+  return yield* feed({
+    log: waves,
+    every: 60_000,
+    offset: 37_000,
+    window: 0,
+    poll: (previous) =>
+      Effect.gen(function* () {
+        const now = yield* Clock.currentTimeMillis;
+
+        if (now - (yield* Ref.get(asked)) < WAVES_EVERY) return null;
+
+        const measured = yield* Effect.tryPromise(() => fetchWaves(now));
+
+        // Not before it's answered: failing, it's asked again the next minute.
+        yield* Ref.set(asked, now);
+
+        return measured && measured.time > (previous?.data.time ?? -1)
+          ? measured
+          : null;
+      }),
+  });
+});
+
+/**
+ * How often the grid's asked what it's carrying, ms: the substations' loads
+ * are dispatched every five minutes, the HVDC link's transfer posted each
+ * half hour.
+ */
+const GRID_EVERY = 5 * 60_000;
+
+/** With no frame for this long, the radar's only asked every fifth minute, ms. */
+const RADAR_LATE = 3 * RADAR_FRAME;
+
+/**
+ * Where the rain radar sees rain (RainViewer): a frame every ten minutes,
+ * so it's not asked until the next is due, then each minute until it's up,
+ * within five as a rule. Asking's a 1 KB JSON; a new frame's one picture of
+ * 1–50 KB. The last half hour's are kept, for the positions.
+ */
+const radarFeed = feed({
+  log: radar,
+  every: 60_000,
+  offset: 10_000,
+  window: RADAR_KEPT,
+  poll: (previous) =>
+    Effect.gen(function* () {
+      const now = yield* Clock.currentTimeMillis;
+      const last = previous?.data.time;
+
+      if (last !== undefined) {
+        if (now < last + RADAR_FRAME) return null;
+
+        // RainViewer's stopped, or MetService has: asked less.
+        if (now > last + RADAR_LATE && Math.floor(now / 60_000) % 5) {
+          return null;
+        }
+      }
+
+      return yield* Effect.tryPromise(() => fetchRadar(last));
+    }),
+});
+
 /** Every feed, made once per container, and what they know of routes. */
 export const makeFeeds = Effect.gen(function* () {
   const routeMemory: Routes = { known: new Map(), due: new Map() };
@@ -559,6 +685,8 @@ export const makeFeeds = Effect.gen(function* () {
       poll: () => Effect.tryPromise(fetchTraffic),
     }),
 
+    signs: signsFeed,
+
     // getConditions logs its own failures, and says null: asked again the
     // next minute.
     weather: feed({
@@ -618,6 +746,25 @@ export const makeFeeds = Effect.gen(function* () {
         }),
     }),
 
+    // Written when any of it is newer. What couldn't be fetched stays as it
+    // was last stored.
+    grid: feed({
+      log: grid,
+      every: 60_000,
+      offset: 47_000,
+      window: 0,
+      poll: (previous) =>
+        Effect.gen(function* () {
+          const now = yield* Clock.currentTimeMillis;
+
+          if (previous && now - previous.sk < GRID_EVERY) return null;
+
+          return yield* Effect.tryPromise(() =>
+            fetchGridFlow(previous?.data ?? null)
+          );
+        }),
+    }),
+
     // Written when there's a newer report: each one once.
     metar: feed({
       log: metar,
@@ -656,6 +803,12 @@ export const makeFeeds = Effect.gen(function* () {
           );
         }),
     }),
+
+    // Written when the buoy's sent a newer half hour: each one once.
+    waves: wavesFeed,
+
+    // Written when there's a newer frame: each one once.
+    radar: radarFeed,
   });
 
   return { logs, routes: routeMemory.known };

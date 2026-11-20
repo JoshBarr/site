@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { readJson } from "./schemas";
+import type { SignMessages } from "./signs";
 import type { TrafficSpeeds } from "./traffic";
 
 // Traffic speeds from NZTA's traffic and travel API
@@ -85,4 +86,55 @@ export async function fetchTraffic(): Promise<TrafficSpeeds> {
   if (!Object.keys(speeds.links).length) throw new Error("nzta: no links");
 
   return speeds;
+}
+
+// What the variable message signs are showing, from the same API: every
+// sign in a box round the highways the scene draws (about a hundred, 65 KB,
+// two seconds), each with its message in NTCIP markup (../lib/signs.ts).
+// Travel times are on them too, as messages. Neither this nor any other
+// endpoint has the smart motorway's lane signals or variable speed limits.
+
+/**
+ * West, south, east, north: as scripts/traffic/build_signs.mjs has it, so
+ * every sign public/roads/signs.json binds is asked after.
+ */
+const SIGNS_BOUNDS = [174.72, -41.36, 175.2, -40.94];
+
+const SIGNS_API = `http://trafficnz.info/service/traffic/rest/4/signs/vms/withinbounds/${SIGNS_BOUNDS.join("/")}`;
+
+const messageSigns = z.object({
+  // With no signs in the bounds it's "".
+  response: z.union([
+    z.literal(""),
+    z.object({
+      vms: oneOrMany(
+        z.object({
+          id: z.number(),
+          /** "" when the sign's blank. */
+          currentMessage: z.string().nullish(),
+        })
+      ).optional(),
+    }),
+  ]),
+});
+
+/** What every message sign round State Highways 1 and 2 is showing. */
+export async function fetchSigns(): Promise<SignMessages> {
+  const response = await fetch(SIGNS_API, {
+    headers: { Accept: "application/json" },
+    signal: AbortSignal.timeout(TIMEOUT),
+  });
+
+  if (!response.ok) throw new Error(`nzta signs: ${response.status}`);
+
+  const body = await readJson(response, messageSigns, "nzta signs");
+  const signs = (body.response || {}).vms ?? [];
+
+  if (!signs.length) throw new Error("nzta signs: none");
+
+  return {
+    messages: Object.fromEntries(
+      signs.map(({ id, currentMessage }) => [id, currentMessage ?? ""])
+    ),
+  };
 }

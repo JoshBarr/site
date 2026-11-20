@@ -28,6 +28,7 @@ import {
   floor,
   int,
   ivec2,
+  min,
   mix,
   normalize,
   positionGeometry,
@@ -56,6 +57,7 @@ import {
   disposeAirfieldMaps,
   showAirfieldFor,
 } from "../airport/surface";
+import { FAR_LAND_EAST } from "../farland/mesh";
 import { quakeGlow } from "../quakes/glow";
 import { switchedOff } from "../stats";
 
@@ -113,6 +115,9 @@ const SHADOW_CASTER = {
   level: 3,
   gridSize: 256,
 };
+
+/** How far under the sea the South Island's tip is put, m: out of sight. */
+const SUNK = 30;
 
 /** Height exaggeration. Scales about sea level, so coastlines don't move. */
 export const verticalScale = uniform(1.15);
@@ -305,14 +310,26 @@ function createMaterial(
     ? new MeshStandardNodeMaterial({ roughness: 0.9, metalness: 0 })
     : new MeshLambertNodeMaterial();
 
-  material.positionNode = vec3(
-    tileA.x.add(local.x.mul(size)),
-    height
-      .mul(verticalScale)
-      .add(skirt)
-      .sub(size.mul(sink / gridSize)),
-    tileA.y.add(local.y.mul(size))
-  );
+  const east = tileA.x.add(local.x.mul(size));
+
+  const surfaceHeight = height
+    .mul(verticalScale)
+    .add(skirt)
+    .sub(size.mul(sink / gridSize));
+
+  // The root's west edge takes in the tip of the South Island, where the
+  // scene's fog has faded everything out: a blank in front of the rest of
+  // the island, which the far land draws (../farland). So that's the far
+  // land's too, and here it's under the sea.
+  const [farLandEast] = nztmToWorld(index.manifest, FAR_LAND_EAST, 0);
+
+  const sunk = switchedOff("farland")
+    ? surfaceHeight
+    : east
+        .lessThan(farLandEast)
+        .select(min(surfaceHeight, -SUNK), surfaceHeight);
+
+  material.positionNode = vec3(east, sunk, tileA.y.add(local.y.mul(size)));
 
   // Gradient is per texel; the source tile's samples are this many metres apart.
   const cell = size.div(tileB.z).div(tileCells);

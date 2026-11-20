@@ -19,7 +19,7 @@ async function load() {
 
 type Loaded = Awaited<ReturnType<typeof load>>;
 
-const HEADING = "Te Whanganui-a-Tara/Wellington Loading...";
+const HEADING = "Te Whanganui-a-Tara/Wellington Loading 0%";
 
 afterEach(async () => {
   (await import("@testing-library/react")).cleanup();
@@ -41,6 +41,22 @@ describe("the intro", () => {
     expect(
       container.querySelector("wbr")?.previousElementSibling?.textContent
     ).toBe("/");
+  });
+
+  it("counts the scene's first view loading", async () => {
+    const l = await load();
+
+    l.render(<l.Intro hidden={false} />);
+
+    const heading = l.screen.getByRole("heading", { level: 1 });
+
+    l.act(() => l.setFirstViewProgress(0.42));
+    expect(heading.textContent).toBe(
+      "Te Whanganui-a-Tara/Wellington Loading 42%"
+    );
+
+    l.act(() => l.setFirstViewProgress(1));
+    expect(heading.textContent).toMatch(/Loading 100%$/);
   });
 
   it("fades out when hidden", async () => {
@@ -77,7 +93,6 @@ describe("the loading fill", () => {
 
     l.act(() => l.setFirstViewProgress(1));
     expect(percent(l)).toBe(100);
-    expect(l.screen.getByText("100%")).toBeTruthy();
   });
 
   it("leaves its rest to the stylesheet, and fades when hidden", async () => {

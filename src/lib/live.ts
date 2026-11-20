@@ -4,22 +4,27 @@ import type { Timetable } from "./cablecar";
 import type { CloudMap } from "./cloudMap";
 import type { Aircraft, RouteEnd } from "./flights";
 import { foldFlights } from "./flightStore";
+import type { GridFlow } from "./gridFlow";
 import {
   buses,
   cableCar,
   clouds,
   flights,
+  grid,
   metar,
   quakes,
+  radar,
   rain,
   routePrefix,
   routes,
   satellites,
+  signs,
   tide,
   timeline,
   traffic,
   trains,
   vessels,
+  waves,
   weather,
   windStations,
 } from "./liveRecords";
@@ -27,8 +32,10 @@ import { canRead, readNewest, readOldest, readSince } from "./liveTable";
 import { withObserved } from "./metar";
 import { loadPositions, type Positions } from "./positions";
 import type { Quake } from "./quakes";
+import { type Radar, RADAR_KEPT, toRadar } from "./radarGrid";
 import type { Rainfall } from "./rainGauges";
 import type { Orbit } from "./satellites";
+import type { SignsResponse } from "./signs";
 import type { Tide } from "./tide";
 import { nextDay, nzMidnight, type TimelineDay, toDay } from "./timeline";
 import type { TrafficResponse } from "./traffic";
@@ -36,6 +43,7 @@ import { type Train, TRAIL } from "./trains";
 import { foldTrains } from "./trainStore";
 import { TRAIL as VESSEL_TRAIL, type Vessel } from "./vessels";
 import { foldVessels } from "./vesselStore";
+import type { Waves } from "./waves";
 import type { Conditions } from "./weather";
 import type { WindReadings } from "./windStations";
 
@@ -220,6 +228,24 @@ export const loadTraffic = (
   );
 
 /**
+ * What NZTA's message signs were showing at `at` (or now), and when that
+ * was fetched; null if they've not been read.
+ */
+export const loadSigns = (
+  at?: number
+): Promise<Omit<SignsResponse, "time"> | null> =>
+  fromTable(
+    "signs",
+    async () => {
+      const newest = await readNewest(signs, "", at);
+
+      return newest && { fetched: newest.sk, ...newest.data };
+    },
+    (positions) => positions.signs,
+    at
+  );
+
+/**
  * MetService's newest conditions at `at` (or now), with what the airport
  * observed lately in their place (./metar.ts); null if there are none.
  */
@@ -330,12 +356,50 @@ export const loadRain = (at?: number): Promise<Rainfall | null> =>
     at
   );
 
+/** What the grid was last carrying at `at` (or now); null if it's not known. */
+export const loadGrid = (at?: number): Promise<GridFlow | null> =>
+  fromTable(
+    "grid",
+    async () => (await readNewest(grid, "", at))?.data ?? null,
+    (positions) => positions.grid,
+    at
+  );
+
 /** The weather stations' newest winds at `at` (or now); null if there are none. */
 export const loadWind = (at?: number): Promise<WindReadings | null> =>
   fromTable(
     "wind",
     async () => (await readNewest(windStations, "", at))?.data ?? null,
     (positions) => positions.wind,
+    at
+  );
+
+/** The wave buoy's newest reading at `at` (or now); null if there's none. */
+export const loadWaves = (at?: number): Promise<Waves | null> =>
+  fromTable(
+    "waves",
+    async () => (await readNewest(waves, "", at))?.data ?? null,
+    (positions) => positions.waves,
+    at
+  );
+
+/**
+ * The rain radar's scans from the half hour before `at` (or now), oldest
+ * first; none if it hasn't been read lately.
+ */
+export const loadRadar = (at?: number): Promise<Radar> =>
+  fromTable(
+    "radar",
+    async () => {
+      const now = at ?? Date.now();
+      const logged = await readSince(radar, now - RADAR_KEPT, at);
+
+      return toRadar(
+        logged.map(({ data }) => data),
+        now
+      );
+    },
+    (positions) => toRadar(positions.radar, Date.now()),
     at
   );
 

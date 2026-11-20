@@ -19,6 +19,11 @@ const CC_BY: Licence = {
   href: "https://creativecommons.org/licenses/by/4.0/",
 };
 
+const CC_BY_NZ: Licence = {
+  name: "CC BY 3.0 NZ",
+  href: "https://creativecommons.org/licenses/by/3.0/nz/",
+};
+
 const CC_BY_SA: Licence = {
   name: "CC BY-SA 4.0",
   href: "https://creativecommons.org/licenses/by-sa/4.0/",
@@ -40,6 +45,11 @@ export const MAP_CREDITS: Credit[] = [
       },
     ],
     licence: CC_BY,
+  },
+  {
+    what: "the sea floor, and the South Island on the horizon",
+    who: [{ name: "NIWA", href: "https://koordinates.com/layer/8678/" }],
+    licence: CC_BY_NZ,
   },
   {
     what: "3D buildings",
@@ -116,6 +126,46 @@ export const LIVE_CREDITS: Credit[] = [
     ],
   },
   {
+    // Served without a licence said; GWRC's terms for it are unconfirmed.
+    what: "the sea off Baring Head, by its wave buoy",
+    who: [
+      {
+        name: "Greater Wellington Regional Council",
+        href: "https://www.gw.govt.nz/environment/environmental-data-and-information/",
+      },
+    ],
+  },
+  {
+    // Its website's terms reserve its contents: no open licence.
+    what: "the HVDC link's transfer and the North Island's load",
+    who: [
+      {
+        name: "Transpower New Zealand",
+        href: "https://www.transpower.co.nz/system-operator/live-system-and-market-data/consolidated-live-data",
+      },
+    ],
+  },
+  {
+    // Only once the poller has a key for it (lib/gridFlow.ts).
+    what: "substation loads and wind farm output",
+    who: [
+      {
+        name: "Electricity Authority",
+        href: "https://www.emi.ea.govt.nz",
+      },
+    ],
+    licence: CC_BY,
+  },
+  {
+    // RainViewer's terms ask for its name and this link; the radars are
+    // MetService's.
+    what: "rain radar",
+    who: [
+      { name: "RainViewer", href: "https://www.rainviewer.com/" },
+      { name: "MetService", href: "https://www.metservice.com" },
+    ],
+  },
+  {
     what: "ship positions",
     who: [
       { name: "Open Waters AIS", href: "https://openwaters.io/ais/" },
@@ -137,7 +187,8 @@ export const LIVE_CREDITS: Credit[] = [
     licence: CC_BY,
   },
   {
-    what: "traffic speeds and counts",
+    // The speed limits are its National Speed Limit Register's.
+    what: "traffic speeds and counts, message signs, speed limits",
     who: [
       {
         name: "NZTA",

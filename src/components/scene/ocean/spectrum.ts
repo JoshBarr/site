@@ -1,8 +1,25 @@
 // Initial ocean spectrum for the FFT simulation (Tessendorf 2001), using a
 // JONSWAP energy spectrum with Mitsuyasu directional spreading. Computed on
 // the CPU whenever conditions change; the GPU only animates it.
+//
+// The longest cascade holds two seas in one: the open sea, as the wave buoy
+// off Baring Head measures it (or as the wind over a long fetch would raise
+// it, when the buoy's not heard from), and under it the sea the wind makes
+// of a harbour's few kilometres. What's built is the taller of the two,
+// wave by wave; `open` says how much of it is the open sea's alone, which
+// the surface scales back where the land's in the way (./shelter.ts).
 
 const G = 9.81;
+
+/** A sea's waves in open water. */
+export interface Sea {
+  /** Significant height, m. */
+  height: number;
+  /** Period of the dominant waves, s. */
+  period: number;
+  /** Degrees clockwise from north: where they come from. */
+  direction: number;
+}
 
 export interface OceanConditions {
   /** Metres per second at 10m. */
@@ -13,7 +30,40 @@ export interface OceanConditions {
   fetch: number;
   /** 0..1: narrows spreading toward long-travelled, aligned swell. */
   swell: number;
+  /**
+   * The open sea as it's measured. Left out, it's the wind's over `fetch`.
+   */
+  sea?: Sea | null;
 }
+
+/**
+ * The longest stretch of water the wind has to itself inside the harbour,
+ * m: Petone to the entrance. Its sea is what's left where the open sea's
+ * shut out.
+ */
+const HARBOUR_FETCH = 12_000;
+
+/**
+ * The periods a measured sea's drawn with, s. Shorter, and its waves are
+ * the finer cascades', which the wind already fills; longer, and fewer
+ * than two of them fit the longest cascade's patch.
+ */
+const SHORTEST = 3.6;
+const LONGEST = 14;
+
+/**
+ * A sea's height over its wavelength: a wind sea still being raised is
+ * this steep or more, swell that's run from far off this or less.
+ */
+const WIND_SEA = 0.03;
+const SWELL = 0.012;
+
+/** JONSWAP's peak for a wind sea, and how much sharper swell's is. */
+const PEAKED = 3.3;
+const SWELL_PEAKED = 7;
+
+/** `swell` for swell itself: its crests long and all one way. */
+const SWELL_NARROW = 1.4;
 
 /** Wellington's prevailing northerly, moderate. */
 export const DEFAULT_CONDITIONS: OceanConditions = {
@@ -64,9 +114,21 @@ export function significantHeight({ windSpeed, fetch }: OceanConditions) {
   return Math.min(0.0016 * u * Math.sqrt(fetch / G), (0.21 * u * u) / G);
 }
 
-function jonswap(omega: number, windSpeed: number, fetch: number) {
-  const alpha = 0.076 * Math.pow((windSpeed * windSpeed) / (fetch * G), 0.22);
-  const peak = peakOmega(windSpeed, fetch);
+/**
+ * The camera's headroom over the sea, m: the open sea's significant height,
+ * measured if it is, or else the wind's.
+ */
+export function openHeight(conditions: OceanConditions) {
+  return conditions.sea
+    ? Math.max(
+        conditions.sea.height,
+        significantHeight({ ...conditions, fetch: HARBOUR_FETCH })
+      )
+    : significantHeight(conditions);
+}
+
+/** JONSWAP's shape about `peak`, without its scale. */
+function peaked(omega: number, peak: number, sharpness: number) {
   const sigma = omega <= peak ? 0.07 : 0.09;
 
   const r = Math.exp(
@@ -74,10 +136,48 @@ function jonswap(omega: number, windSpeed: number, fetch: number) {
   );
 
   return (
-    ((alpha * G * G) / omega ** 5) *
+    (1 / omega ** 5) *
     Math.exp(-1.25 * (peak / omega) ** 4) *
-    Math.pow(3.3, r)
+    Math.pow(sharpness, r)
   );
+}
+
+function jonswap(omega: number, windSpeed: number, fetch: number) {
+  const alpha = 0.076 * Math.pow((windSpeed * windSpeed) / (fetch * G), 0.22);
+
+  return alpha * G * G * peaked(omega, peakOmega(windSpeed, fetch), PEAKED);
+}
+
+const smoothstep = (from: number, to: number, x: number) => {
+  const t = Math.min(Math.max((x - from) / (to - from), 0), 1);
+
+  return t * t * (3 - 2 * t);
+};
+
+/**
+ * How a measured sea's drawn: its peak, how sharp that is and how narrowly
+ * its waves keep to their direction, by how far it's come (0 a wind sea, 1
+ * swell), which its steepness tells.
+ */
+function seaShape(sea: Sea, swell: number) {
+  const period = Math.min(Math.max(sea.period, SHORTEST), LONGEST);
+  const length = (G * period * period) / (2 * Math.PI);
+  const travelled = 1 - smoothstep(SWELL, WIND_SEA, sea.height / length);
+
+  return {
+    period,
+    peak: (2 * Math.PI) / period,
+    sharpness: PEAKED + (SWELL_PEAKED - PEAKED) * travelled,
+    narrow: swell + (SWELL_NARROW - swell) * travelled,
+  };
+}
+
+/** Where waves from `direction` (degrees) head, as an angle in the xz plane. */
+function heading(direction: number) {
+  // Bearing clockwise from north; north is -z.
+  const bearing = ((direction + 180) * Math.PI) / 180;
+
+  return Math.atan2(-Math.cos(bearing), Math.sin(bearing));
 }
 
 /** Normalisation for cos^2s(θ/2) spreading, as a polynomial fit. */
@@ -137,6 +237,15 @@ export interface Spectrum {
   h0: Float32Array;
   /** Per sample: kx, kz, ω, 1/|k| */
   waves: Float32Array;
+  /**
+   * 0..1: how much of the longest cascade's energy is the open sea's alone,
+   * over the harbour's own. Where the open sea's shut out, that much goes.
+   */
+  open: number;
+  /** Degrees: where the open sea comes from. */
+  from: number;
+  /** The open sea's dominant wavelength, m. */
+  length: number;
 }
 
 /**
@@ -152,19 +261,29 @@ export function buildSpectrum(
   const windSpeed = Math.max(conditions.windSpeed, 0.5);
   const peak = peakOmega(windSpeed, conditions.fetch);
 
-  // Waves travel downwind. Bearing clockwise from north; north is -z.
-  const bearing = ((conditions.windDirection + 180) * Math.PI) / 180;
-  const windAngle = Math.atan2(-Math.cos(bearing), Math.sin(bearing));
+  // Waves travel downwind.
+  const windAngle = heading(conditions.windDirection);
+
+  const { sea } = conditions;
+  const shape = sea ? seaShape(sea, conditions.swell) : null;
+  const seaAngle = sea ? heading(sea.direction) : windAngle;
 
   const count = n * n;
   const h0 = new Float32Array(cascades.length * count * 4);
   const waves = new Float32Array(cascades.length * count * 4);
   const amplitude = new Float32Array(count * 2);
+  // Each sample's energy: what a harbour would have, and the open sea's.
+  const sheltered = new Float64Array(count);
+  const exposed = new Float64Array(count);
+  const xi = new Float64Array(count * 2);
+  let open = 0;
 
   cascades.forEach((cascade, c) => {
     const random = gaussianRandom(seed * 7919 + c * 104729);
     const dk = (2 * Math.PI) / cascade.size;
     const base = c * count * 4;
+    // The cascade the open sea's in: the others are the wind's, wherever.
+    const longest = c === 0;
 
     for (let z = 0; z < n; z++) {
       for (let x = 0; x < n; x++) {
@@ -173,31 +292,75 @@ export function buildSpectrum(
         const kz = (z - n / 2) * dk;
         const k = Math.hypot(kx, kz);
         const omega = Math.sqrt(G * k);
-        const [xi1, xi2] = random();
 
+        xi.set(random(), i * 2);
         waves.set([kx, kz, omega, k > 0 ? 1 / k : 0], base + i * 4);
-
-        let a = 0;
+        sheltered[i] = exposed[i] = 0;
 
         if (k > 1e-6 && k >= cascade.kMin && k < cascade.kMax) {
-          const theta = Math.atan2(kz, kx) - windAngle;
-          const dOmegaDk = G / (2 * omega);
+          const angle = Math.atan2(kz, kx);
+          // Per unit of wavenumber, from per unit of frequency.
+          const perK = G / (2 * omega) / k;
 
-          const energy =
-            (jonswap(omega, windSpeed, conditions.fetch) *
-              spreading(theta, omega, peak, conditions.swell) *
-              dOmegaDk) /
-            k;
+          const windSea =
+            jonswap(omega, windSpeed, conditions.fetch) *
+            spreading(angle - windAngle, omega, peak, conditions.swell) *
+            perK;
 
-          // h~(k) sums h0(k) and conj(h0(-k)), so each contributes half
-          // the energy: E|h~|² = S(k) dk².
-          a = Math.sqrt((energy * dk * dk) / 4);
+          if (!longest) {
+            sheltered[i] = windSea;
+          } else {
+            // The same sea, without the waves a harbour's too short to raise.
+            sheltered[i] =
+              jonswap(omega, windSpeed, conditions.fetch) <=
+              jonswap(omega, windSpeed, HARBOUR_FETCH)
+                ? windSea
+                : jonswap(omega, windSpeed, HARBOUR_FETCH) *
+                  spreading(angle - windAngle, omega, peak, conditions.swell) *
+                  perK;
+
+            exposed[i] = shape
+              ? peaked(omega, shape.peak, shape.sharpness) *
+                spreading(angle - seaAngle, omega, shape.peak, shape.narrow) *
+                perK
+              : windSea;
+          }
         }
-
-        amplitude[i * 2] = xi1 * a;
-        amplitude[i * 2 + 1] = xi2 * a;
       }
     }
+
+    // How much of each sample's energy the dice gave it: 1 on average.
+    const dealt = (i: number) => (xi[i * 2] ** 2 + xi[i * 2 + 1] ** 2) / 2;
+    let scale = 1;
+
+    if (longest && sea) {
+      // A measured sea is as high as it was measured: its handful of long
+      // waves, as the dice fell, add up to its significant height.
+      let drawn = 0;
+
+      for (let i = 0; i < count; i++) drawn += dealt(i) * exposed[i] * dk * dk;
+
+      scale = drawn > 0 ? (sea.height / 4) ** 2 / drawn : 0;
+    }
+
+    let harbours = 0;
+    let beyond = 0;
+
+    for (let i = 0; i < count; i++) {
+      const energy = Math.max(sheltered[i], exposed[i] * scale);
+
+      // h~(k) sums h0(k) and conj(h0(-k)), so each contributes half
+      // the energy: E|h~|² = S(k) dk².
+      const a = Math.sqrt((energy * dk * dk) / 4);
+
+      amplitude[i * 2] = xi[i * 2] * a;
+      amplitude[i * 2 + 1] = xi[i * 2 + 1] * a;
+
+      harbours += dealt(i) * sheltered[i];
+      beyond += dealt(i) * (energy - sheltered[i]);
+    }
+
+    if (longest) open = beyond > 0 ? beyond / (harbours + beyond) : 0;
 
     for (let z = 0; z < n; z++) {
       for (let x = 0; x < n; x++) {
@@ -216,5 +379,13 @@ export function buildSpectrum(
     }
   });
 
-  return { h0, waves };
+  const period = shape?.period ?? (2 * Math.PI) / peak;
+
+  return {
+    h0,
+    waves,
+    open,
+    from: sea?.direction ?? conditions.windDirection,
+    length: (G * period * period) / (2 * Math.PI),
+  };
 }

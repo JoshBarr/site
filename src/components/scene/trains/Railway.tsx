@@ -11,6 +11,8 @@ import { switchedOff } from "../stats";
 import { TileIndex } from "../terrain/manifest";
 import { railBores } from "../tunnels/bores";
 import { Bores } from "../tunnels/Tunnels";
+import { type Crossing, loadCrossings, Watch } from "./crossingWatch";
+import { Crossings } from "./Crossings";
 import { createTrackChunks } from "./geometry";
 import { loadRailNetwork, RailNetwork } from "./network";
 import { Trains } from "./Trains";
@@ -91,9 +93,14 @@ export function Tracks({ network }: { network: RailNetwork }) {
   return <primitive object={group} name="railway track" />;
 }
 
+/** `?crossings=down` holds every level crossing down, for looking at them. */
+const crossingsDown = () =>
+  new URLSearchParams(location.search).get("crossings") === "down";
+
 /**
- * The railway: its track near the camera, its tunnels, and Metlink's trains
- * running live wherever they are on the map.
+ * The railway: its track near the camera, its tunnels, Metlink's trains
+ * running live wherever they are on the map, and the level crossings
+ * flashing for them.
  * `lights` (0..1), how far through lighting-up, lights the trains for night.
  */
 export function Railway({
@@ -104,12 +111,23 @@ export function Railway({
   lights?: number;
 }) {
   const [network, setNetwork] = useState<RailNetwork | null>(null);
+  const [crossings, setCrossings] = useState<Crossing[] | null>(null);
 
   useEffect(() => {
     loadRailNetwork(index).then(setNetwork, (e) => console.error(e));
+
+    // Without them the trains still run.
+    if (!switchedOff("crossings")) {
+      loadCrossings(index).then(setCrossings, (e) => console.error(e));
+    }
   }, [index]);
 
   const bores = useMemo(() => network && railBores(network), [network]);
+
+  const watch = useMemo(
+    () => crossings && new Watch(crossings, crossingsDown()),
+    [crossings]
+  );
 
   if (!network || !bores) return null;
 
@@ -117,7 +135,8 @@ export function Railway({
     <>
       <Tracks network={network} />
       {!switchedOff("tunnels") && <Bores bores={bores} name="rail tunnels" />}
-      <Trains index={index} network={network} lights={lights} />
+      <Trains index={index} network={network} lights={lights} watch={watch} />
+      {watch && <Crossings watch={watch} />}
     </>
   );
 }

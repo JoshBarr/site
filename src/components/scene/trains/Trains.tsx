@@ -63,6 +63,7 @@ import {
 } from "./models";
 import { createModelMaterial, isNear, NearModels } from "../models/lod";
 import { useTrains } from "./useTrains";
+import type { Watch } from "./crossingWatch";
 import { sceneNow, useSeek } from "../clock";
 import type { Line } from "../../../lib/trains";
 import {
@@ -386,16 +387,19 @@ const turned = new Quaternion();
  * Metlink's trains at their live positions, run along the tracks from fix
  * to fix a little behind live, with trails behind them. Each one's cars
  * follow the curves. `lights` (0..1), how far through lighting-up, lights
- * their windows and head and tail lights, for night.
+ * their windows and head and tail lights, for night. `watch` is told where
+ * each is drawn, for the level crossings to go by.
  */
 export function Trains({
   index,
   network,
   lights = 0,
+  watch,
 }: {
   index: TileIndex;
   network: RailNetwork;
   lights?: number;
+  watch?: Watch | null;
 }) {
   const trains = useTrains();
   const { epoch } = useSeek();
@@ -531,6 +535,7 @@ export function Trains({
     spots.begin();
 
     for (const model of Object.values(detailed.models)) model.begin();
+    watch?.begin();
     runs.forEach((run, i) => {
       const { train, fixes } = run;
       const latest = fixes[fixes.length - 1].time;
@@ -549,6 +554,7 @@ export function Trains({
 
       playheads.current.set(train.id, playhead);
       trails.playheads.array[i] = playhead;
+      watch?.see(run, playhead, target);
 
       // The fix is taken as the middle of the train; it runs toward +s.
       const head = distanceAt(run, playhead) + run.length / 2;
@@ -605,6 +611,7 @@ export function Trains({
     });
 
     for (const model of Object.values(detailed.models)) model.end();
+    watch?.settle(target + DELAY / 1000);
 
     cars.mesh.count = count;
     cars.mesh.instanceMatrix.needsUpdate = true;

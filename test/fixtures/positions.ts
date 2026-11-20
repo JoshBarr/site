@@ -17,12 +17,16 @@ const nothing: Positions = {
   aircraft: [],
   vessels: [],
   traffic: null,
+  signs: null,
   weather: null,
   quakes: [],
   tide: null,
   rain: null,
+  grid: null,
   wind: null,
   clouds: null,
+  waves: null,
+  radar: [],
 };
 
 /** Answers for the positions with `respond`. */

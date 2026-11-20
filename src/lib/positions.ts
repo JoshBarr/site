@@ -7,12 +7,16 @@ import {
   conditions,
   fix,
   gauges,
+  gridFlow,
   quake,
+  radarScan,
   routeEnd,
   seaLevel,
+  signMessages,
   speeds,
   trainFix,
   vessel,
+  waveReading,
   windReadings,
 } from "./liveRecords";
 import { readJson, trailPoint } from "./schemas";
@@ -41,6 +45,8 @@ export const positions = z.object({
   vessels: z.array(vessel),
   /** Null until NZTA's been heard from. */
   traffic: speeds.extend({ fetched: z.number() }).nullable(),
+  /** Null until NZTA's message signs have been read. */
+  signs: signMessages.extend({ fetched: z.number() }).nullable().default(null),
   /** Null until MetService has; with the airport's METAR in it, if lately. */
   weather: conditions.nullable(),
   /** Missing from those published before quakes were polled. */
@@ -49,10 +55,16 @@ export const positions = z.object({
   tide: seaLevel.nullable().default(null),
   /** Null until the rain gauges have been heard from. */
   rain: gauges.nullable().default(null),
+  /** Null until the grid's been heard from. */
+  grid: gridFlow.nullable().default(null),
   /** Null until the weather stations have been heard from. */
   wind: windReadings.nullable().default(null),
   /** Null until Himawari's been looked at. */
   clouds: cloudMap.nullable().default(null),
+  /** Null until the wave buoy has been heard from. */
+  waves: waveReading.nullable().default(null),
+  /** The rain radar's scans from the last half hour; none before it was read. */
+  radar: z.array(radarScan).default([]),
 });
 
 export type Positions = z.infer<typeof positions>;

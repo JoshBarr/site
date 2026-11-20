@@ -6,8 +6,11 @@ import type { CloudMap } from "./cloudMap";
 import type { Fix, RouteEnd } from "./flights";
 import type { Sighting } from "./flightStore";
 import type { CloudLayer, Observation } from "./metar";
+import { type GridFlow, SITES } from "./gridFlow";
 import type { Quake } from "./quakes";
+import type { RadarScan } from "./radarGrid";
 import type { Gauge, Rainfall } from "./rainGauges";
+import type { SignMessages } from "./signs";
 import { orbit } from "./satellites";
 import { point, trailPoint } from "./schemas";
 import type { TrafficSpeeds } from "./traffic";
@@ -15,6 +18,7 @@ import type { Tide } from "./tide";
 import { METRICS, SLOTS, type TimelineHour } from "./timeline";
 import type { Train } from "./trains";
 import type { Vessel } from "./vessels";
+import type { Waves } from "./waves";
 import type { Conditions } from "./weather";
 import type { StationReading, WindReadings } from "./windStations";
 
@@ -284,6 +288,17 @@ export const gauges = z.object({
   gauges: z.array(gauge),
 }) satisfies z.ZodType<Rainfall>;
 
+const megawatts = z.object({ time: z.number(), mw: z.number() });
+const bySite = z.partialRecord(z.enum(SITES), z.number());
+
+export const gridFlow = z.object({
+  hvdc: megawatts.nullable(),
+  northIsland: megawatts.nullable(),
+  sites: z
+    .object({ time: z.number(), load: bySite, generation: bySite })
+    .nullable(),
+}) satisfies z.ZodType<GridFlow>;
+
 const stationReading = z.object({
   site: z.string(),
   speed: z.number(),
@@ -296,8 +311,30 @@ export const windReadings = z.object({
   stations: z.array(stationReading),
 }) satisfies z.ZodType<WindReadings>;
 
+export const waveReading = z.object({
+  time: z.number(),
+  height: z.number(),
+  period: z.number(),
+  direction: z.number(),
+}) satisfies z.ZodType<Waves>;
+
+export const radarScan = z.object({
+  time: z.number(),
+  cells: z.string(),
+}) satisfies z.ZodType<RadarScan>;
+
 /** NZTA's speeds. */
 export const traffic = log("traffic", speeds);
+
+export const signMessages = z.object({
+  messages: z.record(z.string(), z.string()),
+}) satisfies z.ZodType<SignMessages>;
+
+/**
+ * What NZTA's message signs on the highways are showing, when any's
+ * changed.
+ */
+export const signs = log("signs", signMessages);
 
 /** MetService's conditions for the hour. */
 export const weather = log("weather", conditions);
@@ -314,6 +351,12 @@ export const tide = log("tide", seaLevel);
 /** How hard it's raining at each of GWRC's gauges, every five minutes. */
 export const rain = log("rain", gauges);
 
+/**
+ * What the grid's carrying (./gridFlow.ts): the HVDC link's transfer, the
+ * North Island's load and, with a key, each substation's, when any is newer.
+ */
+export const grid = log("grid", gridFlow);
+
 /** The wind at each of GWRC's weather stations, every five minutes. */
 export const windStations = log("wind", windReadings);
 
@@ -322,6 +365,12 @@ export const metar = log("metar", observation);
 
 /** Where Himawari saw cloud over the map, each scan once (every 10 min). */
 export const clouds = log("cloudmap", cloudMap);
+
+/** The sea off Baring Head by GWRC's wave buoy, each half hour's once. */
+export const waves = log("waves", waveReading);
+
+/** Where the rain radar saw rain over the map, each frame once (every 10 min). */
+export const radar = log("radar", radarScan);
 
 /** Every airport on a callsign's route, or null if adsb.im doesn't know it. */
 export const routes = collection("routes", 1, {

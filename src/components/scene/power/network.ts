@@ -34,12 +34,15 @@ export interface PlacedTower {
 export const WIRE_STRIDE = 8;
 
 interface PowerNetwork {
+  /** One to a structure, in their order. */
   towers: PlacedTower[];
   /**
    * Each wire hangs between two points, dipping `sag` m below the straight
    * line between them at mid-span, and is drawn `gauge` m thick.
    */
   wires: Float32Array;
+  /** The span each wire's strung across, by its place in the list. */
+  strung: Uint16Array;
 }
 
 /**
@@ -316,9 +319,7 @@ export function layOut(
   });
 
   const wires: number[] = [];
-
-  const string = (from: End, to: End, sag: number, gauge: number) =>
-    wires.push(...from.point, ...to.point, sag, gauge);
+  const strung: number[] = [];
 
   spans.forEach(([a, b, at, rise], span) => {
     const from = nodes[a];
@@ -397,6 +398,11 @@ export function layOut(
       )
     );
 
+    const string = (start: End, end: End, dip: number, thick: number) => {
+      wires.push(...start.point, ...end.point, dip, thick);
+      strung.push(span);
+    };
+
     for (const [start, end] of pairs) string(start, end, sag, gauge);
 
     // Earth wires run tower to tower, the leftmost to the leftmost.
@@ -425,5 +431,6 @@ export function layOut(
       height,
     })),
     wires: new Float32Array(wires),
+    strung: Uint16Array.from(strung),
   };
 }

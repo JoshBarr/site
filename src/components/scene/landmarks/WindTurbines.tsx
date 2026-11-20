@@ -31,6 +31,7 @@ import {
   shouldRun,
   TurbineModel,
   windAtHub,
+  windForOutput,
 } from "./turbineModels";
 
 export interface Wind {
@@ -85,22 +86,29 @@ interface TurbineState {
  * spinner, blades). Each faces into the wind and turns at the speed its
  * controller would choose for the wind at its hub.
  *
- * `positions` are world [x, y, z] of each tower base.
+ * `positions` are world [x, y, z] of each tower base. `output`, if given,
+ * is how much of its rated power each one's farm is known to be sending
+ * out (0..1), or null where it isn't: those known turn as they would to
+ * send that, whatever the wind's taken to be, and face as it says.
  */
 export function WindTurbines({
   model,
   positions,
   wind,
+  output,
   timeScale = 1,
 }: {
   model: TurbineModel;
   positions: [number, number, number][];
   wind: Wind;
+  output?: (number | null)[];
   /** Speeds up the simulation, e.g. to watch nacelles slew. */
   timeScale?: number;
 }) {
   const windRef = useRef(wind);
   windRef.current = wind;
+  const outputRef = useRef(output);
+  outputRef.current = output;
   const timeScaleRef = useRef(timeScale);
   timeScaleRef.current = timeScale;
 
@@ -139,10 +147,17 @@ export function WindTurbines({
     const from = (direction * Math.PI) / 180;
     const hubWind = windAtHub(model, speed);
 
+    /** The steady wind turbine `i` runs by: its farm's output's, if known. */
+    const steady = (i: number) => {
+      const share = outputRef.current?.[i] ?? null;
+
+      return share === null ? hubWind : windForOutput(model, share, hubWind);
+    };
+
     if (!state.current) {
       // Start settled: facing the wind (within the deadband), up to speed.
       state.current = positions.map((_, i) => {
-        const wind = hubWind * variety[i].exposure;
+        const wind = steady(i) * variety[i].exposure;
         const running = shouldRun(model, wind, false);
         const { rpm, pitch } = operatingPoint(model, wind, running);
 
@@ -180,7 +195,7 @@ export function WindTurbines({
       const fluctuation = 0.65 * gust(t - delay, 0) + 0.35 * gust(t, phase);
 
       const wind = Math.max(
-        hubWind * exposure * (1 + TURBULENCE * fluctuation),
+        steady(i) * exposure * (1 + TURBULENCE * fluctuation),
         0
       );
 
