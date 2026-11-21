@@ -625,7 +625,7 @@ export const makeFeeds = Effect.gen(function* () {
   const logs = yield* Effect.all({
     flights: flightsFeed(routeMemory),
 
-    // Buses never go quiet, so every poll writes; they're drawn 45 s behind
+    // Buses never go quiet, so every poll writes; they're drawn 60 s behind
     // along their routes, so 20 s apart loses little.
     buses: feed({
       log: buses,

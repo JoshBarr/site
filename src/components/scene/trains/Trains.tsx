@@ -89,10 +89,14 @@ const MAX_DETAILED = 24;
 const DELAY = 60_000;
 
 /**
- * Seconds over which a train that's fallen behind (it waited at its last
- * fix for the next) makes the time up, at up to three times the pace.
+ * Seconds behind at which a train that's waited at its last fix for the
+ * next is making the time up at its fastest, FASTER than the usual pace;
+ * closer than that, it eases back to it.
  */
 const CATCH_UP = 10;
+
+/** How much faster a train making time up goes: more reads as racing. */
+const FASTER = 0.5;
 
 /** Light pink-purple, against the scene's greys: it's data, like the others. */
 const TRAIL_COLOR = new Color(0.9, 0.62, 1);
@@ -547,7 +551,7 @@ export function Trains({
         playhead = Math.min(target, latest);
       } else {
         const rate =
-          1 + Math.min(Math.max((target - playhead) / CATCH_UP, 0), 2);
+          1 + Math.min(Math.max((target - playhead) / CATCH_UP, 0), 1) * FASTER;
 
         playhead = Math.min(playhead + delta * rate, target, latest);
       }

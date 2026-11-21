@@ -38,16 +38,22 @@ const MAX_BUSES = 640;
 
 /**
  * Buses are drawn this far behind live, ms, so there's nearly always a fix
- * ahead of them to run to: like the trains, they report about every 30
- * seconds, and the fix takes a while to reach the page.
+ * ahead of them to run to. They report every 5 seconds, but the poller
+ * asks every 20, and with /api/buses's cache and the page's own polls a
+ * bus's newest fix is up to ~55 s old when it arrives (measured
+ * 2026-11-20; at 45 s, buses stood waiting 10 to 20 s at a time).
  */
-const DELAY = 45_000;
+const DELAY = 60_000;
 
 /**
- * Seconds over which a bus that's fallen behind (it waited at its last fix
- * for the next) makes the time up, at up to three times the pace.
+ * Seconds behind at which a bus that's waited at its last fix for the next
+ * is making the time up at its fastest, FASTER than the usual pace; closer
+ * than that, it eases back to it.
  */
 const CATCH_UP = 10;
+
+/** How much faster a bus making time up goes: more reads as racing. */
+const FASTER = 0.5;
 
 /**
  * A single-decker, near enough: Metlink runs double-deckers on some routes
@@ -335,7 +341,7 @@ function Fleet({
         playhead = Math.min(target, latest);
       } else {
         const rate =
-          1 + Math.min(Math.max((target - playhead) / CATCH_UP, 0), 2);
+          1 + Math.min(Math.max((target - playhead) / CATCH_UP, 0), 1) * FASTER;
 
         playhead = Math.min(playhead + delta * rate, target, latest);
       }

@@ -26,7 +26,7 @@ export default async function handler(
     const time = at ?? Date.now();
     res.setHeader(
       "Cache-Control",
-      // Buses are drawn 45 s behind live; a fix can wait up to 20 s to be
+      // Buses are drawn 60 s behind live; a fix can wait up to 20 s to be
       // polled, then 10 s here and up to 10 s more served stale.
       cacheFor("public, s-maxage=10, stale-while-revalidate=10", at)
     );
