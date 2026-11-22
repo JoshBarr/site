@@ -13,6 +13,7 @@ import {
   float,
   max,
   mx_noise_float,
+  pow,
   sqrt,
   texture,
   time,
@@ -36,9 +37,13 @@ const SIZE = 512;
 /**
  * Upwind of a point, how far to look for land, m: each sample marks the end
  * of a stretch, so the fetch is the open stretches added up to the first
- * shore.
+ * shore. Close enough together that a shore falls part way along a stretch,
+ * not at its end: with five, from 150 m to 6 km, mid-harbour's 2.5 km of
+ * water to the north-north-west came out as 1 km, the 1.5 km before the
+ * sample that found the shore all taken for land. Past GROWN_89 the fetch
+ * makes no more difference.
  */
-const UPWIND = [150, 400, 1000, 2500, 6000];
+const UPWIND = [100, 200, 350, 550, 800, 1100, 1500, 2000, 2600, 3300, 4000];
 
 /** Fetch the finer cascades need to be fully grown, m. */
 const GROWN_89 = 4000;
@@ -101,10 +106,19 @@ export function loadSeaWind() {
 }
 
 /**
+ * How much of the sea's whitecapped in a wind of so many m/s at 10 m, out
+ * where the waves have grown (Monahan & O'Muircheartaigh 1980: 1.5% at
+ * 11 m/s, 10% at 20). Under about 4 m/s, none to speak of.
+ */
+const whitecapped = (speed) => pow(speed, 3.41).mul(3.84e-6).min(0.15);
+
+/**
  * How built-up the sea is at world `xz` against the open sea's, for the
  * 89 m and 13 m cascades: (local wind / open wind)² for how hard it blows,
- * times how far the waves have grown over the fetch, times the gusts. For
- * the vertex stage; pass it on to the fragment's in a varying.
+ * times how far the waves have grown over the fetch, times the gusts; and
+ * the share of it that's whitecapped, by the wind there and the fetch; and
+ * that wind, m/s. For
+ * the vertex stage; pass them on to the fragment's in a varying.
  */
 export function seaWindiness(xz, rootSize: number) {
   const half = rootSize / 2;
@@ -127,8 +141,11 @@ export function seaWindiness(xz, rootSize: number) {
 
   for (const to of UPWIND) {
     const p = xz.add(upwind.mul(to));
+    const before = reach;
     reach = reach.mul(float(1).sub(texture(land, uvOf(p)).level(float(0)).r));
-    stretch = stretch.add(reach.mul(to - from));
+    // Open as far as the shore, wherever along the stretch that is: half
+    // of it, as near as two ends tell.
+    stretch = stretch.add(before.add(reach).mul((to - from) / 2));
     from = to;
   }
 
@@ -146,5 +163,13 @@ export function seaWindiness(xz, rootSize: number) {
     .mul(GUSTINESS * 2)
     .add(1);
 
-  return clamp(grown.mul(ratio.mul(ratio)).mul(gust), LEAST, MOST);
+  const speed = open.mul(ratio).mul(gust);
+
+  return {
+    built: clamp(grown.mul(ratio.mul(ratio)).mul(gust), LEAST, MOST),
+    // Short of its fetch, a sea breaks in smaller and fewer crests.
+    whitecaps: whitecapped(speed).mul(grown.x),
+    /** The wind here, m/s. */
+    speed,
+  };
 }

@@ -217,6 +217,28 @@ describe("the spectrum", () => {
     expect(measured.open).toBeLessThan(0.3);
   });
 
+  it("says how far each cascade's surface squeezes: as far as it slopes", () => {
+    const fresh = { ...light, windSpeed: 11, windDirection: 336 };
+    const spectrum = buildSpectrum(N, cascades, fresh);
+
+    cascades.forEach((_, c) => {
+      let slopes = 0;
+
+      for (let i = c * N * N; i < (c + 1) * N * N; i++) {
+        const k2 = spectrum.waves[i * 4] ** 2 + spectrum.waves[i * 4 + 1] ** 2;
+
+        for (let j = 0; j < 4; j++) slopes += spectrum.h0[i * 4 + j] ** 2 * k2;
+      }
+
+      expect(spectrum.folding[c]).toBeCloseTo(Math.sqrt(slopes), 4);
+    });
+
+    // A fresh breeze squeezes the wind's waves more than a light one does.
+    const calmer = buildSpectrum(N, cascades, light);
+
+    expect(spectrum.folding[1]).toBeGreaterThan(calmer.folding[1]);
+  });
+
   it("deals the same dice whatever the sea, so it doesn't reshuffle", () => {
     const a = buildSpectrum(N, cascades, light);
     const b = buildSpectrum(N, cascades, light);

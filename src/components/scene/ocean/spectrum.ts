@@ -246,6 +246,12 @@ export interface Spectrum {
   from: number;
   /** The open sea's dominant wavelength, m. */
   length: number;
+  /**
+   * Per cascade, how far its surface's spread or squeeze (the jacobian,
+   * less 1) strays, as a standard deviation: the same as its slope's, as
+   * the choppiness stands at 1. What's far out at its tail is a whitecap.
+   */
+  folding: number[];
 }
 
 /**
@@ -277,6 +283,7 @@ export function buildSpectrum(
   const exposed = new Float64Array(count);
   const xi = new Float64Array(count * 2);
   let open = 0;
+  const folding: number[] = [];
 
   cascades.forEach((cascade, c) => {
     const random = gaussianRandom(seed * 7919 + c * 104729);
@@ -345,6 +352,7 @@ export function buildSpectrum(
 
     let harbours = 0;
     let beyond = 0;
+    let squeeze = 0;
 
     for (let i = 0; i < count; i++) {
       const energy = Math.max(sheltered[i], exposed[i] * scale);
@@ -356,11 +364,16 @@ export function buildSpectrum(
       amplitude[i * 2] = xi[i * 2] * a;
       amplitude[i * 2 + 1] = xi[i * 2 + 1] * a;
 
+      // Each wave's squeeze is k times its height.
+      const k2 = waves[base + i * 4] ** 2 + waves[base + i * 4 + 1] ** 2;
+      squeeze += 2 * dealt(i) * 2 * a * a * k2;
+
       harbours += dealt(i) * sheltered[i];
       beyond += dealt(i) * (energy - sheltered[i]);
     }
 
     if (longest) open = beyond > 0 ? beyond / (harbours + beyond) : 0;
+    folding.push(Math.sqrt(squeeze));
 
     for (let z = 0; z < n; z++) {
       for (let x = 0; x < n; x++) {
@@ -387,5 +400,6 @@ export function buildSpectrum(
     open,
     from: sea?.direction ?? conditions.windDirection,
     length: (G * period * period) / (2 * Math.PI),
+    folding,
   };
 }

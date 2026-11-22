@@ -5,6 +5,7 @@ import {
   LinearMipmapLinearFilter,
   RepeatWrapping,
   StorageTexture,
+  Vector3,
   WebGPURenderer,
 } from "three/webgpu";
 import {
@@ -66,6 +67,11 @@ export class OceanSimulation {
   readonly time = uniform(0);
   /** Horizontal displacement scale; higher is sharper crests. */
   readonly choppiness = uniform(1);
+  /**
+   * The spread of each cascade's jacobian about 1, as the spectrum has it
+   * (./spectrum.ts `folding`).
+   */
+  readonly folding = uniform(new Vector3());
 
   private h0: any;
   private waves: any;
@@ -104,6 +110,8 @@ export class OceanSimulation {
   /** Builds the sea for `conditions`; gives back what it's made of. */
   setConditions(conditions: OceanConditions) {
     const spectrum = buildSpectrum(this.size, this.cascades, conditions);
+
+    this.folding.value.fromArray(spectrum.folding);
 
     for (const [node, data] of [
       [this.h0, spectrum.h0],

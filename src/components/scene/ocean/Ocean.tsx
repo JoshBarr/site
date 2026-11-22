@@ -9,18 +9,22 @@ import {
   NoColorSpace,
   Texture,
   TextureLoader,
+  Vector3,
   WebGPURenderer,
 } from "three/webgpu";
 import {
   cameraFar,
   cameraNear,
   cameraPosition,
+  cameraProjectionMatrix,
+  cameraViewMatrix,
   dFdx,
   dFdy,
   dot,
   exp,
   float,
   linearDepth,
+  log,
   log2,
   max,
   mix,
@@ -30,14 +34,20 @@ import {
   pow,
   reflect,
   reflector,
+  screenUV,
+  select,
   smoothstep,
+  sqrt,
   texture,
+  uniform,
   vec2,
   varying,
   vec3,
+  vec4,
   viewportLinearDepth,
 } from "three/tsl";
 import { TERRAIN_URL, TileIndex } from "../terrain/manifest";
+import { verticalScale } from "../terrain/Terrain";
 import {
   cloudShadow,
   nearShadow,
@@ -149,6 +159,114 @@ function createSurfaceGeometry(segments: number) {
   return geometry;
 }
 
+/**
+ * How many standard deviations up a normal distribution leaves `share` of
+ * it above (Abramowitz & Stegun 26.2.23, to 0.0005).
+ */
+function belowShare(share) {
+  const t = sqrt(log(max(share, 1e-6)).mul(-2));
+
+  return t.sub(
+    t
+      .mul(0.010328)
+      .add(0.802853)
+      .mul(t)
+      .add(2.515517)
+      .div(t.mul(0.001308).add(0.189269).mul(t).add(1.432788).mul(t).add(1))
+  );
+}
+
+/** The mirror as it was: nudged a little by the drawn slope (?off=searough). */
+function roughMirrorBefore(mirror: ReturnType<typeof reflector>, slope) {
+  if (mirror.uvNode) mirror.uvNode = mirror.uvNode.add(slope.mul(0.12));
+
+  return mirror.rgb;
+}
+
+/**
+ * Half the mirror's spread, either side, in its slope's standard deviations,
+ * and how much each tap counts: a Gaussian's, five taps across.
+ */
+const TAPS = [-1.6, -0.8, 0, 0.8, 1.6].map((at) => ({
+  at,
+  weight: Math.exp(-0.5 * at * at),
+}));
+
+/**
+ * Winds at which the sea starts to lose its mirror and has lost it, m/s at
+ * 10 m: under a light air, glassy; by a moderate breeze, as rough as its
+ * waves.
+ */
+const GLASSY = 1;
+const RUFFLED = 7;
+
+/** The mirror smeared no further than this, of the screen's height. */
+const WIDEST = 0.3;
+
+/**
+ * The mirror off a rough sea. A facet that leans toward the eye by a slope
+ * s turns the reflected ray up by 2s, which on screen is s times the lens's
+ * cot(fov / 2) of its height lower down; leaning sideways it turns the ray
+ * sideways, by less the lower the eye looks across it. So the drawn waves
+ * move the reflection that far, and the waves too fine to draw (`rough`,
+ * their slope's variance) smear it up and down by as much, as the long
+ * shimmering streaks a windy sea makes of a shore's lights. Without that a
+ * gale left the far harbour a mirror of the hills, as still as a calm.
+ *
+ * Above the horizon the mirror has nothing in it (the reflected ray goes
+ * down, under the sea), so nothing's taken from closer to it than the
+ * pixel is.
+ */
+function roughMirror(mirror: ReturnType<typeof reflector>, slope, rough, view) {
+  const base: any = mirror.uvNode!;
+  // cot(fov / 2): the projection's y scale.
+  // SAFETY: a mat4 node's element(i) is its column i, which three's types
+  // leave off UniformNode.
+  const lens = (cameraProjectionMatrix as any).element(1).y;
+
+  // Along the ground, from the sea to the eye.
+  const flat = view.xz.length();
+  const eyeward = view.xz.div(max(flat, 1e-4));
+  const leaning = slope.dot(eyeward).negate();
+  const sideways = slope.dot(vec2(eyeward.y.negate(), eyeward.x));
+
+  // Screen y runs down: lower on the screen is higher in the reflection.
+  const moved = vec2(sideways.mul(view.y), leaning).mul(lens);
+
+  // Where the horizon is, straight up the screen from here: where the way
+  // to the eye, turned round and levelled, vanishes.
+  const away = cameraProjectionMatrix.mul(
+    cameraViewMatrix.mul(vec4(eyeward.x.negate(), 0, eyeward.y.negate(), 0))
+  );
+
+  const horizon = select(
+    away.w.greaterThan(1e-4),
+    float(0.5).sub(away.y.div(away.w).mul(0.5)),
+    float(-1)
+  );
+
+  const nearest = mix(horizon, screenUV.y, 0.1);
+  const spread: any = sqrt(rough.mul(0.5)).mul(lens).min(WIDEST);
+
+  let sum: any = vec3(0);
+  let total = 0;
+
+  for (const { at, weight } of TAPS) {
+    const uv = base.add(moved).add(vec2(0, spread.mul(at)));
+    const kept = vec2(uv.x, max(uv.y, nearest));
+
+    // The middle tap is the mirror itself, which keeps it in the material.
+    if (at === 0) mirror.uvNode = kept;
+
+    const tap = at === 0 ? mirror : mirror.sample(kept);
+
+    sum = sum.add(tap.rgb.mul(weight));
+    total += weight;
+  }
+
+  return sum.div(total);
+}
+
 /** Without a simulation the sea is flat but shaded the same way. */
 function createMaterial(
   simulation: OceanSimulation | null,
@@ -160,6 +278,7 @@ function createMaterial(
   const displacements = simulation?.displacement ?? [];
   const derivatives = simulation?.derivatives ?? [];
   const fftSize = simulation?.size ?? 1;
+  const folding = simulation?.folding ?? uniform(new Vector3());
   const { rootSize } = index.manifest;
   const maxDepth = index.manifest.water?.maxDepth ?? 30;
   const sqrtEncoded = index.manifest.water?.encoding === "sqrt";
@@ -184,15 +303,26 @@ function createMaterial(
   const gusting = !switchedOff("seawind");
   const sheltering = !switchedOff("shelter");
 
+  const windy = gusting ? seaWindiness(world, rootSize) : null;
+
+  // (open sea, 89 m cascade, 13 m cascade, share whitecapped)
   const local: any = varying(
-    vec3(
+    vec4(
       sheltering ? seaStanding(world, rootSize) : float(1),
-      gusting ? seaWindiness(world, rootSize) : vec2(1)
+      windy ? windy.built : vec2(1),
+      windy ? windy.whitecaps : float(0)
     )
   );
 
+  // The wind here, m/s.
+  const breeze: any = varying(windy ? windy.speed : openWind.length());
+
   const builtUp = (c: number) =>
     c === 0 ? local.x : c === 1 ? local.y : local.z;
+
+  // The land's drawn this much taller than it is (../terrain/Terrain.tsx),
+  // and its sea with it: the waves' rise, and so their slopes.
+  const rise = vec3(1, verticalScale, 1);
 
   let displacement: any = vec3(0);
   cascades.forEach(({ size }, c) => {
@@ -204,6 +334,7 @@ function createMaterial(
         .level(float(0))
         .xyz.mul(fade)
         .mul(builtUp(c))
+        .mul(rise)
     );
   });
 
@@ -227,33 +358,53 @@ function createMaterial(
 
   let slope: any = vec2(0);
   let jacobian: any = float(1);
+  // How far the jacobian strays here, squared, and how far below the
+  // 89 m cascade's waves the pixel is: by then its whitecaps are too.
+  let folds: any = float(0);
+  let blurred: any = float(0);
   // Slope too fine to draw: what the mips have averaged out of the normal.
   let unseen: any = float(0);
+  // The same for the mirror, with the ripples in: what roughens it.
+  let rough: any = float(0);
   cascades.forEach(({ size }, c) => {
     // (slope x, slope z, jacobian, slope squared)
     const d = texture(derivatives[c], surface.div(size));
     const scale = builtUp(c);
     slope = slope.add(d.xy.mul(scale));
 
-    // The finest cascade's ripples are under a pixel from any height, and
-    // the glint's never counted them: the look is of the two that draw.
-    if (c >= 2) return;
-
-    jacobian = jacobian.add(d.z.sub(1).mul(scale));
-
     // The squares' mean less the mean's square. Only where the map's
     // minified: between two texels the same sum is the slope's change
     // across them, which is drawn.
     const minified = log2(footprint.div(size / fftSize)).saturate();
 
-    unseen = unseen.add(
-      max(d.w.sub(d.xy.dot(d.xy)), 0)
-        .mul(scale.mul(scale))
-        .mul(minified)
-    );
+    const hidden = max(d.w.sub(d.xy.dot(d.xy)), 0)
+      .mul(scale.mul(scale))
+      .mul(minified);
+
+    rough = rough.add(hidden);
+
+    // The finest cascade's ripples are under a pixel from any height, and
+    // the glint's never counted them: the look is of the two that draw.
+    if (c >= 2) return;
+
+    jacobian = jacobian.add(d.z.sub(1).mul(scale));
+    folds = folds.add((c === 0 ? folding.x : folding.y).mul(scale).pow(2));
+    unseen = unseen.add(hidden);
+
+    if (c === 1) blurred = minified;
   });
-  slope = slope.mul(shallow);
-  unseen = unseen.mul(shallow).mul(shallow);
+  const steeper = verticalScale.mul(verticalScale);
+  slope = slope.mul(shallow).mul(verticalScale);
+  unseen = unseen.mul(shallow).mul(shallow).mul(steeper);
+  // The spectrum's ripples hardly still with the wind (its tail's as rough
+  // at half a metre a second as at five), but a sea in a breath of wind is
+  // glassy: it mirrors the hills until the wind picks up past a metre a
+  // second or so, and has lost them by a fresh breeze.
+  rough = rough
+    .mul(shallow)
+    .mul(shallow)
+    .mul(steeper)
+    .mul(smoothstep(GLASSY, RUFFLED, breeze));
 
   const normal = normalize(vec3(slope.x.negate(), 1, slope.y.negate()));
   const view = normalize(cameraPosition.sub(positionWorld));
@@ -272,9 +423,13 @@ function createMaterial(
 
   mirror.target.rotateX(-Math.PI / 2);
 
-  if (mirror.uvNode) mirror.uvNode = mirror.uvNode.add(slope.mul(0.12));
   // Left out of the material, the mirror isn't rendered.
-  const sky = switchedOff("reflection") ? vec3(0.04) : mirror.rgb;
+  const sky = switchedOff("reflection")
+    ? vec3(0.04)
+    : switchedOff("searough")
+      ? roughMirrorBefore(mirror, slope)
+      : roughMirror(mirror, slope, rough, view);
+
   const sunAmount = max(dot(reflected, sunDirection), 0);
 
   // In a hill's, a ship's or a cloud's shadow the sun's glint and direct light
@@ -338,8 +493,29 @@ function createMaterial(
     max(dot(normal, sunDirection), 0).mul(0.02).mul(sunIntensity).mul(lit)
   );
 
-  // Whitecaps where the surface folds over (jacobian drops below 1).
-  const whitecaps = smoothstep(0.85, 0.35, jacobian).mul(shallow);
+  // Whitecaps where the surface folds over (jacobian drops below 1), and
+  // the wind's: where it squeezes most, as much of the sea as the wind
+  // there whitecaps (./seaWind.ts). The drawn waves' squeeze barely grows
+  // with the wind, so at a fixed squeeze a gale had no more than a breeze,
+  // and a windy harbour none. Too far off to draw, their share of the sea.
+  const capped = local.w;
+
+  const squeezed = float(1)
+    .sub(jacobian)
+    .div(max(sqrt(folds), 1e-3));
+
+  const threshold = belowShare(capped);
+
+  const windCaps = mix(
+    smoothstep(threshold.sub(0.3), threshold.add(0.3), squeezed),
+    capped,
+    blurred
+  );
+
+  const whitecaps = max(
+    smoothstep(0.85, 0.35, jacobian),
+    switchedOff("whitecaps") ? float(0) : windCaps
+  ).mul(shallow);
 
   // Water thickness along the view ray, from the scene depth behind it.
   const thickness = viewportLinearDepth
