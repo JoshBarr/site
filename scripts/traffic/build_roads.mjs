@@ -427,6 +427,218 @@ for (const [name, { road, steps }] of Object.entries(routes)) {
   carriageways[name] = { road, pts, attrs, s };
 }
 
+// --- Room between each highway's two directions. ---
+
+// OSM draws a divided highway's carriageways as two lines, but not always
+// as far apart as their lanes are wide: between Ngauranga and Thorndon
+// SH1's are ~10 m apart with 3 lanes south and 4 north, which need 12.3,
+// so the scene laid the north side's lanes over the south side's third.
+// Where the lanes either side would come closer than MEDIAN, each line's
+// moved out by half of what's missing, tapered in and out along the road.
+
+/** Between the lanes of a highway's two directions, at least, m. */
+const MEDIAN = 1;
+
+/** The other direction's line within this, m, is the other carriageway. */
+const OPPOSITE_WITHIN = 25;
+
+/** Closer than this, m, it's the same road (a two-way one), not the other. */
+const SAME_LINE = 2;
+
+/** Pointing this nearly the other way (cosine), it's running opposite. */
+const OPPOSITE = -0.8;
+
+/**
+ * Sideways per metre along that a move's eased in and out by: 1 m over 20.
+ * Where the road turns two-way, both directions share one line, which
+ * doesn't move, so a move's eased out before it at the same rate.
+ */
+const TAPER = 0.05;
+
+const PAIRS = [
+  ["SH1S", "SH1N"],
+  ["SH2S", "SH2N"],
+];
+
+/** Lanes' width at a segment's attrs, as the scene has it. */
+const laneWidthOf = (attrs) => (attrs[3] > 50 ? LANE : TOWN_LANE);
+
+/** Unit vectors along each point of `pts`, and to its right. */
+function frames(pts) {
+  return pts.map((_, i) => {
+    const a = pts[Math.max(i - 1, 0)];
+    const b = pts[Math.min(i + 1, pts.length - 1)];
+    const length = Math.hypot(b.e - a.e, b.n - a.n) || 1;
+    const along = [(b.e - a.e) / length, (b.n - a.n) / length];
+
+    return { along, right: [along[1], -along[0]] };
+  });
+}
+
+/** Segments of `cw` by 50 m squares, for the nearest one to a place. */
+function segmentGrid(cw) {
+  const grid = new Map();
+
+  for (let j = 0; j < cw.pts.length - 1; j++) {
+    const a = cw.pts[j];
+    const b = cw.pts[j + 1];
+
+    for (const p of [a, b]) {
+      const key = `${Math.floor(p.e / 50)},${Math.floor(p.n / 50)}`;
+
+      if (!grid.has(key)) grid.set(key, new Set());
+      grid.get(key).add(j);
+    }
+  }
+
+  return grid;
+}
+
+/** Per point of `own`, how far right to move it from `other`, m. */
+function pushesFrom(own, other) {
+  const ownFrames = frames(own.pts);
+  const grid = segmentGrid(other);
+
+  return own.pts.map((p, i) => {
+    const attrs = own.attrs[Math.min(i, own.attrs.length - 1)];
+
+    if (attrs[2] & TWO_WAY) return 0;
+
+    const { along, right } = ownFrames[i];
+    const cx = Math.floor(p.e / 50);
+    const cy = Math.floor(p.n / 50);
+    let best = null;
+
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        for (const j of grid.get(`${cx + dx},${cy + dy}`) ?? []) {
+          const a = other.pts[j];
+          const b = other.pts[j + 1];
+          const de = b.e - a.e;
+          const dn = b.n - a.n;
+          const ll = de * de + dn * dn || 1e-9;
+          const length = Math.sqrt(ll);
+
+          if ((along[0] * de + along[1] * dn) / length > OPPOSITE) continue;
+
+          if (other.attrs[j][2] & TWO_WAY) continue;
+
+          const t = Math.min(
+            Math.max(((p.e - a.e) * de + (p.n - a.n) * dn) / ll, 0),
+            1
+          );
+
+          const off = [a.e + de * t - p.e, a.n + dn * t - p.n];
+          const d = Math.hypot(off[0], off[1]);
+
+          if (!best || d < best.d) best = { d, off, j };
+        }
+      }
+    }
+
+    if (!best || best.d < SAME_LINE || best.d > OPPOSITE_WITHIN) return 0;
+
+    const theirs = other.attrs[best.j];
+
+    const need =
+      (attrs[0] * laneWidthOf(attrs) + theirs[0] * laneWidthOf(theirs)) / 2 +
+      MEDIAN;
+
+    const lateral = best.off[0] * right[0] + best.off[1] * right[1];
+    const missing = need - Math.abs(lateral);
+
+    return missing > 0 ? (-Math.sign(lateral) * missing) / 2 : 0;
+  });
+}
+
+/**
+ * `pushes` held where they're needed, tapering off either side, and down to
+ * nothing at a point on a two-way road (`shared`).
+ */
+function eased(pushes, s, shared) {
+  const reach = Math.max(...pushes.map(Math.abs)) / TAPER;
+
+  // How far along to the nearest shared point, either way.
+  const toShared = s.map(() => Infinity);
+  let last = -Infinity;
+
+  for (let i = 0; i < s.length; i++) {
+    if (shared[i]) last = s[i];
+    toShared[i] = s[i] - last;
+  }
+
+  last = Infinity;
+
+  for (let i = s.length - 1; i >= 0; i--) {
+    if (shared[i]) last = s[i];
+    toShared[i] = Math.min(toShared[i], last - s[i]);
+  }
+
+  return pushes.map((_, i) => {
+    let most = 0;
+    let sign = 0;
+
+    for (let k = i; k >= 0 && s[i] - s[k] < reach; k--) {
+      const v = Math.abs(pushes[k]) - TAPER * (s[i] - s[k]);
+
+      if (v > most) [most, sign] = [v, Math.sign(pushes[k])];
+    }
+
+    for (let k = i + 1; k < pushes.length && s[k] - s[i] < reach; k++) {
+      const v = Math.abs(pushes[k]) - TAPER * (s[k] - s[i]);
+
+      if (v > most) [most, sign] = [v, Math.sign(pushes[k])];
+    }
+
+    return sign * Math.min(most, TAPER * toShared[i]);
+  });
+}
+
+/** Per point of `cw`, whether it's on a two-way stretch, at either side. */
+const sharedOf = (cw) =>
+  cw.pts.map(
+    (_, i) =>
+      (cw.attrs[i][2] & TWO_WAY) !== 0 ||
+      (i > 0 && (cw.attrs[i - 1][2] & TWO_WAY) !== 0)
+  );
+
+const movesOf = (own, other) =>
+  eased(pushesFrom(own, other), own.s, sharedOf(own));
+
+{
+  // Every move's measured on the lines as OSM has them, then made.
+  const moves = PAIRS.flatMap(([a, b]) => [
+    [a, movesOf(carriageways[a], carriageways[b])],
+    [b, movesOf(carriageways[b], carriageways[a])],
+  ]);
+
+  for (const [name, shifts] of moves) {
+    const cw = carriageways[name];
+    const { pts, s } = cw;
+    const rights = frames(pts).map(({ right }) => right);
+
+    pts.forEach((p, i) => {
+      p.e += rights[i][0] * shifts[i];
+      p.n += rights[i][1] * shifts[i];
+    });
+
+    for (let i = 1; i < pts.length; i++) {
+      s[i] =
+        s[i - 1] + Math.hypot(pts[i].e - pts[i - 1].e, pts[i].n - pts[i - 1].n);
+    }
+
+    const moved = shifts.filter((v) => Math.abs(v) > 0.05);
+
+    if (moved.length) {
+      const most = Math.max(...moved.map(Math.abs));
+
+      console.log(
+        `${name}: ${moved.length} points moved apart from the other way, up to ${most.toFixed(1)} m`
+      );
+    }
+  }
+}
+
 // --- Heights: the ground across the whole road, smoothed along it. ---
 
 for (const cw of Object.values(carriageways)) {
