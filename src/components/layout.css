@@ -1450,10 +1450,11 @@ a {
   transform: translateY(-12px);
 }
 
-/* The header floats over the scene, so clear it as well. */
+/* The header floats over the scene, so clear it as well, with a floor so a
+   phone's heading isn't crowded up against the header's keyline. */
 .hero__intro .hero__title {
   max-width: 17em;
-  margin-top: calc(60px + 6vw);
+  margin-top: calc(60px + max(6vw, 2rem));
 }
 
 .hero__sentence {
