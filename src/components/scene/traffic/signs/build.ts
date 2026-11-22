@@ -29,9 +29,9 @@ import {
   vec3,
 } from "three/tsl";
 import { parseMessage } from "../../../../lib/signs";
-import { DOTS_HIGH, DOTS_WIDE, litDots } from "./dots";
+import { DOTS_HIGH, DOTS_WIDE, litDots, litLane } from "./dots";
 import { BACK, buildSigns, HOUSING, LAMPS, PAINTED } from "./geometry";
-import { pack, type PlacedStructure } from "./layout";
+import { pack, type PlacedFace, type PlacedStructure } from "./layout";
 import { GUTTER, paintDirection, paintSpeed } from "./paint";
 
 // The signs as the scene draws them: a few meshes of steel and faces, one
@@ -75,8 +75,16 @@ const LAMP_SHARE = 0.8;
  */
 export function createSigns(placed: PlacedStructure[]) {
   const faces = placed.flatMap((structure) => structure.faces);
-  const painted = faces.filter(({ face }) => face.kind !== "vms");
-  const lit = faces.filter(({ face }) => face.kind === "vms");
+
+  // Lane signs are dark: housings only, neither painted nor lit.
+  const painted = faces.filter(
+    ({ face }) => face.kind === "speed" || face.kind === "direction"
+  );
+
+  // Message signs, and lane signs: lamps, a band of the map each.
+  const lit = faces.filter(
+    ({ face }) => face.kind === "vms" || face.kind === "lane"
+  );
 
   // Room in the sheet for each painted face, with a gutter round it.
   const { slots, height } = pack(
@@ -246,25 +254,42 @@ export function createSigns(placed: PlacedStructure[]) {
       sheetMap.needsUpdate = true;
     },
 
+    /** The lane signs, for working out what each shows. */
+    lanes: lit.filter(({ face }) => face.kind === "lane"),
+
     /**
-     * Sets every message sign's lamps: to `messages` (NZTA's, by sign id;
-     * null for none), or all to `override`.
+     * Sets every sign's lamps: message signs to `messages` (NZTA's, by sign
+     * id; null for none), or all to `override`; lane signs to `limits`
+     * (km/h, by face; dark where there's none).
      */
-    show(messages: Record<string, string> | null, override: string | null) {
+    show(
+      messages: Record<string, string> | null,
+      override: string | null,
+      limits: ReadonlyMap<PlacedFace, number | null> = new Map()
+    ) {
       lamps.fill(0);
-      lit.forEach(({ face }, k) => {
-        if (face.kind !== "vms") return;
+      lit.forEach((placed, k) => {
+        const { face } = placed;
+        let shown: Uint8Array[];
 
-        // The record that's showing something: an old sign's is blank.
-        const message =
-          override ??
-          face.ids.map((id) => messages?.[id]).find((shown) => shown?.trim()) ??
-          "";
+        if (face.kind === "lane") {
+          const dots = litLane(limits.get(placed) ?? null);
 
-        const pages = parseMessage(message);
+          shown = [dots, dots];
+        } else if (face.kind === "vms") {
+          // The record that's showing something: an old sign's is blank.
+          const message =
+            override ??
+            face.ids.map((id) => messages?.[id]).find((text) => text?.trim()) ??
+            "";
 
-        if (!pages.length) return;
-        const shown = [pages[0], pages[1] ?? pages[0]].map(litDots);
+          const pages = parseMessage(message);
+
+          if (!pages.length) return;
+          shown = [pages[0], pages[1] ?? pages[0]].map(litDots);
+        } else {
+          return;
+        }
 
         for (let row = 0; row < DOTS_HIGH; row++) {
           const to = (k * DOTS_HIGH + row) * DOTS_WIDE * 2;

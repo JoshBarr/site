@@ -17,6 +17,7 @@ import {
   layOutDirection,
   pack,
   place,
+  trussBoxes,
   placeAll,
   spread,
 } from "../../src/components/scene/traffic/signs/layout";
@@ -373,9 +374,41 @@ describe("a sign set up", () => {
     expect(right.x - right.width / 2).toBeGreaterThan(left.x + left.width / 2);
     // The message sign's over them, not across them.
     expect(sign.y - sign.height / 2).toBeGreaterThan(left.y + left.height / 2);
-    // Two legs, a beam, and two struts under the raised sign.
-    expect(boxes).toHaveLength(5);
+    // A truss leg to leg: four chords its whole length.
+    const chords = boxes.filter((box) => box.size[0] > 23);
+
+    expect(chords).toHaveLength(4);
     expect(Math.max(...boxes.map((box) => box.size[0]))).toBeCloseTo(24, 5);
+  });
+
+  it("a gantry's truss is braced along its faces, chord to chord", () => {
+    const boxes = trussBoxes(0, 0, 10, 1, 0, 24);
+    const braces = boxes.filter((box) => box.uy);
+    const top = Math.max(...boxes.map((box) => box.y));
+    const bottom = Math.min(...boxes.map((box) => box.y));
+
+    // Two faces, a brace a bay, leaning alternate ways.
+    expect(braces).toHaveLength(20);
+    expect(new Set(braces.map((box) => Math.sign(box.uy!)))).toEqual(
+      new Set([-1, 1])
+    );
+
+    for (const brace of braces) {
+      // Level across the beam, and reaching from one chord up to the other.
+      expect(Math.hypot(brace.ux, brace.uy!, brace.uz)).toBeCloseTo(1, 9);
+      expect(brace.uz).toBeCloseTo(0, 9);
+      expect(Math.abs(brace.uy!) * brace.size[0]).toBeCloseTo(top - bottom, 6);
+    }
+  });
+
+  it("hangs a lane sign as a square over its lane", () => {
+    expect(
+      faceSize({ kind: "lane", zone: "motorway" }, 80 / 3.6, true)
+    ).toEqual({
+      width: 1.3,
+      height: 1.3,
+      capital: 0,
+    });
   });
 
   it("is bigger over the road than on the verge, and in town smaller", () => {

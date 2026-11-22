@@ -25,6 +25,9 @@ const FAST = 80 / 3.6;
 const DISC = 1.2;
 const DISC_TOWN = 0.9;
 
+/** A lane control sign's housing, m square. */
+const LANE_SIGN = 1.3;
+
 /** A direction panel's parts, in capital heights. */
 const MARGIN = 0.8;
 const LINE = 1.75;
@@ -45,8 +48,19 @@ const SPEED_FOOT = 2;
 /** A message sign's foot on a verge mast, m. */
 const MESSAGE_FOOT = { large: 4.8, small: 3 };
 
+/**
+ * A gantry's truss, m: a box of four chords, braced across at each bay's
+ * end and diagonally along its faces, as the motorway's are.
+ */
+const TRUSS_TALL = 1.3;
+const TRUSS_DEEP = 1.1;
+const CHORD = 0.16;
+const WEB = 0.08;
+const BAY = 2.4;
+
 /** Steel, m: a gantry's legs and beam, an arm's mast, a board's posts. */
 const LEG = 0.5;
+const GANTRY_LEG = 0.7;
 const BEAM_DEEP = 0.45;
 const BEAM_TALL = 0.6;
 const POST = 0.14;
@@ -84,6 +98,8 @@ export interface Box {
   z: number;
   ux: number;
   uz: number;
+  /** How far up its length runs too, for a brace (it's level without). */
+  uy?: number;
   /** Along (ux, uz), up, and across. */
   size: [number, number, number];
 }
@@ -100,6 +116,9 @@ export interface PlacedFace {
   height: number;
   /** A direction panel's capital height, m. */
   capital: number;
+  /** The carriageway whose traffic it faces, and how far along, m. */
+  on: string;
+  s: number;
 }
 
 export interface PlacedStructure {
@@ -240,6 +259,10 @@ export function faceSize(face: Face, limit: number, overhead = false) {
     const across = limit >= FAST ? DISC : DISC_TOWN;
 
     return { width: across, height: across, capital: 0 };
+  }
+
+  if (face.kind === "lane") {
+    return { width: LANE_SIGN, height: LANE_SIGN, capital: 0 };
   }
 
   const capital = overhead
@@ -390,6 +413,8 @@ export function place(
       width,
       height,
       capital,
+      on: panel.on,
+      s: panel.s,
     });
 
     return { id: structure.id, x: ax, y, z: az, boxes, faces };
@@ -399,7 +424,10 @@ export function place(
   const span = Math.hypot(bx - ax, bz - az) || 1;
   const [ux, uz] = [(bx - ax) / span, (bz - az) / span];
   const tallest = Math.max(...sized.map(({ height }) => height));
-  const beam = y + Math.max(CLEARANCE + tallest / 2, CLEARANCE + BEAM_TALL);
+  const truss = structure.kind === "gantry";
+  const beamTall = truss ? TRUSS_TALL : BEAM_TALL;
+  const standOff = truss ? TRUSS_DEEP / 2 + THICK * 2 : STAND_OFF;
+  const beam = y + Math.max(CLEARANCE + tallest / 2, CLEARANCE + beamTall / 2);
 
   // Each carriageway's panels along the beam: direction panels moved apart
   // where they'd overlap, and a message sign that would cover one raised
@@ -442,14 +470,16 @@ export function place(
 
       faces.push({
         face: panel.face,
-        x: ax + ux * at + nx * STAND_OFF,
+        x: ax + ux * at + nx * standOff,
         y: beam + up,
-        z: az + uz * at + nz * STAND_OFF,
+        z: az + uz * at + nz * standOff,
         nx,
         nz,
         width,
         height,
         capital,
+        on: panel.on,
+        s: panel.s,
       });
       from = Math.min(from, at - width / 2);
       to = Math.max(to, at + width / 2);
@@ -470,21 +500,22 @@ export function place(
     }
   }
 
-  // An arm reaches as far as its panels; a gantry's beam, leg to leg.
-  const [start, end] = structure.kind === "gantry" ? [0, span] : [0, to];
-
-  boxes.push({
-    x: ax + (ux * (start + end)) / 2,
-    y: beam,
-    z: az + (uz * (start + end)) / 2,
-    ux,
-    uz,
-    size: [end - start, BEAM_TALL, BEAM_DEEP],
-  });
-  boxes.push(post(ax, az, y, beam + BEAM_TALL / 2, LEG, ux, uz));
-
-  if (structure.kind === "gantry") {
-    boxes.push(post(bx, bz, y, beam + BEAM_TALL / 2, LEG, ux, uz));
+  if (truss) {
+    // A gantry: a truss leg to leg.
+    boxes.push(...trussBoxes(ax, az, beam, ux, uz, span));
+    boxes.push(post(ax, az, y, beam + TRUSS_TALL / 2, GANTRY_LEG, ux, uz));
+    boxes.push(post(bx, bz, y, beam + TRUSS_TALL / 2, GANTRY_LEG, ux, uz));
+  } else {
+    // An arm: a beam as far as its panels reach.
+    boxes.push({
+      x: ax + (ux * to) / 2,
+      y: beam,
+      z: az + (uz * to) / 2,
+      ux,
+      uz,
+      size: [to, BEAM_TALL, BEAM_DEEP],
+    });
+    boxes.push(post(ax, az, y, beam + BEAM_TALL / 2, LEG, ux, uz));
   }
 
   return {
@@ -495,6 +526,90 @@ export function place(
     boxes,
     faces,
   };
+}
+
+/**
+ * A truss from (ax, az) `length` m along (ux, uz), its middle `y` high: four
+ * chords, a frame across at each bay's end, and a brace along each face of
+ * each bay, leaning alternate ways.
+ */
+export function trussBoxes(
+  ax: number,
+  az: number,
+  y: number,
+  ux: number,
+  uz: number,
+  length: number
+): Box[] {
+  const boxes: Box[] = [];
+  // Across the beam, level.
+  const [cx, cz] = [-uz, ux];
+  const half = [TRUSS_DEEP / 2 - CHORD / 2, TRUSS_TALL / 2 - CHORD / 2];
+
+  for (const side of [-1, 1]) {
+    for (const level of [-1, 1]) {
+      boxes.push({
+        x: ax + (ux * length) / 2 + cx * half[0] * side,
+        y: y + half[1] * level,
+        z: az + (uz * length) / 2 + cz * half[0] * side,
+        ux,
+        uz,
+        size: [length, CHORD, CHORD],
+      });
+    }
+  }
+
+  const bays = Math.max(1, Math.round(length / BAY));
+  const bay = length / bays;
+  const rise = half[1] * 2;
+  const brace = Math.hypot(bay, rise);
+
+  for (let k = 0; k <= bays; k++) {
+    const along = k * bay;
+    const [x, z] = [ax + ux * along, az + uz * along];
+
+    // The frame across: an upright on each face, a rung top and bottom.
+    for (const side of [-1, 1]) {
+      boxes.push({
+        x: x + cx * half[0] * side,
+        y,
+        z: z + cz * half[0] * side,
+        ux,
+        uz,
+        size: [WEB, rise, WEB],
+      });
+    }
+
+    for (const level of [-1, 1]) {
+      boxes.push({
+        x,
+        y: y + half[1] * level,
+        z,
+        ux: cx,
+        uz: cz,
+        size: [half[0] * 2, WEB, WEB],
+      });
+    }
+
+    if (k === bays) break;
+
+    // The braces along each face, leaning alternate ways bay by bay.
+    const lean = k % 2 ? 1 : -1;
+
+    for (const side of [-1, 1]) {
+      boxes.push({
+        x: x + (ux * bay) / 2 + cx * half[0] * side,
+        y,
+        z: z + (uz * bay) / 2 + cz * half[0] * side,
+        ux: (ux * bay) / brace,
+        uy: (rise * lean) / brace,
+        uz: (uz * bay) / brace,
+        size: [brace, WEB, WEB],
+      });
+    }
+  }
+
+  return boxes;
 }
 
 /** Every structure of `file` that's on a road `ground` knows. */

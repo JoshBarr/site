@@ -34,6 +34,9 @@ const CHUNK = 4000;
 const HOUSING_DEEP = 0.35;
 const THICK = 0.05;
 
+/** A lane sign's housing round its lamps, m. */
+const LANE_BEZEL = 0.08;
+
 /** A speed limit's disc has this many sides. */
 const SIDES = 24;
 
@@ -66,13 +69,23 @@ class Builder {
   }
 
   /** A box of steel (or housing): six flat sides. */
-  addBox({ x, y, z, ux, uz, size: [long, tall, deep] }: Box, part: number) {
-    // Along, up, and across.
-    const axes: Triple[] = [
-      [ux, 0, uz],
-      [0, 1, 0],
-      [-uz, 0, ux],
+  addBox(
+    { x, y, z, ux, uy = 0, uz, size: [long, tall, deep] }: Box,
+    part: number
+  ) {
+    // Along, up, and across: across stays level, and up is square to both,
+    // so a brace leans in the plane of its face.
+    const flat = Math.hypot(ux, uz) || 1;
+    const across: Triple = [-uz / flat, 0, ux / flat];
+    const along: Triple = [ux, uy, uz];
+
+    const up: Triple = [
+      across[1] * along[2] - across[2] * along[1],
+      across[2] * along[0] - across[0] * along[2],
+      across[0] * along[1] - across[1] * along[0],
     ];
+
+    const axes: Triple[] = [along, up, across];
 
     const half = [long / 2, tall / 2, deep / 2];
 
@@ -267,7 +280,34 @@ export function buildSigns(
       const slot = painted.get(face);
       const grid = lamps.get(face);
 
-      if (face.face.kind === "vms" && grid !== undefined) {
+      if (face.face.kind === "lane") {
+        // A lane sign: its housing, and its lamps inside a thin bezel, the
+        // DOTS_HIGH square at the left of its band (dark until it's given a
+        // limit).
+        builder.addBox(
+          {
+            x: face.x - (face.nx * HOUSING_DEEP) / 2,
+            y: face.y,
+            z: face.z - (face.nz * HOUSING_DEEP) / 2,
+            ux: face.nz,
+            uz: -face.nx,
+            size: [face.width, face.height, HOUSING_DEEP],
+          },
+          HOUSING
+        );
+
+        if (grid !== undefined) {
+          const per = DOTS_HIGH / (face.width - LANE_BEZEL * 2);
+
+          builder.addQuad(face, 0.01, LAMPS, (across, down) => ({
+            dot: [
+              (across * face.width - LANE_BEZEL) * per,
+              (down * face.height - LANE_BEZEL) * per,
+              grid,
+            ],
+          }));
+        }
+      } else if (face.face.kind === "vms" && grid !== undefined) {
         // The lamps' grid sits inside the housing's bezel.
         const edge = bezel(face.face.size);
         const wide = DOTS_WIDE / (face.width - edge * 2);

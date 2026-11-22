@@ -5,13 +5,27 @@ import { PAGE_TIME } from "../../../../lib/signs";
 import { sceneNow } from "../../clock";
 import { nztmToWorld, type TileIndex } from "../../terrain/manifest";
 import { loadRoads, type Place, type Roads } from "../roads";
+import { demand } from "../speeds";
+import { useHolidays } from "../useHolidays";
+import { useTraffic } from "../useTraffic";
 import { createSigns } from "./build";
 import { loadSigns, type SignsFile } from "./file";
-import { type Ground, placeAll } from "./layout";
+import { type Ground, type PlacedFace, placeAll } from "./layout";
+import { estimateLimit, speedAt } from "./limits";
 import { overrideFromUrl, useSigns } from "./useSigns";
 
 /** Signs are drawn this near the camera, m: beyond, a gantry's a pixel or two. */
 const RANGE = 7000;
+
+/** Lane signs are worked out again this often, ms: the hour moves on. */
+const RETHINK = 60_000;
+
+/** `?lanes=KMH` shows KMH on every lane sign. */
+function laneOverride() {
+  const kmh = Number(new URLSearchParams(location.search).get("lanes"));
+
+  return Number.isFinite(kmh) && kmh > 0 ? kmh : null;
+}
 
 const eye = new Vector3();
 const scratch: Place = { x: 0, y: 0, z: 0 };
@@ -51,11 +65,53 @@ function Standing({
 }) {
   const messages = useSigns();
   const override = useMemo(overrideFromUrl, []);
+  const laneKmh = useMemo(laneOverride, []);
+  const { speeds } = useTraffic();
+  const { holidays } = useHolidays(new Date(sceneNow()));
+  const [tick, setTick] = useState(0);
 
   const signs = useMemo(
     () => createSigns(placeAll(file, groundOf(roads, index))),
     [roads, file, index]
   );
+
+  useEffect(() => {
+    const timer = setInterval(() => setTick((t) => t + 1), RETHINK);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  // What each lane sign likely shows: NZTA doesn't say (limits.ts).
+  const limits = useMemo(() => {
+    const byName = new Map(roads.carriageways.map((c) => [c.name, c]));
+    const now = new Date(sceneNow());
+
+    // How busy the hour usually is, the busier way: rush is rush either way.
+    const perLane =
+      Math.max(
+        demand(now, holidays, true, false),
+        demand(now, holidays, false, false)
+      ) * 3600;
+
+    return new Map<PlacedFace, number | null>(
+      signs.lanes.map((placed) => {
+        const road = byName.get(placed.on);
+
+        if (placed.face.kind !== "lane" || !road) return [placed, null];
+
+        return [
+          placed,
+          laneKmh ??
+            estimateLimit(
+              placed.face.zone,
+              speedAt(road, placed.s, speeds),
+              perLane
+            ),
+        ];
+      })
+    );
+    // `tick` moves the hour on.
+  }, [signs, roads, speeds, holidays, laneKmh, tick]);
 
   // The painted faces, once: off the frame that set the signs up.
   useEffect(() => {
@@ -65,8 +121,8 @@ function Standing({
   }, [signs]);
 
   useEffect(() => {
-    signs.show(messages, override);
-  }, [signs, messages, override]);
+    signs.show(messages, override, limits);
+  }, [signs, messages, override, limits]);
 
   useEffect(() => {
     signs.night.value = lights;
@@ -92,9 +148,10 @@ function Standing({
  * The signs along State Highways 1 and 2: NZTA's message signs showing
  * what they show now (travel times, closures, or nothing), and the fixed
  * ones there's a record of (direction signs worded as OpenStreetMap has
- * them, speed limits where they change), on gantries, arms and posts.
- * `lights` (0..1) is how far through lighting-up it is. `?vms=TEXT` puts
- * TEXT on every message sign.
+ * them, speed limits where they change), on gantries, arms and posts; and
+ * the motorway's lane signs, showing the limit they likely show. `lights`
+ * (0..1) is how far through lighting-up it is. `?vms=TEXT` puts TEXT on
+ * every message sign, `?lanes=KMH` KMH on every lane sign.
  */
 export function Signs({
   index,

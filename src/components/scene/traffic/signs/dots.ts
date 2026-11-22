@@ -123,3 +123,71 @@ export function litDots(page: SignPage): Uint8Array {
 
   return dots;
 }
+
+/** A lane sign's ring, in dots from its middle: inside and outside. */
+const RING = [15.5, 18.6];
+
+/** Its number's height, and the most room across for it, in dots. */
+const NUMBER_TALL = TALL * 2;
+const NUMBER_WIDE = 22;
+const NUMBER_GAP = 2;
+
+/**
+ * A lane sign showing a speed limit, as lit dots in the same grid as a
+ * message sign's page (DOTS_WIDE × DOTS_HIGH), in the DOTS_HIGH square at
+ * its left: a
+ * ring, and the limit inside it, its characters twice their usual size, or
+ * narrower where three wouldn't fit. Dark for null.
+ */
+export function litLane(limit: number | null): Uint8Array {
+  const dots = new Uint8Array(DOTS_WIDE * DOTS_HIGH);
+
+  if (limit === null) return dots;
+  const middle = DOTS_HIGH / 2;
+
+  for (let y = 0; y < DOTS_HIGH; y++) {
+    for (let x = 0; x < DOTS_HIGH; x++) {
+      const r = Math.hypot(x + 0.5 - middle, y + 0.5 - middle);
+
+      if (r >= RING[0] && r <= RING[1]) dots[y * DOTS_WIDE + x] = 255;
+    }
+  }
+
+  // Each character's lit columns only: a "1" is narrow.
+  const glyphs = [...String(limit)].flatMap((character) => {
+    const glyph = GLYPHS.get(character);
+
+    if (!glyph) return [];
+
+    const used = [...Array(CHAR).keys()].filter((i) =>
+      glyph.some((row) => row[i] === "#")
+    );
+
+    return [{ glyph, from: used[0] ?? 0, wide: used.length || 1 }];
+  });
+
+  const gaps = (glyphs.length - 1) * NUMBER_GAP;
+  const columns = glyphs.reduce((sum, { wide }) => sum + wide, 0);
+  const scale = Math.min(2, (NUMBER_WIDE - gaps) / columns);
+  const across = columns * scale + gaps;
+  let left = Math.round(middle - across / 2);
+  const top = Math.round(middle - NUMBER_TALL / 2);
+
+  for (const { glyph, from, wide } of glyphs) {
+    const width = Math.round(wide * scale);
+
+    for (let y = 0; y < NUMBER_TALL; y++) {
+      const row = glyph[Math.floor((y / NUMBER_TALL) * TALL)];
+
+      for (let x = 0; x < width; x++) {
+        if (row[from + Math.floor((x / width) * wide)] === "#") {
+          dots[(top + y) * DOTS_WIDE + left + x] = 255;
+        }
+      }
+    }
+
+    left += width + NUMBER_GAP;
+  }
+
+  return dots;
+}

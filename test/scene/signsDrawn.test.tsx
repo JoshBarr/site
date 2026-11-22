@@ -179,6 +179,57 @@ describe("the signs, built", () => {
     signs.dispose();
   });
 
+  it("light a lane sign's square with the limit it's given, and leave it dark without", () => {
+    const lanes = createSigns(
+      placeAll(
+        {
+          structures: [
+            {
+              id: "lanes",
+              kind: "gantry",
+              on: "N",
+              s: 200,
+              a: [-8, 200],
+              b: [8, 200],
+              panels: [
+                {
+                  on: "N",
+                  s: 200,
+                  t: 0.5,
+                  face: { kind: "lane", zone: "motorway" },
+                },
+              ],
+            },
+          ],
+        },
+        north
+      )
+    );
+
+    const { geometry } = lanes.meshes[0];
+    const part = geometry.getAttribute("part");
+    const dot = geometry.getAttribute("lamp");
+    const x: number[] = [];
+
+    for (let i = 0; i < part.count; i++) {
+      if (part.getX(i) === LAMPS) x.push(dot.getX(i));
+    }
+
+    // Its grid's the square at the left of its band.
+    expect(Math.max(...x) - Math.min(...x)).toBeLessThan(DOTS_HIGH + 6);
+    expect(lanes.lanes).toHaveLength(1);
+
+    lanes.show(null, null);
+    expect(lit(lanes, 0)).toEqual([0, 0]);
+
+    lanes.show(null, "IGNORED", new Map([[lanes.lanes[0], 80]]));
+    const [one, two] = lit(lanes, 0);
+
+    expect(one).toBeGreaterThan(100);
+    expect(two).toBe(one);
+    lanes.dispose();
+  });
+
   it("go dark with no messages, and all show an override", () => {
     const signs = createSigns(placeAll(file, north));
 
@@ -220,7 +271,7 @@ describe("the scene's signs", () => {
 
     expect(meshes.length).toBeGreaterThan(3);
 
-    // A lamp quad for every message sign there is.
+    // A lamp quad for every message sign and lane sign there is.
     const lamps = meshes.reduce((n, { geometry }) => {
       const part = geometry.getAttribute("part");
       let quads = 0;
@@ -232,7 +283,7 @@ describe("the scene's signs", () => {
 
     expect(lamps).toBe(
       built.structures.flatMap(({ panels }) =>
-        panels.filter(({ face }) => face.kind === "vms")
+        panels.filter(({ face }) => face.kind === "vms" || face.kind === "lane")
       ).length
     );
 

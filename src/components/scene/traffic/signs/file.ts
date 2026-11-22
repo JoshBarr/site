@@ -36,7 +36,22 @@ export interface SpeedFace {
   limit: number;
 }
 
-export type Face = MessageFace | DirectionFace | SpeedFace;
+/**
+ * Which stretch a lane sign's on: each runs its variable limit its own way
+ * (see limits.ts).
+ */
+export type LaneZone = "motorway" | "tunnel" | "gorge";
+
+/**
+ * A lane control sign over one lane: the variable limit, or a lane closed.
+ * No feed says what these show, so the scene estimates the limit.
+ */
+interface LaneFace {
+  kind: "lane";
+  zone: LaneZone;
+}
+
+export type Face = MessageFace | DirectionFace | SpeedFace | LaneFace;
 
 interface Panel {
   /** The carriageway whose traffic it faces, and how far along it, m. */
@@ -51,7 +66,7 @@ export interface Structure {
   id: string;
   /**
    * A post (or pair) on the verge with its sign on it; an arm out over the
-   * road from a mast at `a`; or a gantry with a leg at each end.
+   * road from a mast at `a`; or a gantry with a leg at each end, a truss.
    */
   kind: "post" | "cantilever" | "gantry";
   /** The carriageway it stands by, and how far along it, m. */

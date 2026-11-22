@@ -15,8 +15,13 @@
 // where it leaves, lane by lane where `destination:lanes` says; speed
 // limit signs stand where roads.json's limits (OSM `maxspeed`) change, if
 // NZTA's National Speed Limit Register (CC BY 4.0) doesn't say otherwise.
-// Gantries are OSM's `man_made=gantry` ways, end to end. Nothing's worded
-// from a guess: a sign with no legend on record is left out.
+// Gantries are OSM's `man_made=gantry` ways, end to end, and where NZTA has
+// two message signs facing each other's traffic at one spot over the lanes,
+// one gantry across both carriageways carries them. On the Wellington urban
+// motorway's gantries, in the register's variable limit, a lane sign hangs
+// over each lane: NZTA's lane control signs, which no feed reports, so the
+// scene estimates what they show. Nothing's worded from a guess: a sign with no legend
+// on record is left out.
 
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -82,6 +87,41 @@ const LEFT = 5;
  */
 const GANTRY_BEFORE = 150;
 const GANTRY_AFTER = 200;
+
+/**
+ * Message signs over the lanes this near each other, m, facing each other's
+ * traffic, hang from one gantry across both carriageways: at Placemakers and
+ * the Rail Crossing, the council's 3D models of them span both.
+ */
+const PAIRED = 60;
+
+/**
+ * Lane control signs: NZTA's, "mounted on gantries and bridges straddling
+ * the motorway" on SH1 from the Terrace Tunnel to Ngauranga Gorge, in the
+ * register's variable limit, which runs on up the gorge to Johnsonville.
+ * South of this northing, NZTM m: Johnsonville.
+ */
+const LANE_SIGNS_NORTH = 5436500;
+const LANE_SIGN_ROADS = ["SH1N", "SH1S"];
+
+/**
+ * North of this northing, NZTM m, the Ngauranga interchange, SH1's the
+ * gorge: open road.
+ */
+const NGAURANGA = 5432800;
+
+/**
+ * Which stretch a lane sign's on, by its register zone and where it is:
+ * each runs its variable limit its own way (the scene estimates it).
+ */
+function laneZone(zone, [, northing]) {
+  if (/TERRACE TUNNEL/.test(zone.speedLimitZoneName)) return "tunnel";
+
+  return northing > NGAURANGA ||
+    /NEWLANDS TO NGAURANGA|JOHNSONVILLE/.test(zone.speedLimitZoneName)
+    ? "gorge"
+    : "motorway";
+}
 
 /** An arm from one post reaches this far at most, m: longer has a post at each end. */
 const SELF_STANDING = 12;
@@ -247,6 +287,28 @@ const omitted = [];
  * Each with its ends, and for each carriageway it reaches over: where along,
  * and from how far to how far across.
  */
+/**
+ * The carriageways a beam from end to end reaches over: for each, where
+ * along, from how far to how far across, its lanes' edges, and each end
+ * projected onto it.
+ */
+const overOf = (ends) =>
+  carriageways.flatMap((c) => {
+    const [a, b] = ends.map((end) => project(c, end));
+    const i = a.i;
+    const left = kerb(c, i);
+    const right = left + c.lanes[i] * laneWidth(c, i);
+    const from = Math.min(a.lateral, b.lateral);
+    const to = Math.max(a.lateral, b.lateral);
+
+    // Over at least a metre of its lanes, and square to it.
+    if (Math.min(to, right) - Math.max(from, left) < 1) return [];
+
+    if (Math.abs(a.s - b.s) > 15 || Math.max(a.off, b.off) > 60) return [];
+
+    return [{ c, s: (a.s + b.s) / 2, i, from, to, left, right, a, b }];
+  });
+
 const gantries = osm.elements
   .filter((el) => el.type === "way" && el.tags?.man_made === "gantry")
   .map((el) => {
@@ -254,23 +316,7 @@ const gantries = osm.elements
       toNztm(p.lat, p.lon)
     );
 
-    const over = carriageways.flatMap((c) => {
-      const [a, b] = ends.map((end) => project(c, end));
-      const i = a.i;
-      const left = kerb(c, i);
-      const right = left + c.lanes[i] * laneWidth(c, i);
-      const from = Math.min(a.lateral, b.lateral);
-      const to = Math.max(a.lateral, b.lateral);
-
-      // Over at least a metre of its lanes, and square to it.
-      if (Math.min(to, right) - Math.max(from, left) < 1) return [];
-
-      if (Math.abs(a.s - b.s) > 15 || Math.max(a.off, b.off) > 60) return [];
-
-      return [{ c, s: (a.s + b.s) / 2, from, to, left, right, a, b }];
-    });
-
-    return { id: el.id, ends, over, panels: [], notes: [] };
+    return { id: el.id, ends, over: overOf(ends), panels: [], notes: [] };
   });
 
 /** How far a point is from a gantry's beam, m. */
@@ -359,6 +405,7 @@ messageSigns.sort(
 );
 
 const messageGroups = [];
+const arms = [];
 
 for (const found of messageSigns) {
   const group = messageGroups.find(
@@ -422,23 +469,94 @@ for (const group of messageGroups) {
     });
     evidence[id] = [...notes, "a mast on the verge, at NZTA's position"];
   } else {
-    // Over the lanes, and no gantry mapped: an arm out from the kerb.
-    const reach = Math.min(Math.max(lateral, left + 1.5), right - 1.5);
-
-    structures.push({
-      id,
-      kind: "cantilever",
-      on: c.name,
-      s: round(s, 0),
-      a: pointAt(c, s, left - MAST_OFF),
-      b: pointAt(c, s, reach),
-      panels: [{ on: c.name, s: round(s, 0), t: 1, face }],
-    });
-    evidence[id] = [
-      ...notes,
-      "NZTA's position is over the lanes and OSM has no gantry there: drawn on an arm from the left kerb (the mounting's a guess)",
-    ];
+    arms.push({ id, c, s, i, left, right, lateral, at, face, notes });
   }
+}
+
+// Over the lanes, and no gantry mapped: two facing each other's traffic at
+// one spot share a gantry across both carriageways; the rest are arms out
+// from the kerb.
+const paired = new Set();
+
+for (const arm of arms) {
+  if (paired.has(arm)) continue;
+
+  const other = arms
+    .filter(
+      (o) =>
+        !paired.has(o) &&
+        o !== arm &&
+        o.c.name.slice(0, -1) === arm.c.name.slice(0, -1) &&
+        o.c.name !== arm.c.name &&
+        Math.hypot(o.at[0] - arm.at[0], o.at[1] - arm.at[1]) < PAIRED
+    )
+    .sort(
+      (a, b) =>
+        Math.hypot(a.at[0] - arm.at[0], a.at[1] - arm.at[1]) -
+        Math.hypot(b.at[0] - arm.at[0], b.at[1] - arm.at[1])
+    )[0];
+
+  if (other) {
+    paired.add(arm).add(other);
+
+    // Kerb to kerb: from outside this carriageway's lanes, square across to
+    // outside the other's.
+    const across = project(other.c, pointAt(arm.c, arm.s, 0));
+
+    const ends = [
+      pointAt(arm.c, arm.s, arm.left - MAST_OFF),
+      pointAt(other.c, across.s, kerb(other.c, across.i) - MAST_OFF),
+    ];
+
+    const over = overOf(ends);
+    const id = `gantry-${arm.id}-${other.id.replace(/^vms-/, "")}`;
+
+    const panels = [arm, other].flatMap(({ c, face }) => {
+      const span = over.find((o) => o.c === c);
+
+      return span
+        ? [
+            {
+              on: c.name,
+              s: round(span.s, 0),
+              t: round(alongBeam(span, (span.left + span.right) / 2), 3),
+              face,
+            },
+          ]
+        : [];
+    });
+
+    gantries.push({
+      id,
+      ends,
+      over,
+      panels,
+      made: true,
+      notes: [
+        ...arm.notes,
+        ...other.notes,
+        `NZTA's signs face each other's traffic ${Math.hypot(other.at[0] - arm.at[0], other.at[1] - arm.at[1]).toFixed(0)} m apart over the lanes, and OSM has no gantry there: one gantry across both carriageways, kerb to kerb (the council's 3D model there spans both; where its legs stand is a guess)`,
+      ],
+    });
+    continue;
+  }
+
+  const { id, c, s, left, right, lateral, face, notes } = arm;
+  const reach = Math.min(Math.max(lateral, left + 1.5), right - 1.5);
+
+  structures.push({
+    id,
+    kind: "cantilever",
+    on: c.name,
+    s: round(s, 0),
+    a: pointAt(c, s, left - MAST_OFF),
+    b: pointAt(c, s, reach),
+    panels: [{ on: c.name, s: round(s, 0), t: 1, face }],
+  });
+  evidence[id] = [
+    ...notes,
+    "NZTA's position is over the lanes and OSM has no gantry there: drawn on an arm from the left kerb (the mounting's a guess)",
+  ];
 }
 
 // --- Direction signs: where a road with OSM destinations leaves. ---
@@ -851,7 +969,7 @@ for (const { c, s, i, face, note } of directionPosts) {
 // --- Gantries with something to carry. ---
 
 for (const gantry of gantries) {
-  const what = `OSM gantry way ${gantry.id}`;
+  const what = gantry.made ? gantry.id : `OSM gantry way ${gantry.id}`;
 
   if (!gantry.panels.length) {
     omitted.push({
@@ -884,7 +1002,7 @@ for (const gantry of gantries) {
     (end) => end.map((v) => round(v))
   );
 
-  const id = `gantry-${gantry.id}`;
+  const id = gantry.made ? gantry.id : `gantry-${gantry.id}`;
 
   structures.push({
     id,
@@ -898,7 +1016,10 @@ for (const gantry of gantries) {
       t: footFirst ? panel.t : round(1 - panel.t, 3),
     })),
   });
-  evidence[id] = [`${what}, end to end`, ...gantry.notes];
+  evidence[id] = [
+    ...(gantry.made ? [] : [`${what}, end to end`]),
+    ...gantry.notes,
+  ];
 }
 
 // --- Speed limit signs: where roads.json's limit changes. ---
@@ -1036,6 +1157,61 @@ for (const c of carriageways) {
   }
 }
 
+// --- Lane signs: one over each lane, on the urban motorway's gantries. ---
+
+let laneSigns = 0;
+
+for (const structure of structures) {
+  if (structure.kind !== "gantry") continue;
+
+  for (const span of overOf([structure.a, structure.b])) {
+    const { c, s, i, left, a, b } = span;
+    const at = pointAt(c, s, 0);
+
+    if (!LANE_SIGN_ROADS.includes(c.name) || at[1] > LANE_SIGNS_NORTH) continue;
+
+    // Its lanes are signed for where they go already.
+    if (
+      structure.panels.some(
+        ({ on, face }) => on === c.name && face.kind === "direction"
+      )
+    ) {
+      continue;
+    }
+
+    const variable = (await registered(at)).find(
+      (zone) =>
+        zone.speedCategoryName === "Variable" &&
+        zone.whenEffective <= now &&
+        (zone.whenIneffective === null || zone.whenIneffective > now)
+    );
+
+    if (!variable) continue;
+    const width = laneWidth(c, i);
+    let count = 0;
+
+    for (let lane = 0; lane < c.lanes[i]; lane++) {
+      const lateral = left + (lane + 0.5) * width;
+      const t = (lateral - a.lateral) / (b.lateral - a.lateral || 1);
+
+      if (t <= 0.02 || t >= 0.98) continue;
+      structure.panels.push({
+        on: c.name,
+        s: round(s, 0),
+        t: round(t, 3),
+        face: { kind: "lane", zone: laneZone(variable, at) },
+      });
+      count++;
+    }
+
+    if (!count) continue;
+    laneSigns += count;
+    evidence[structure.id].push(
+      `${count} lane signs over ${c.name}'s lanes: in the register's variable limit (${variable.speedLimitZoneName}), on the motorway NZTA's lane control signs hang over (Terrace Tunnel to Ngauranga Gorge); no feed says what they show, so the scene estimates it from NZTA's speeds as the ${laneZone(variable, at)} runs`
+    );
+  }
+}
+
 if (nslr.fetched) {
   const save = process.argv.indexOf("--save-nslr");
 
@@ -1063,6 +1239,6 @@ const count = (kind) =>
 
 console.log(
   `${structures.length} structures (${structures.filter(({ kind }) => kind !== "post").length} gantries and arms): ` +
-    `${count("vms")} message signs, ${count("direction")} direction panels, ${count("speed")} speed limits; ` +
+    `${count("vms")} message signs, ${count("direction")} direction panels, ${count("speed")} speed limits, ${laneSigns} lane signs; ` +
     `${omitted.length} left out; ${(json.length / 1024).toFixed(0)} KB`
 );

@@ -86,7 +86,7 @@ const CRAWL = 1.5;
  * each an average over its hour, so at its middle. Public holidays
  * ("YYYY-MM-DD") are as quiet as weekends.
  */
-function demand(
+export function demand(
   date: Date,
   holidays: ReadonlySet<string> | null,
   inbound: boolean,

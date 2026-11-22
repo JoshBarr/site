@@ -187,8 +187,10 @@ export const LIVE_CREDITS: Credit[] = [
     licence: CC_BY,
   },
   {
-    // The speed limits are its National Speed Limit Register's.
-    what: "traffic speeds and counts, message signs, speed limits",
+    // The speed limits are its National Speed Limit Register's. NZTA
+    // doesn't publish what its lane signs show: the scene estimates it from
+    // the register and the speeds (traffic/signs/limits.ts).
+    what: "traffic speeds and counts, message signs, speed limits (the motorway's lane signs estimated from them)",
     who: [
       {
         name: "NZTA",

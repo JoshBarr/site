@@ -12,29 +12,9 @@
       "NZTA VMS 163 \"SH1 Sussex St - Northbound\" (Northbound) at -41.300668, 174.778686: SH1N 4885 m along, -7.4 m right of its line",
       "a mast on the verge, at NZTA's position"
     ],
-    "vms-5": [
-      "NZTA VMS 5 \"SH1 Arthur Street - Northbound\" (Northbound) at -41.297177, 174.773682: SH1N 5590 m along, -0.7 m right of its line",
-      "NZTA's position is over the lanes and OSM has no gantry there: drawn on an arm from the left kerb (the mounting's a guess)"
-    ],
-    "vms-75": [
-      "NZTA VMS 75 \"SH1 Karo Drive - Northbound\" (Northbound) at -41.295038, 174.771111: SH1N 5924 m along, -1.2 m right of its line",
-      "NZTA's position is over the lanes and OSM has no gantry there: drawn on an arm from the left kerb (the mounting's a guess)"
-    ],
-    "vms-135": [
-      "NZTA VMS 135 \"SH1 Placemakers - Northbound\" (Northbound) at -41.25679, 174.796462: SH1N 10984 m along, -2.1 m right of its line",
-      "NZTA's position is over the lanes and OSM has no gantry there: drawn on an arm from the left kerb (the mounting's a guess)"
-    ],
-    "vms-148": [
-      "NZTA VMS 148 \"SH1 Rail Crossing - Northbound\" (Northbound) at -41.253696, 174.804483: SH1N 11742 m along, -2.5 m right of its line",
-      "NZTA's position is over the lanes and OSM has no gantry there: drawn on an arm from the left kerb (the mounting's a guess)"
-    ],
     "vms-448": [
       "NZTA VMS 448 \"Te Ara Tupua (N) VMS\" (Northbound) at -41.247678, 174.813317: SH1N 12743 m along, -10.4 m right of its line",
       "a mast on the verge, at NZTA's position"
-    ],
-    "vms-121": [
-      "NZTA VMS 121 \"SH1 Newlands 3 - Northbound\" (Northbound) at -41.235003, 174.806124: SH1N 14555 m along, -0.1 m right of its line",
-      "NZTA's position is over the lanes and OSM has no gantry there: drawn on an arm from the left kerb (the mounting's a guess)"
     ],
     "vms-179": [
       "NZTA VMS 179 \"SH1 Tawa - Northbound\" (Northbound) at -41.198355, 174.824128: SH1N 19119 m along, -14.3 m right of its line",
@@ -76,18 +56,6 @@
       "NZTA VMS 178 \"SH1 Tawa - Southbound\" (Southbound) at -41.177648, 174.829988: SH1S 26627 m along, -13.9 m right of its line",
       "a mast on the verge, at NZTA's position"
     ],
-    "vms-72": [
-      "NZTA VMS 72 \"SH1 Johnsonville - Southbound\" (Southbound) at -41.217229, 174.811758: SH1S 31646 m along, -4.0 m right of its line",
-      "NZTA's position is over the lanes and OSM has no gantry there: drawn on an arm from the left kerb (the mounting's a guess)"
-    ],
-    "vms-149": [
-      "NZTA VMS 149 \"SH1 Rail Crossing - Southbound\" (Southbound) at -41.253851, 174.804485: SH1S 36686 m along, -2.0 m right of its line",
-      "NZTA's position is over the lanes and OSM has no gantry there: drawn on an arm from the left kerb (the mounting's a guess)"
-    ],
-    "vms-136": [
-      "NZTA VMS 136 \"SH1 Placemakers - Southbound\" (Southbound) at -41.256845, 174.796691: SH1S 37422 m along, -3.3 m right of its line",
-      "NZTA's position is over the lanes and OSM has no gantry there: drawn on an arm from the left kerb (the mounting's a guess)"
-    ],
     "vms-57": [
       "NZTA VMS 57 \"SH1 Hobson St - Southbound\" (Southbound) at -41.27392, 174.775858: SH1S 40023 m along, -12.6 m right of its line",
       "a mast on the verge, at NZTA's position"
@@ -96,10 +64,6 @@
       "NZTA VMS 456 \"North Portal (S) VMS_NEW\" (Southbound) at -41.286589, 174.772145: SH1S 41527 m along, -6.4 m right of its line",
       "NZTA VMS 123 \"SH1 Terrace Tunnel North Portal - Southbound\" (Southbound) at -41.286592, 174.772132: SH1S 41527 m along, -6.4 m right of its line",
       "a mast on the verge, at NZTA's position"
-    ],
-    "vms-117": [
-      "NZTA VMS 117 \"SH1 Ngauranga - Northbound\" (Northbound) at -41.246767, 174.815118: SH2N 596 m along, -2.8 m right of its line",
-      "NZTA's position is over the lanes and OSM has no gantry there: drawn on an arm from the left kerb (the mounting's a guess)"
     ],
     "vms-37": [
       "NZTA VMS 37 \"SH2 Dowse Drive - Northbound\" (Northbound) at -41.219562, 174.873699: SH2N 6497 m along, -9.9 m right of its line",
@@ -122,12 +86,24 @@
       "NZTA VMS 11 \"SH2 Belmont - Southbound\" (Southbound) at -41.182949, 174.94194: SH2S 21422 m along, -12.7 m right of its line",
       "a mast on the verge, at NZTA's position"
     ],
-    "vms-133": [
-      "NZTA VMS 133 \"SH2 Petone - Southbound\" (Southbound) at -41.223895, 174.862489: SH2S 29523 m along, 2.1 m right of its line",
+    "vms-5": [
+      "NZTA VMS 5 \"SH1 Arthur Street - Northbound\" (Northbound) at -41.297177, 174.773682: SH1N 5590 m along, -0.7 m right of its line",
       "NZTA's position is over the lanes and OSM has no gantry there: drawn on an arm from the left kerb (the mounting's a guess)"
     ],
-    "vms-118": [
-      "NZTA VMS 118 \"SH1 Ngauranga - Southbound\" (Southbound) at -41.246846, 174.815248: SH2S 34358 m along, 1.4 m right of its line",
+    "vms-75": [
+      "NZTA VMS 75 \"SH1 Karo Drive - Northbound\" (Northbound) at -41.295038, 174.771111: SH1N 5924 m along, -1.2 m right of its line",
+      "NZTA's position is over the lanes and OSM has no gantry there: drawn on an arm from the left kerb (the mounting's a guess)"
+    ],
+    "vms-121": [
+      "NZTA VMS 121 \"SH1 Newlands 3 - Northbound\" (Northbound) at -41.235003, 174.806124: SH1N 14555 m along, -0.1 m right of its line",
+      "NZTA's position is over the lanes and OSM has no gantry there: drawn on an arm from the left kerb (the mounting's a guess)"
+    ],
+    "vms-72": [
+      "NZTA VMS 72 \"SH1 Johnsonville - Southbound\" (Southbound) at -41.217229, 174.811758: SH1S 31646 m along, -4.0 m right of its line",
+      "NZTA's position is over the lanes and OSM has no gantry there: drawn on an arm from the left kerb (the mounting's a guess)"
+    ],
+    "vms-133": [
+      "NZTA VMS 133 \"SH2 Petone - Southbound\" (Southbound) at -41.223895, 174.862489: SH2S 29523 m along, 2.1 m right of its line",
       "NZTA's position is over the lanes and OSM has no gantry there: drawn on an arm from the left kerb (the mounting's a guess)"
     ],
     "exit-SH1S-14036": [
@@ -334,7 +310,8 @@
       "NZTA VMS 68 \"SH1 Interchange - Southbound\" (Southbound) at -41.250251, 174.809786: SH1S 36084 m along, -3.2 m right of its line",
       "hung from OSM gantry way 1124896697, 7 m from NZTA's position, over the middle of SH1S's lanes",
       "OSM way 158306216 along SH1N from 10716 m: destination:lanes=Porirua;Palmerston North|Porirua;Palmerston North|Hutt Valley;Masterton|Hutt Valley;Masterton, destination:ref:lanes=SH 1|SH 1|SH 2|SH 2, turn:lanes=slight_left|slight_left|through|through",
-      "put on OSM gantry way 1124896697, 12326 m along SH1N, in the stretch so signed: that this gantry carries these is inferred"
+      "put on OSM gantry way 1124896697, 12326 m along SH1N, in the stretch so signed: that this gantry carries these is inferred",
+      "2 lane signs over SH1S's lanes: in the register's variable limit (WELLINGTON URBAN MOTORWAY SOUTHBOUND - NGAURANGA TO PIPITEA, SH1), on the motorway NZTA's lane control signs hang over (Terrace Tunnel to Ngauranga Gorge); no feed says what they show, so the scene estimates it from NZTA's speeds as the motorway runs"
     ],
     "gantry-1125588529": [
       "OSM gantry way 1125588529, end to end",
@@ -348,14 +325,17 @@
       "NZTA VMS 119 \"SH1 Newlands 1 - Southbound\" (Southbound) at -41.229435, 174.809477: SH1S 33090 m along, -2.6 m right of its line",
       "hung from OSM gantry way 1138259746, 1 m from NZTA's position, over the middle of SH1S's lanes",
       "OSM way 16874792 (trunk_link) leaves SH1N 15411 m along, to the left: destination=Johnsonville",
-      "put on OSM gantry way 1138259746, 126 m before where it leaves: that this gantry carries this sign is inferred"
+      "put on OSM gantry way 1138259746, 126 m before where it leaves: that this gantry carries this sign is inferred",
+      "2 lane signs over SH1S's lanes: in the register's variable limit (CENTENNIAL HIGHWAY SOUTHBOUND, SH 1 - JOHNSONVILLE ROAD ON RAMP TO NEWLANDS ROAD), on the motorway NZTA's lane control signs hang over (Terrace Tunnel to Ngauranga Gorge); no feed says what they show, so the scene estimates it from NZTA's speeds as the gorge runs"
     ],
     "gantry-1160951516": [
       "OSM gantry way 1160951516, end to end",
       "NZTA VMS 87 \"SH1 Kaiwharawhara - Northbound\" (Northbound) at -41.260586, 174.791331: SH1N 10376 m along, -1.9 m right of its line",
       "hung from OSM gantry way 1160951516, 9 m from NZTA's position, over the middle of SH1N's lanes",
       "NZTA VMS 88 \"SH1 Kaiwharawhara - Southbound\" (Southbound) at -41.260637, 174.791517: SH1S 38034 m along, -1.6 m right of its line",
-      "hung from OSM gantry way 1160951516, 5 m from NZTA's position, over the middle of SH1S's lanes"
+      "hung from OSM gantry way 1160951516, 5 m from NZTA's position, over the middle of SH1S's lanes",
+      "3 lane signs over SH1S's lanes: in the register's variable limit (WELLINGTON URBAN MOTORWAY SOUTHBOUND - NGAURANGA TO PIPITEA, SH1), on the motorway NZTA's lane control signs hang over (Terrace Tunnel to Ngauranga Gorge); no feed says what they show, so the scene estimates it from NZTA's speeds as the motorway runs",
+      "4 lane signs over SH1N's lanes: in the register's variable limit (NEWLANDS TO PIPITEA NORTHBOUND, SH 1, SH 2), on the motorway NZTA's lane control signs hang over (Terrace Tunnel to Ngauranga Gorge); no feed says what they show, so the scene estimates it from NZTA's speeds as the motorway runs"
     ],
     "gantry-1191549031": [
       "OSM gantry way 1191549031, end to end",
@@ -375,7 +355,27 @@
     "gantry-1195973179": [
       "OSM gantry way 1195973179, end to end",
       "NZTA VMS 39 \"SH1 Nauranga Gorge Flyover - Southbound\" (Southbound) at -41.245728, 174.814911: SH1S 35381 m along, 0.7 m right of its line",
-      "hung from OSM gantry way 1195973179, 5 m from NZTA's position, over the middle of SH1S's lanes"
+      "hung from OSM gantry way 1195973179, 5 m from NZTA's position, over the middle of SH1S's lanes",
+      "2 lane signs over SH1S's lanes: in the register's variable limit (WELLINGTON URBAN MOTORWAY SOUTHBOUND - NEWLANDS TO NGAURANGA, SH1), on the motorway NZTA's lane control signs hang over (Terrace Tunnel to Ngauranga Gorge); no feed says what they show, so the scene estimates it from NZTA's speeds as the gorge runs"
+    ],
+    "gantry-vms-135-136": [
+      "NZTA VMS 135 \"SH1 Placemakers - Northbound\" (Northbound) at -41.25679, 174.796462: SH1N 10984 m along, -2.1 m right of its line",
+      "NZTA VMS 136 \"SH1 Placemakers - Southbound\" (Southbound) at -41.256845, 174.796691: SH1S 37422 m along, -3.3 m right of its line",
+      "NZTA's signs face each other's traffic 20 m apart over the lanes, and OSM has no gantry there: one gantry across both carriageways, kerb to kerb (the council's 3D model there spans both; where its legs stand is a guess)",
+      "3 lane signs over SH1S's lanes: in the register's variable limit (WELLINGTON URBAN MOTORWAY SOUTHBOUND - NGAURANGA TO PIPITEA, SH1), on the motorway NZTA's lane control signs hang over (Terrace Tunnel to Ngauranga Gorge); no feed says what they show, so the scene estimates it from NZTA's speeds as the motorway runs",
+      "4 lane signs over SH1N's lanes: in the register's variable limit (NEWLANDS TO PIPITEA NORTHBOUND, SH 1, SH 2), on the motorway NZTA's lane control signs hang over (Terrace Tunnel to Ngauranga Gorge); no feed says what they show, so the scene estimates it from NZTA's speeds as the motorway runs"
+    ],
+    "gantry-vms-148-149": [
+      "NZTA VMS 148 \"SH1 Rail Crossing - Northbound\" (Northbound) at -41.253696, 174.804483: SH1N 11742 m along, -2.5 m right of its line",
+      "NZTA VMS 149 \"SH1 Rail Crossing - Southbound\" (Southbound) at -41.253851, 174.804485: SH1S 36686 m along, -2.0 m right of its line",
+      "NZTA's signs face each other's traffic 17 m apart over the lanes, and OSM has no gantry there: one gantry across both carriageways, kerb to kerb (the council's 3D model there spans both; where its legs stand is a guess)",
+      "3 lane signs over SH1S's lanes: in the register's variable limit (WELLINGTON URBAN MOTORWAY SOUTHBOUND - NGAURANGA TO PIPITEA, SH1), on the motorway NZTA's lane control signs hang over (Terrace Tunnel to Ngauranga Gorge); no feed says what they show, so the scene estimates it from NZTA's speeds as the motorway runs",
+      "4 lane signs over SH1N's lanes: in the register's variable limit (NEWLANDS TO PIPITEA NORTHBOUND, SH 1, SH 2), on the motorway NZTA's lane control signs hang over (Terrace Tunnel to Ngauranga Gorge); no feed says what they show, so the scene estimates it from NZTA's speeds as the motorway runs"
+    ],
+    "gantry-vms-117-118": [
+      "NZTA VMS 117 \"SH1 Ngauranga - Northbound\" (Northbound) at -41.246767, 174.815118: SH2N 596 m along, -2.8 m right of its line",
+      "NZTA VMS 118 \"SH1 Ngauranga - Southbound\" (Southbound) at -41.246846, 174.815248: SH2S 34358 m along, 1.4 m right of its line",
+      "NZTA's signs face each other's traffic 14 m apart over the lanes, and OSM has no gantry there: one gantry across both carriageways, kerb to kerb (the council's 3D model there spans both; where its legs stand is a guess)"
     ],
     "speed-SH1S-23510": [
       "SH1S: roads.json's limit (OSM maxspeed) goes 110 → 100 km/h 23510 m along",
@@ -424,7 +424,7 @@
     ],
     "speed-SH1N-24889": [
       "SH1N: roads.json's limit (OSM maxspeed) goes 100 → 110 km/h 24889 m along",
-      "the National Speed Limit Register has no zone in force 80 m on (it lags changes): OSM's word alone",
+      "the National Speed Limit Register agrees 80 m on: 110 km/h permanent zone \"WHITBY TO TAWA 110 KM/H, SH 1\" (61ad3401-d0b2-42ff-807f-8d2b4c6814ed)",
       "stood on the left verge where the limit changes (the sign across the carriageway from it isn't drawn)"
     ],
     "speed-SH2S-883": [
@@ -434,22 +434,27 @@
     ],
     "speed-SH2S-3885": [
       "SH2S: roads.json's limit (OSM maxspeed) goes 80 → 70 km/h 3885 m along",
-      "the National Speed Limit Register has no zone in force 80 m on (it lags changes): OSM's word alone",
+      "the National Speed Limit Register agrees 80 m on: 70 km/h permanent zone \"TIMBERLEA TO CLOUSTON PARK, SH 2\" (a3146fe6-a3b6-482f-84c2-565bc77b22f2)",
       "stood on the left verge where the limit changes"
     ],
     "speed-SH2S-4598": [
       "SH2S: roads.json's limit (OSM maxspeed) goes 70 → 50 km/h 4598 m along",
-      "the National Speed Limit Register has no zone in force 80 m on (it lags changes): OSM's word alone",
+      "the National Speed Limit Register agrees 80 m on: 50 km/h permanent zone \"SH2 MAORIBANK (NORTH OF AKATARAWA RD TO SOUTH OF FERGUSSON DRIVE)\" (d1403fc8-cdf5-4fef-9a5a-b6ac3c6be631)",
       "stood on the left verge where the limit changes"
     ],
     "speed-SH2S-5963": [
       "SH2S: roads.json's limit (OSM maxspeed) goes 50 → 100 km/h 5963 m along",
-      "the National Speed Limit Register has no zone in force 80 m on (it lags changes): OSM's word alone",
+      "the National Speed Limit Register agrees 80 m on: 100 km/h permanent zone \"CLOUSTON PARK TO HAYWARDS, SH 2\" (b0c20870-49fa-45b7-9361-f4c53617e764)",
       "stood on the left verge where the limit changes"
     ],
     "speed-SH2S-9637": [
       "SH2S: roads.json's limit (OSM maxspeed) goes 100 → 80 km/h 9637 m along",
       "the National Speed Limit Register agrees 80 m on: 80 km/h permanent zone \"TRENTHAM  - RIVER ROAD SOUTHBOUND, SH 2\" (0917d713-177a-42f3-9268-5431e7ff5375)",
+      "stood on the left verge where the limit changes (the sign across the carriageway from it isn't drawn)"
+    ],
+    "speed-SH2S-11904": [
+      "SH2S: roads.json's limit (OSM maxspeed) goes 80 → 100 km/h 11904 m along",
+      "the National Speed Limit Register agrees 80 m on: 100 km/h permanent zone \"CLOUSTON PARK TO HAYWARDS, SH 2\" (b0c20870-49fa-45b7-9361-f4c53617e764)",
       "stood on the left verge where the limit changes (the sign across the carriageway from it isn't drawn)"
     ],
     "speed-SH2S-29102": [
@@ -479,17 +484,17 @@
     ],
     "speed-SH2N-25313": [
       "SH2N: roads.json's limit (OSM maxspeed) goes 80 → 100 km/h 25313 m along",
-      "the National Speed Limit Register has no zone in force 80 m on (it lags changes): OSM's word alone",
+      "the National Speed Limit Register agrees 80 m on: 100 km/h permanent zone \"CLOUSTON PARK TO HAYWARDS, SH 2\" (b0c20870-49fa-45b7-9361-f4c53617e764)",
       "stood on the left verge where the limit changes"
     ],
     "speed-SH2N-28985": [
       "SH2N: roads.json's limit (OSM maxspeed) goes 100 → 50 km/h 28985 m along",
-      "the National Speed Limit Register has no zone in force 80 m on (it lags changes): OSM's word alone",
+      "the National Speed Limit Register agrees 80 m on: 50 km/h permanent zone \"SH2 MAORIBANK (NORTH OF AKATARAWA RD TO SOUTH OF FERGUSSON DRIVE)\" (d1403fc8-cdf5-4fef-9a5a-b6ac3c6be631)",
       "stood on the left verge where the limit changes"
     ],
     "speed-SH2N-30347": [
       "SH2N: roads.json's limit (OSM maxspeed) goes 50 → 70 km/h 30347 m along",
-      "the National Speed Limit Register has no zone in force 80 m on (it lags changes): OSM's word alone",
+      "the National Speed Limit Register agrees 80 m on: 70 km/h permanent zone \"TIMBERLEA TO CLOUSTON PARK, SH 2\" (a3146fe6-a3b6-482f-84c2-565bc77b22f2)",
       "stood on the left verge where the limit changes"
     ],
     "speed-SH2N-31061": [
@@ -738,7 +743,7 @@
     },
     {
       "what": "SH1S: roads.json's limit (OSM maxspeed) goes 80 → 70 km/h 41388 m along",
-      "why": "the register has a variable limit there (100 km/h variable zone \"WELLINGTON URBAN MOTORWAY TERRACE TUNNEL SOUTHBOUND, SH 1 - BOULCOTT STREET TO SALAMANCA ROAD\" (02f055da-35fd-4505-995b-8bc7453dbad7); 100 km/h variable zone \"WELLINGTON URBAN MOTORWAY TERRACE TUNNEL NORTHBOUND, SH 1 - BOULCOTT STREET TO SALAMANCA ROAD\" (00c15b40-5a8d-4346-b0e4-ed3dbbf2d111)): its signs are electronic, and no feed says what they show"
+      "why": "the register has a variable limit there (100 km/h variable zone \"WELLINGTON URBAN MOTORWAY TERRACE TUNNEL NORTHBOUND, SH 1 - BOULCOTT STREET TO SALAMANCA ROAD\" (00c15b40-5a8d-4346-b0e4-ed3dbbf2d111); 100 km/h variable zone \"WELLINGTON URBAN MOTORWAY TERRACE TUNNEL SOUTHBOUND, SH 1 - BOULCOTT STREET TO SALAMANCA ROAD\" (02f055da-35fd-4505-995b-8bc7453dbad7)): its signs are electronic, and no feed says what they show"
     },
     {
       "what": "SH1N: roads.json's limit (OSM maxspeed) goes 50 → 70 km/h 6017 m along",
@@ -755,10 +760,6 @@
     {
       "what": "SH1N: roads.json's limit (OSM maxspeed) goes 80 → 100 km/h 15795 m along",
       "why": "the register has a variable limit there (100 km/h variable zone \"JOHNSONVILLE PORIRUA MOTORWAY NORTHBOUND, SH 1 - HELSTON ROAD TO JOHNSONVILLE ROAD ON RAMP\" (66421373-1dd3-4f4c-b76c-0165e903ce67)): its signs are electronic, and no feed says what they show"
-    },
-    {
-      "what": "SH2S: roads.json's limit (OSM maxspeed) goes 80 → 100 km/h 11904 m along",
-      "why": "the register disagrees: 80 km/h permanent zone \"SH2 MOONSHINE HILL ROAD 80 KM/H\" (c9429607-d1e3-4e7b-b1db-239f994dd1c6)"
     }
   ]
 }
