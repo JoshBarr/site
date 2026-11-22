@@ -127,12 +127,14 @@ export function hazeShadow({
 
 /**
  * `color` (the scene, hazed as though the sun reached all of it) less the
- * sun's glow in the haze that `shadow` (see hazeShadow) found in cloud
- * shadow.
+ * sun's glow in the haze found in cloud or hill shadow: `lost`, that share
+ * of the frame's light (see hazeShadow, or the haze volume). The volume
+ * gives the share that's `lit` too, and `rays`, how much to make of the
+ * glow there (1 as it is).
  */
 export function shadedHaze(
   color,
-  shadow,
+  { lost, lit, rays }: { lost: any; lit?: any; rays?: any },
   {
     cameraWorld,
     projectionInverse,
@@ -148,5 +150,7 @@ export function shadedHaze(
   const glow =
     skyStage() >= 4 ? hazeSunRadiance(direction).add(lobe.mul(moonlit)) : lobe;
 
-  return max(color.sub(glow.mul(shadow.r)), 0);
+  const taken = lit && rays ? lost.sub(lit.mul(rays.sub(1))) : lost;
+
+  return max(color.sub(glow.mul(taken)), 0);
 }

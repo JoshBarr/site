@@ -54,6 +54,7 @@ import { useRenderer } from "../renderer";
 import { setSceneDepth } from "../sceneDepth";
 import { createGovernor } from "../governor";
 import { hazeShadow, shadedHaze } from "../hazeShadow";
+import { createHazeVolume } from "../hazeVolume";
 import { meterSky, skyStage, stopDown } from "../sky/skyModel";
 import { hasFirstViewLoaded } from "../loading";
 import { sceneShown } from "../visibility";
@@ -293,152 +294,179 @@ export function Clouds({
     setNightGlow(night);
   }, [night]);
 
-  const { scenePass, pipeline, glow, history, drops, tv } = useMemo(() => {
-    const pipeline = new RenderPipeline(renderer);
-    // Tone mapped and dithered by hand, as its last node (see dithered).
-    pipeline.outputColorTransform = false;
-    const scenePass = pass(scene, camera);
-    const depth = scenePass.getTextureNode("depth");
-    const output = scenePass.getTextureNode("output");
-    const glow = nightGlow(output, dark);
-    // Bent where a quake's wave is passing.
-    const seen = output.sample(quakeWarp(depth, camera));
-    const color = glow ? seen.add(glow) : seen;
+  const { scenePass, pipeline, glow, history, drops, tv, volume } =
+    useMemo(() => {
+      const pipeline = new RenderPipeline(renderer);
+      // Tone mapped and dithered by hand, as its last node (see dithered).
+      pipeline.outputColorTransform = false;
+      const scenePass = pass(scene, camera);
+      const depth = scenePass.getTextureNode("depth");
+      const output = scenePass.getTextureNode("output");
+      const glow = nightGlow(output, dark);
+      // Bent where a quake's wave is passing.
+      const seen = output.sample(quakeWarp(depth, camera));
+      const color = glow ? seen.add(glow) : seen;
 
-    if (!noiseReady || switchedOff("clouds")) {
-      const tv = tvScreen(depthOfField(color, depth));
-      pipeline.outputNode = shown(tv.node);
+      if (!noiseReady || switchedOff("clouds")) {
+        const tv = tvScreen(depthOfField(color, depth));
+        pipeline.outputNode = shown(tv.node);
 
-      return { scenePass, pipeline, glow, history: null, drops: null, tv };
-    }
+        return {
+          scenePass,
+          pipeline,
+          glow,
+          history: null,
+          drops: null,
+          tv,
+          volume: null,
+        };
+      }
 
-    const offset = uniform(0);
-    const accumulated = !switchedOff("cloudhistory");
+      const offset = uniform(0);
+      const accumulated = !switchedOff("cloudhistory");
 
-    // A quarter of the march's pixels a frame, the rest kept from the
-    // history: which of each four, set by the history as it goes.
-    const sub =
-      accumulated && !switchedOff("cloudquarter")
-        ? uniform(new Vector2())
+      // A quarter of the march's pixels a frame, the rest kept from the
+      // history: which of each four, set by the history as it goes.
+      const sub =
+        accumulated && !switchedOff("cloudquarter")
+          ? uniform(new Vector2())
+          : null;
+
+      const cloudNode = createCloudNode({
+        depth: scenePass.getTextureNode("depth"),
+        cameraPosition: uniform(camera.position),
+        cameraWorld: uniform(camera.matrixWorld),
+        projectionInverse: uniform(camera.projectionMatrixInverse),
+        weather: cloudNoise.weather,
+        ...layers,
+        rain,
+        quality,
+        offset,
+        sub,
+      });
+
+      // Relative to CSS pixels: on a 2x display the march would otherwise do
+      // four times the work for detail the softness of clouds doesn't need.
+      // A second texture for how far off the cloud is.
+      const clouds = rtt(cloudNode, null, null, {
+        type: HalfFloatType,
+        resolutionScale:
+          (quality.resolutionScale / renderer.getPixelRatio()) *
+          (sub ? 0.5 : 1),
+        count: 2,
+      });
+
+      const history = accumulated
+        ? cloudHistory(
+            clouds,
+            texture(clouds.renderTarget!.textures[1]),
+            camera,
+            offset,
+            sub
+          )
         : null;
 
-    const cloudNode = createCloudNode({
-      depth: scenePass.getTextureNode("depth"),
-      cameraPosition: uniform(camera.position),
-      cameraWorld: uniform(camera.matrixWorld),
-      projectionInverse: uniform(camera.projectionMatrixInverse),
-      weather: cloudNoise.weather,
-      ...layers,
-      rain,
-      quality,
-      offset,
-      sub,
-    });
+      // The haze in the clouds' shadows goes dark, before they're laid over.
+      const eye = {
+        cameraPosition: uniform(camera.position),
+        cameraWorld: uniform(camera.matrixWorld),
+        projectionInverse: uniform(camera.projectionMatrixInverse),
+      };
 
-    // Relative to CSS pixels: on a 2x display the march would otherwise do
-    // four times the work for detail the softness of clouds doesn't need.
-    // A second texture for how far off the cloud is.
-    const clouds = rtt(cloudNode, null, null, {
-      type: HalfFloatType,
-      resolutionScale:
-        (quality.resolutionScale / renderer.getPixelRatio()) * (sub ? 0.5 : 1),
-      count: 2,
-    });
+      const webgpu =
+        "isWebGPUBackend" in renderer.backend &&
+        renderer.backend.isWebGPUBackend === true;
 
-    const history = accumulated
-      ? cloudHistory(
-          clouds,
-          texture(clouds.renderTarget!.textures[1]),
-          camera,
-          offset,
-          sub
-        )
-      : null;
+      // From a volume over the view where there's compute to fill it
+      // (?off=froxels for the march it replaced, as the WebGL fallback has).
+      const volume =
+        webgpu && !switchedOff("hazeshadow") && !switchedOff("froxels")
+          ? createHazeVolume(eye)
+          : null;
 
-    // The haze in the clouds' shadows goes dark, before they're laid over.
-    const eye = {
-      cameraPosition: uniform(camera.position),
-      cameraWorld: uniform(camera.matrixWorld),
-      projectionInverse: uniform(camera.projectionMatrixInverse),
-    };
+      const lit: typeof color.rgb = switchedOff("hazeshadow")
+        ? color.rgb
+        : shadedHaze(
+            color.rgb,
+            volume
+              ? { ...volume.sample(depth), rays: volume.rays }
+              : {
+                  lost: hazeShadow({
+                    depth,
+                    ...eye,
+                    resolutionScale:
+                      quality.resolutionScale / renderer.getPixelRatio(),
+                  }).r,
+                },
+            eye
+          );
 
-    const lit: typeof color.rgb = switchedOff("hazeshadow")
-      ? color.rgb
-      : shadedHaze(
-          color.rgb,
-          hazeShadow({
-            depth,
-            ...eye,
-            resolutionScale: quality.resolutionScale / renderer.getPixelRatio(),
-          }),
-          eye
-        );
+      // Just enough blur to dissolve the march's jitter grain.
+      const settled = history?.getTextureNode() ?? clouds;
+      const soft = gaussianBlur(settled, 1, 0.4);
 
-    // Just enough blur to dissolve the march's jitter grain.
-    const settled = history?.getTextureNode() ?? clouds;
-    const soft = gaussianBlur(settled, 1, 0.4);
+      // Faded out by cloudsSeen; not drawn at all once it's 0.
+      const cloudy = lit.mul(soft.a).add(soft.rgb);
 
-    // Faded out by cloudsSeen; not drawn at all once it's 0.
-    const cloudy = lit.mul(soft.a).add(soft.rgb);
+      const composite: any = depthOfField(
+        vec4(
+          select(cloudsSeen.greaterThan(0), mix(lit, cloudy, cloudsSeen), lit),
+          1
+        ),
+        depth
+      );
 
-    const composite: any = depthOfField(
-      vec4(
-        select(cloudsSeen.greaterThan(0), mix(lit, cloudy, cloudsSeen), lit),
-        1
-      ),
-      depth
-    );
+      if (!raining) {
+        const tv = tvScreen(composite);
+        pipeline.outputNode = shown(tv.node);
 
-    if (!raining) {
-      const tv = tvScreen(composite);
+        return { scenePass, pipeline, glow, history, drops: null, tv, volume };
+      }
+
+      // Drops go over the clouds: from under them, they're in front.
+      const drops = createDrops({
+        weather: cloudNoise.weather,
+        low: layers.low,
+        rain,
+        sceneDepth: scenePass.getTextureNode("depth"),
+        count: quality.drops,
+      });
+
+      const rainScene = new Scene();
+      rainScene.add(drops);
+
+      // Soft-edged and at least a couple of pixels wide: no MSAA needed.
+      const streaks = pass(rainScene, camera, { samples: 0 }).getTextureNode(
+        "output"
+      );
+
+      // And water on the lens over everything. What it bends into view is
+      // blurred anyway, so it goes without the depth of field (and glow).
+      const over = (under, layer) =>
+        under.mul(layer.a.oneMinus()).add(layer.rgb);
+
+      if (!WET_LENS) {
+        const tv = tvScreen(vec4(over(composite.rgb, streaks), 1));
+        pipeline.outputNode = shown(tv.node);
+
+        return { scenePass, pipeline, glow, history, drops, tv, volume };
+      }
+
+      const tv = tvScreen(
+        wetLens(vec4(over(composite.rgb, streaks), 1), (uv) => {
+          const sky = settled.sample(uv);
+
+          return over(
+            output.sample(uv).rgb.mul(sky.a).add(sky.rgb),
+            streaks.sample(uv)
+          );
+        })
+      );
+
       pipeline.outputNode = shown(tv.node);
 
-      return { scenePass, pipeline, glow, history, drops: null, tv };
-    }
-
-    // Drops go over the clouds: from under them, they're in front.
-    const drops = createDrops({
-      weather: cloudNoise.weather,
-      low: layers.low,
-      rain,
-      sceneDepth: scenePass.getTextureNode("depth"),
-      count: quality.drops,
-    });
-
-    const rainScene = new Scene();
-    rainScene.add(drops);
-
-    // Soft-edged and at least a couple of pixels wide: no MSAA needed.
-    const streaks = pass(rainScene, camera, { samples: 0 }).getTextureNode(
-      "output"
-    );
-
-    // And water on the lens over everything. What it bends into view is
-    // blurred anyway, so it goes without the depth of field (and glow).
-    const over = (under, layer) => under.mul(layer.a.oneMinus()).add(layer.rgb);
-
-    if (!WET_LENS) {
-      const tv = tvScreen(vec4(over(composite.rgb, streaks), 1));
-      pipeline.outputNode = shown(tv.node);
-
-      return { scenePass, pipeline, glow, history, drops, tv };
-    }
-
-    const tv = tvScreen(
-      wetLens(vec4(over(composite.rgb, streaks), 1), (uv) => {
-        const sky = settled.sample(uv);
-
-        return over(
-          output.sample(uv).rgb.mul(sky.a).add(sky.rgb),
-          streaks.sample(uv)
-        );
-      })
-    );
-
-    pipeline.outputNode = shown(tv.node);
-
-    return { scenePass, pipeline, glow, history, drops, tv };
-  }, [renderer, scene, camera, noiseReady, rain, quality, dark, raining]);
+      return { scenePass, pipeline, glow, history, drops, tv, volume };
+    }, [renderer, scene, camera, noiseReady, rain, quality, dark, raining]);
 
   // For reading back what's in front of what.
   useEffect(() => {
@@ -453,10 +481,11 @@ export function Clouds({
       tv.dispose();
       glow?.dispose();
       history?.dispose();
+      volume?.dispose();
       drops?.geometry.dispose();
       drops?.material.dispose();
     },
-    [pipeline, tv, glow, history, drops]
+    [pipeline, tv, glow, history, drops, volume]
   );
 
   useEffect(() => {
@@ -525,6 +554,19 @@ export function Clouds({
 
     if (scale !== scenePass.getResolutionScale()) {
       scenePass.setResolutionScale(scale);
+    }
+
+    // The haze's volume, for the camera as this frame draws it: three
+    // doesn't work its matrix out until the scene's drawn.
+    if (volume) {
+      camera.updateMatrixWorld();
+
+      volume.update(
+        renderer,
+        scenePass.getTexture("depth"),
+        scenePass.renderTarget.width,
+        scenePass.renderTarget.height
+      );
     }
 
     pipeline.render();
