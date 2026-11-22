@@ -934,21 +934,13 @@ function Controls({
 
     // Holding a press still on something makes it the orbit point: the
     // camera turns to look at it from where it is (or the map slides over
-    // to it), and focuses on it. Following, it stops first.
+    // to it), and focuses on it. Not while following: the rig has the
+    // camera, and a hold there is only looking around.
     const orbitAround = (point: Vector3) => {
       const c = controls.current;
 
       if (!c) return;
       touched.current = true;
-
-      if (getSnapshot().following) {
-        stopFollowing();
-        handBack();
-
-        // Out of bounds, it's flying back in: that, not this.
-        if (flight.current) return;
-      }
-
       land();
       const map = getMapView();
       const from = c.camera.position.clone();
@@ -984,7 +976,7 @@ function Controls({
       if (
         !(camera instanceof PerspectiveCamera) ||
         scope.active ||
-        getSnapshot().following?.category === "satellite"
+        getSnapshot().following
       ) {
         return null;
       }
@@ -1077,8 +1069,8 @@ function Controls({
           ? { x: e.clientX, y: e.clientY, time: e.timeStamp, took }
           : null;
 
-      // A second finger is a pinch, not a hold.
-      if (press) startHold(e);
+      // A second finger is a pinch, not a hold. Following, there's none.
+      if (press && !getSnapshot().following) startHold(e);
       else letGo();
     };
 
@@ -1192,7 +1184,7 @@ function Controls({
       disposed = true;
       element.style.cursor = "";
     };
-  }, [events, renderer, lookAround, putBack, walk, land, handBack, boundary]);
+  }, [events, renderer, lookAround, putBack, walk, land, boundary]);
 
   // Set views, picked from the shot panel, and the view now, for copying.
   useEffect(
