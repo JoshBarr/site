@@ -18,7 +18,6 @@ import {
   mx_noise_float,
   normalWorld,
   positionWorld,
-  reflect,
   smoothstep,
   step,
   uniform,
@@ -26,9 +25,7 @@ import {
   vec2,
   vec3,
 } from "three/tsl";
-import { skylight } from "../environment";
 import { verticalScale } from "../terrain/Terrain";
-import { switchedOff } from "../stats";
 import { createFloodlights } from "./floodlights";
 import type { BuildingsManifest, EncodedRange } from "./manifest";
 
@@ -43,19 +40,8 @@ const WALL = [0.12, 0.3];
 const ROOF = 0.12;
 const ROOF_SPREAD = [0.35, 1.9];
 
-/** Walls are this rough, the glass in them this. */
+/** Walls are this rough. */
 const WALL_ROUGHNESS = 0.85;
-const GLASS_ROUGHNESS = 0.1;
-
-/** Window glass by day: dark, but for what it reflects. */
-const GLASS_ALBEDO = 0.04;
-
-/**
- * The sky's radiance in the glass, of the scene's sky light, and the
- * ground's, of the sky's. By eye.
- */
-const SKY_IN_GLASS = 1;
-const GROUND_BOUNCE = 0.35;
 
 /** Walls darken over this many metres above the ground. */
 const STREET_SHADE = 10;
@@ -286,51 +272,7 @@ export function createBuildingMaterial({
   // Only truly vertical faces: steep roofs don't get windows.
   const upright = float(1).sub(smoothstep(0.1, 0.25, abs(normalWorld.y)));
 
-  // Glass by day: the panes dark and smooth, so the sun's glint (the GGX
-  // lobe the material pays for anyway) finds them. The wall between is paler
-  // by as much, so wall and glass average to the building's tone: far off,
-  // where the panes are averaged out, nothing changes, and nothing pops as
-  // they resolve.
-  // The sky in the glass (see below): none without it.
-  let skyInGlass: any = vec3(0);
-
-  if (!switchedOff("glass")) {
-    const glazed = upright.mul(float(1).sub(windowless));
-    const glassShown = mix(float(GLASS), pane, resolved);
-
-    const between = max(
-      albedo.sub(GLASS * GLASS_ALBEDO).div(1 - GLASS),
-      GLASS_ALBEDO
-    );
-
-    albedo = mix(albedo, mix(between, GLASS_ALBEDO, glassShown), glazed);
-
-    material.roughnessNode = mix(
-      WALL_ROUGHNESS,
-      GLASS_ROUGHNESS,
-      pane.mul(resolved).mul(glazed)
-    );
-
-    // And the sky in it, by Fresnel's law: faint face on, nearly all of it
-    // at a glance along the wall. The scene's sky light stands for the sky's
-    // brightness (the background's own gradient is far darker than the sky
-    // the haze pass lights); below the horizon, the ground's bounce.
-    if (!switchedOff("glasssky")) {
-      const toEye = cameraPosition.sub(positionWorld).normalize();
-      const facing = max(dot(normalWorld, toEye), 0);
-      const fresnel = float(1).sub(facing).pow(5).mul(0.96).add(0.04);
-      const reflected = reflect(toEye.negate(), normalWorld);
-
-      const seen = mix(
-        GROUND_BOUNCE,
-        1,
-        smoothstep(-0.05, 0.1, reflected.y)
-      ).mul(skylight.mul(SKY_IN_GLASS));
-
-      skyInGlass = vec3(seen.mul(fresnel).mul(glassShown).mul(glazed));
-    }
-  }
-
+  // By day the walls are plain: the panes only show once they're lit.
   material.colorNode = vec3(albedo);
 
   // Windows by night: bays along each wall and storeys up it, a random few
@@ -434,7 +376,7 @@ export function createBuildingMaterial({
       );
     });
 
-    return emitted.add(skyInGlass);
+    return emitted;
   })();
 
   material.addEventListener("dispose", () => floodlights.map.dispose());
