@@ -6,7 +6,9 @@ import {
   hazeGrey,
   hazeTransmittance,
 } from "../haze";
+import { cloudLayers, skyThrough } from "../clouds/density";
 import { hazeGlowAtNight } from "../skyglow";
+import { switchedOff } from "../stats";
 import { nightSky, skyOnCloud, skyRadiance, skyStage } from "./skyModel";
 
 // The sky behind everything, by the direction it's seen in: what the scene's
@@ -51,10 +53,15 @@ export function skyAlong(direction) {
     const lost = smoothstep(0, -0.02, direction.y);
     const hazed = max(lost, horizon.mul(0.8));
 
-    // The deck's underside, lost in the haze toward the horizon.
+    // The deck's underside, lost in the haze toward the horizon: the open
+    // sky's light on it as dim as the march has the low layer's base.
+    const shade = switchedOff("cloudshade")
+      ? float(1)
+      : skyThrough(cloudLayers.low, 0).mul(skyThrough(cloudLayers.mid, 0));
+
     const deck = mix(
       hazeColor(direction),
-      skyOnCloud(0).add(
+      skyOnCloud(0, 1.4, shade).add(
         environment.overcast.mul(environment.sunIntensity).mul(1.2)
       ),
       hazeTransmittance(cameraPosition, far)

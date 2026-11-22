@@ -32,7 +32,10 @@ import {
   CHANNELS,
   ELEVATIONS,
   HAZE_FORWARD,
-  hazePhase as hazePhaseOf,
+  HAZE_PEAK,
+  HAZE_PEAK_SHARE,
+  hazePeaked,
+  hazePhaseBroad,
   skyLight,
   type SkyLight,
 } from "./atmosphere";
@@ -199,14 +202,22 @@ const airPhase = (cosine) =>
     .add(1)
     .mul(3 / (16 * Math.PI));
 
-/** The haze's (Henyey-Greenstein), as ./atmosphere.ts has it. */
-const hazePhase = (cosine) =>
-  float(1 - HAZE_FORWARD ** 2).div(
-    pow(
-      float(1 + HAZE_FORWARD ** 2).sub(cosine.mul(2 * HAZE_FORWARD)),
-      1.5
-    ).mul(4 * Math.PI)
+/** Henyey-Greenstein's phase function, of forwardness g. */
+const lobe = (cosine, g: number) =>
+  float(1 - g ** 2).div(
+    pow(float(1 + g ** 2).sub(cosine.mul(2 * g)), 1.5).mul(4 * Math.PI)
   );
+
+/**
+ * The haze's, as ./atmosphere.ts has it: `forward` its broad lobe's g, and
+ * with it the narrow one.
+ */
+export const hazeLobes = (cosine, forward = HAZE_FORWARD) =>
+  hazePeaked
+    ? mix(lobe(cosine, forward), lobe(cosine, HAZE_PEAK), HAZE_PEAK_SHARE)
+    : lobe(cosine, forward);
+
+const hazePhase = (cosine) => hazeLobes(cosine);
 
 /**
  * The model's light toward `direction` (a unit vector), or with `level` the
@@ -272,13 +283,14 @@ export const hazeSunRadiance = (direction) => towards(direction, true).sun;
 /**
  * The sky's light on a cloud, from `height` 0 at its base to 1 at its top:
  * the old greys, or from stage 3 the model's sky by day and what's left of
- * the greys by night.
+ * the greys by night. The model's is the same at every height, so `shade`
+ * is how much of it gets down that far through the cloud (skyThrough).
  */
-export function skyOnCloud(height, greys = 1.4) {
+export function skyOnCloud(height, greys = 1.4, shade: any = 1) {
   const grey = mix(skyHorizon, skyZenith.mul(3), height).mul(greys);
 
   return skyStage() >= 3
-    ? grey.mul(nightSky).add(skyMean.mul(CLOUD_SKY))
+    ? grey.mul(nightSky).add(skyMean.mul(CLOUD_SKY).mul(shade))
     : grey.mul(skyBrightness);
 }
 
@@ -411,9 +423,12 @@ function glowToward(forward: Vector3) {
   const toSun = forward.dot(skySun.value);
 
   // All of the model's glow, whatever of it the haze is drawn with: it's
-  // the sky's too, low down the way the camera faces.
+  // the sky's too, low down the way the camera faces. Less the narrow lobe
+  // round the sun: this is one direction standing for the whole view, and
+  // facing the sun it stopped the frame down as though the view were all
+  // that bright.
   return (
-    (read(0) * airPhaseOf(toSun) + read(1) * hazePhaseOf(toSun)) *
+    (read(0) * airPhaseOf(toSun) + read(1) * hazePhaseBroad(toSun)) *
       daylight.value *
       sunlit.value +
     read(2) * around.value

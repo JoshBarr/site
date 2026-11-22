@@ -29,6 +29,24 @@ const HAZE_ALBEDO = 0.92;
  */
 export const HAZE_FORWARD = 0.7;
 
+/**
+ * And the narrow lobe on top of that one (its g), with this share of the
+ * light: the bright ring of air close round the sun or the moon, and what
+ * makes a shaft of sun between clouds stand out looked up along. The
+ * clouds' (PEAK in ../clouds/cloudNode.ts) is 0.9; in the haze that drew
+ * too tight a spot, so this is halfway from the broad lobe to it.
+ */
+export const HAZE_PEAK = 0.8;
+export const HAZE_PEAK_SHARE = 0.1;
+
+/** Whether the haze has its narrow lobe: ?off=hazepeak for the look without. */
+export const hazePeaked = !new URLSearchParams(
+  globalThis.location?.search ?? ""
+)
+  .get("off")
+  ?.split(",")
+  .includes("hazepeak");
+
 /** Of the light landing on it, what the land and sea send back up. */
 const GROUND = 0.1;
 
@@ -194,13 +212,24 @@ export interface SkyLight {
 export const airPhase = (cosine: number) =>
   (3 / (16 * Math.PI)) * (1 + cosine * cosine);
 
-/** The haze's (Henyey-Greenstein). */
-export function hazePhase(cosine: number) {
-  const g = HAZE_FORWARD;
+/** Henyey-Greenstein's phase function, of forwardness g. */
+const lobe = (cosine: number, g: number) =>
+  (1 - g * g) / (4 * Math.PI * Math.pow(1 + g * g - 2 * g * cosine, 1.5));
 
-  return (
-    (1 - g * g) / (4 * Math.PI * Math.pow(1 + g * g - 2 * g * cosine, 1.5))
-  );
+/**
+ * The haze's broad lobe alone, for what takes in a stretch of sky: the
+ * narrow one's light is the same, and gathered into a few degrees a grid
+ * of bearings can't find and a camera's whole view hardly holds.
+ */
+export const hazePhaseBroad = (cosine: number) => lobe(cosine, HAZE_FORWARD);
+
+/** The haze's: its broad lobe and, with it, the narrow one. */
+function hazePhase(cosine: number) {
+  const broad = hazePhaseBroad(cosine);
+
+  return hazePeaked
+    ? broad * (1 - HAZE_PEAK_SHARE) + lobe(cosine, HAZE_PEAK) * HAZE_PEAK_SHARE
+    : broad;
 }
 
 /** The sun's disc is half a degree across: it sets over this, radians. */
@@ -331,7 +360,8 @@ export function skyLight(
       const at = (j * BEARINGS + i) * CHANNELS;
 
       once +=
-        (table[at] * airPhase(cosine) + table[at + 1] * hazePhase(cosine)) *
+        (table[at] * airPhase(cosine) +
+          table[at + 1] * hazePhaseBroad(cosine)) *
         solid *
         width;
 

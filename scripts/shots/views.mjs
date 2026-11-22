@@ -10,6 +10,8 @@ const TWILIGHT = "2026-11-10T07:32:00Z"; // 20:32, the sun ~2° under
 const NIGHT = "2026-11-10T10:30:00Z"; // 23:30
 const MORNING = "2026-11-09T19:45:00Z"; // 08:45, the sun ~30° up
 
+const MOON = "2026-11-22T12:30:00Z"; // 01:30 on the 23rd, the Moon near full
+
 const CLEAR = "cloud=0";
 const HALF = "cloud=50";
 const OVERCAST = "cloud=100";
@@ -35,7 +37,24 @@ const SHARED = "freeze";
 const WIND = "wind=8,340";
 const GALE = "wind=15,340";
 
-/** [name, shot id, time, weather, wind if not WIND]. */
+/**
+ * From Miramar up at the Moon, low in the north-north-west at MOON: for
+ * its glow in the cloud round it.
+ */
+const AT_MOON = "cam=1750000,5427800,140,1745620,5436790,5200";
+
+/** And at the Sun, due east and 30° up at MORNING. */
+const AT_SUN = "cam=1750000,5427800,140,1760000,5428300,5900";
+
+/**
+ * From over the harbour across the city at the Sun going down in the
+ * west-south-west, 8° up at EVENING: for its glow in the haze. Dry, with a
+ * little cloud and 20 km of air, whatever that evening's weather was.
+ */
+const AT_SUNSET = "cam=1751500,5428900,400,1745730,5427250,900";
+const GLOW = "cloud=30&rain=0&vis=20000";
+
+/** [name, shot id (or a cam=…), time, weather, wind if not WIND]. */
 const LIST = [
   ["overview-noon-clear", "overview", NOON, CLEAR],
   ["overview-noon-half", "overview", NOON, HALF],
@@ -63,6 +82,12 @@ const LIST = [
   ["kaukau-morning-hazy", "kaukau", MORNING, HAZY],
   ["west-wind-morning-hazy", "west-wind", MORNING, HAZY],
   ["petone-morning-hazy", "petone", MORNING, HAZY],
+  // The Moon and the Sun through broken cloud, for their glow.
+  ["moon-night-half", AT_MOON, MOON, HALF],
+  ["moon-night-hazy", AT_MOON, MOON, HAZY],
+  ["sun-morning-half", AT_SUN, MORNING, HALF],
+  ["sun-morning-hazy", AT_SUN, MORNING, HAZY],
+  ["city-sunset-glow", AT_SUNSET, EVENING, GLOW],
   // A northerly gale, for the sea's lee calms.
   ["harbour-noon-gale", "harbour", NOON, CLEAR, GALE],
   ["oriental-bay-noon-gale", "oriental-bay", NOON, CLEAR, GALE],
@@ -71,7 +96,13 @@ const LIST = [
 
 export const VIEWS = LIST.map(([name, shot, t, weather, wind = WIND]) => ({
   name,
-  query: [`shot=${shot}`, `t=${t}`, weather, wind, SHARED]
+  query: [
+    shot.includes("=") ? shot : `shot=${shot}`,
+    `t=${t}`,
+    weather,
+    wind,
+    SHARED,
+  ]
     .filter(Boolean)
     .join("&"),
 }));

@@ -25,7 +25,12 @@ import {
   vec3,
   vec4,
 } from "three/tsl";
-import { overcast, sunDirection, sunIntensity } from "../environment";
+import {
+  cloudShadowMap,
+  overcast,
+  sunDirection,
+  sunIntensity,
+} from "../environment";
 import { skyOnCloud } from "../sky/skyModel";
 import { hazeColor, hazeTransmittance, phase } from "../haze";
 import { cloudGlowAtNight, hazeGlowAtNight } from "../skyglow";
@@ -42,6 +47,7 @@ import {
   MID_STYLE,
   remap,
   saturate,
+  skyThrough,
 } from "./density";
 import { rainfall, RainUniforms } from "./rain";
 import { rainDeck, rainField } from "./rainField";
@@ -132,6 +138,17 @@ const SUN_RADIANCE = 28;
 const POWDER = 0.5;
 
 /**
+ * Droplets throw much of what they scatter almost straight on, far tighter
+ * than the broad lobe has it: a lobe this narrow (its g), with this share
+ * of the light, is the glow in thin cloud round the sun or the moon and the
+ * bright rim on a thick one's edge (the "silver lining" lobe of Schneider's
+ * Nubis). Without it cloud within 15° of the moon was no brighter than
+ * cloud 30° off.
+ */
+const PEAK = 0.9;
+const PEAK_SHARE = 0.1;
+
+/**
  * Raymarches the cloud layers for each screen pixel, stopping at the scene
  * depth. Writes two outputs: (scattered light, transmittance), to composite
  * with scene * a + rgb; and in r, how far off what it shows is, m, in g, 1
@@ -190,14 +207,30 @@ export function createCloudNode({
   // An overcast deck closes where the satellite saw cloud.
   const lid = (xz) => (share) => max(deckLid.mul(min(share, 1)), rainDeck(xz));
 
-  /** Both layers' density at p, for a march whose samples are `step` apart, m. */
-  const density = (p, step, cheap = false) =>
+  // The sky's light dimming down through a layer (skyThrough), and the mid
+  // layer's shadow on the low: each off for the look before it.
+  const skyShaded = !switchedOff("cloudshade");
+  const midShadows = !switchedOff("cloudmidshade");
+
+  /**
+   * Both layers' density at p, toward the sun from a sample of a march whose
+   * samples are `step` apart, m. From under the mid layer (`underMid`), the
+   * low's alone: the mid's shadow comes from the shadow map, which sees all
+   * of it, where a few steps toward the sun mostly stop short.
+   */
+  const sunwardDensity = (p, step, underMid) =>
     layerDensity(p, low, LOW_STYLE, {
       lid: lid(p.xz),
-      cheap,
+      cheap: true,
       step,
       when: lowCloud,
-    }).add(layerDensity(p, mid, MID_STYLE, { cheap, step, when: midCloud }));
+    }).add(
+      layerDensity(p, mid, MID_STYLE, {
+        cheap: true,
+        step,
+        when: midShadows ? midCloud.and(underMid.not()) : midCloud,
+      })
+    );
 
   // A step is hundreds of metres long far off, and cloud that thick is
   // opaque: one sample to a step finds a small cloud, or a big one's edge,
@@ -252,6 +285,10 @@ export function createCloudNode({
         columnDensity(p, layer, style, columns[i], lidded)
       )
       .reduce((sum: any, each) => sum.add(each));
+
+  /** How far up a layer p is: 0 at its base, 1 at its top. */
+  const heightIn = ({ shape }: CloudLayerUniforms, p) =>
+    p.y.sub(shape.x).div(shape.y.sub(shape.x));
 
   // Set by the march, written to the second output: how far off what it
   // shows is, and whether there's any room for cloud before the scene.
@@ -310,12 +347,27 @@ export function createCloudNode({
 
     const cosine = dot(direction, sunDirection);
 
-    // Bright forward lobe for silver linings, gentle back lobe.
-    const lobes = (scale: number) =>
-      mix(phase(cosine, 0.6 * scale), phase(cosine, -0.25 * scale), 0.35);
+    // Broad forward lobe, gentle back lobe, and the narrow peak for the
+    // glow round the light and silver linings.
+    const peaked = !switchedOff("cloudpeak");
+
+    const lobes = (scale: number) => {
+      const broad = mix(
+        phase(cosine, 0.6 * scale),
+        phase(cosine, -0.25 * scale),
+        0.35
+      );
+
+      return peaked
+        ? mix(broad, phase(cosine, PEAK * scale), PEAK_SHARE)
+        : broad;
+    };
 
     const cloudPhase = lobes(1);
     const scattering = !switchedOff("cloudoctaves");
+    // The sun march's samples as they were: at stride·(i + ½), out past the
+    // stretches they stood for (to 1120 m for 600 m of depth).
+    const oldSunMarch = switchedOff("cloudsunmarch");
 
     // Each octave's phase, by its share of the light: the same for the whole
     // ray, so worked out once. Their sum is scaled to the light scattered
@@ -343,6 +395,8 @@ export function createCloudNode({
 
       // Negative until a step's marched toward the sun.
       const toSun = float(-1).toVar();
+      // The sun let through the mid layer onto the step, if it's under it.
+      const throughMid = float(1).toVar();
 
       /** A sample at `at` along the ray, standing for `length` of it. */
       const sample = (at, length, columns: LayerColumn[]) => {
@@ -363,14 +417,33 @@ export function createCloudNode({
           // Optical depth toward the sun, in growing steps. Once a step,
           // from the first of its samples to find cloud: the one that shows
           // most, and the rest are lit as it is.
+          // Each sample at the middle of the stretch it stands for, so the
+          // depth is Beer's integral of what's actually there.
           If(toSun.lessThan(0), () => {
             toSun.assign(0);
+            throughMid.assign(1);
+            const underMid = p.y.lessThan(mid.shape.x);
             let stride = 40;
+            let reached = 0;
 
             for (let i = 0; i < quality.lightSteps; i++) {
-              const q = p.add(sunDirection.mul(stride * (i + 0.5)));
-              toSun.addAssign(density(q, dt, true).mul(stride));
+              const along = oldSunMarch
+                ? stride * (i + 0.5)
+                : reached + stride / 2;
+
+              const q = p.add(sunDirection.mul(along));
+              toSun.addAssign(sunwardDensity(q, dt, underMid).mul(stride));
+              reached += stride;
               stride *= 2;
+            }
+
+            // As on the ground, an overcast's dimmed sun stands in for it.
+            if (midShadows) {
+              If(midCloud.and(underMid), () => {
+                throughMid.assign(
+                  mix(cloudShadowMap.sampleMid(p), 1, overcast)
+                );
+              });
             }
           });
 
@@ -386,14 +459,30 @@ export function createCloudNode({
           // Dark edges on the sunny side of dense cloud ("powder").
           const powder = float(1).sub(exp(toSun.mul(-EXTINCTION * 2)));
 
-          const direct = sunward.mul(mix(1, powder, POWDER)).mul(sunLight);
+          const direct = sunward
+            .mul(mix(1, powder, POWDER))
+            .mul(sunLight)
+            .mul(throughMid);
 
-          // Sky light, brighter toward the tops. Under a deck, the sun
-          // scattered many times through it lights the whole layer evenly,
-          // where the march above sees it spent at the top.
+          // The open sky's light, brighter toward the tops: it's spent on
+          // its way down through a layer, and what's under the mid layer has
+          // been through that first. Under a deck, the sun scattered many
+          // times through it lights the whole layer evenly, where the march
+          // above sees it spent at the top: that's the deck's underside as
+          // the ground under it is lit, so it isn't dimmed again (it went
+          // darker than the land).
           const height = saturate(p.y.sub(bottom).div(top.sub(bottom)));
 
-          const ambient = skyOnCloud(height).add(
+          const shade = skyShaded
+            ? p.y
+                .lessThan(low.shape.y)
+                .select(
+                  skyThrough(low, heightIn(low, p)).mul(skyThrough(mid, 0)),
+                  skyThrough(mid, heightIn(mid, p))
+                )
+            : float(1);
+
+          const ambient = skyOnCloud(height, 1.4, shade).add(
             overcast.mul(sunIntensity).mul(1.2)
           );
 
@@ -493,8 +582,12 @@ export function createCloudNode({
         ).mul(0.55);
 
         // Thin, so scattered once: the octaves' light isn't in it.
+        const forward = peaked
+          ? mix(phase(cosine, 0.5), phase(cosine, PEAK), PEAK_SHARE)
+          : phase(cosine, 0.5);
+
         const lum = vec3(
-          phase(cosine, 0.5).mul(sunIntensity.mul(SUN_RADIANCE)).mul(0.5)
+          forward.mul(sunIntensity.mul(SUN_RADIANCE)).mul(0.5)
         ).add(skyOnCloud(0, 1.6));
 
         // Fade toward the horizon, where the sheet is very far away.

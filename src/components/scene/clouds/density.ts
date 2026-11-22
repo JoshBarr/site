@@ -105,6 +105,35 @@ export const cloudNoise = createNoise();
 /** Extinction per metre at full density. */
 export const EXTINCTION = 0.035;
 
+/**
+ * Density inside a cloud, on average, of the layer's full density: what the
+ * sky's light meets on its way down through one (see skyThrough).
+ */
+const MEAN_DENSITY = 0.5;
+
+/** How far forward cloud droplets scatter (the phase function's g). */
+const ASYMMETRY = 0.85;
+
+/**
+ * Of the sky's light on a layer's top, what's left `h` of the way up it
+ * (0 its base, 1 its top). Light scattered over and over on its way down
+ * falls off evenly with depth, and what comes out the bottom of a layer of
+ * optical depth τ is 1 / (1 + ¾·τ·(1 − g)): a third through a thick deck,
+ * most of it through a shallow or broken one, where the gaps let it by (so
+ * the depth's the cover's share of a solid layer's).
+ */
+export function skyThrough({ shape }: CloudLayerUniforms, h) {
+  const depth = shape.y
+    .sub(shape.x)
+    .mul(shape.w)
+    .mul(min(shape.z, 1))
+    .mul(EXTINCTION * MEAN_DENSITY);
+
+  const floor = float(1).div(depth.mul(0.75 * (1 - ASYMMETRY)).add(1));
+
+  return mix(floor, 1, clamp(h, 0, 1));
+}
+
 /** Cloud body noise repeats every this many metres. */
 const SHAPE_SCALE = 3200;
 const DETAIL_SCALE = 520;

@@ -151,16 +151,40 @@ export function createCloudShadowMap(toSun) {
   const quad = new QuadMesh(material);
   let sinceDrawn = Infinity;
 
+  /**
+   * The map where p's ray to the sun crosses its plane, and how far past
+   * its edge that is (0 within, 1 beyond). `stepped` for a read inside a
+   * march's loop, where the mip level can't be left to the neighbours.
+   */
+  const read = (p, stepped = false) => {
+    const crossing = p.xz.add(slope.mul(plane.sub(p.y)));
+    const at = crossing.sub(centre).div(EXTENT).add(0.5);
+    const edge = max(abs(at.x.sub(0.5)), abs(at.y.sub(0.5)));
+    const map = texture(target.texture, at);
+
+    return {
+      map: stepped ? map.level(float(0)) : map,
+      past: smoothstep(0.4, 0.5, edge),
+    };
+  };
+
   return {
     sample(p) {
-      const crossing = p.xz.add(slope.mul(plane.sub(p.y)));
-      const at = crossing.sub(centre).div(EXTENT).add(0.5);
-      const map = texture(target.texture, at);
+      const { map, past } = read(p);
       // Ground above the low cloud's base is partly or wholly over it.
       const under = mix(1, map.r, smoothstep(low.shape.y, low.shape.x, p.y));
-      const edge = max(abs(at.x.sub(0.5)), abs(at.y.sub(0.5)));
 
-      return mix(under.mul(map.g), 1, smoothstep(0.4, 0.5, edge));
+      return mix(under.mul(map.g), 1, past);
+    },
+
+    /**
+     * The sun let through the mid layer alone, at a point under it: for the
+     * low cloud, whose own march toward the sun stops short of it.
+     */
+    sampleMid(p) {
+      const { map, past } = read(p, true);
+
+      return mix(map.g, 1, past);
     },
 
     update(renderer: WebGPURenderer, x: number, z: number, delta: number) {

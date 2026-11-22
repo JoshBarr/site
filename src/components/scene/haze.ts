@@ -18,7 +18,7 @@ import {
   sunDirection,
   sunIntensity,
 } from "./environment";
-import { hazeRadiance, nightSky, skyStage } from "./sky/skyModel";
+import { hazeLobes, hazeRadiance, nightSky, skyStage } from "./sky/skyModel";
 
 // Atmospheric haze: extinction falls off exponentially with height, so the
 // boundary layer over the harbour is thick and the hilltops clear above it.
@@ -136,7 +136,7 @@ const MOON_HAZE = 0.25;
 
 /** The haze's forward scattering from the sun, or moon, by `toward`'s cosine. */
 export function hazeGlowToward(toward, strength: number) {
-  return phase(toward, 0.7)
+  return hazeLobes(toward, 0.7)
     .mul(sunIntensity)
     .mul(mix(1, MOON_HAZE, moonlit))
     .mul(strength);
