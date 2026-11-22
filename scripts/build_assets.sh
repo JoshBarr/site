@@ -12,7 +12,9 @@
 #              canopy the lidar made of the decks, and the buildings step
 #              leaves out the council's models of them: when a bridge
 #              changes, run trees, landcover and buildings again
-#   trees      public/trees: lidar-found trees (needs terrain's caches)
+#   trees      public/trees: lidar-found trees (needs terrain's caches;
+#              clears the highways' lanes and the railway's bridges, so
+#              reads roads.json and the trains step's network.json)
 #   landcover  public/terrain/landcover.png, with the trees' canopy folded in
 #   farland    public/farland/land.bin: the South Island on the horizon, a
 #              coarse mesh of NIWA's grid
@@ -24,8 +26,10 @@
 #              heights, for past the city (needs the trees' caches)
 #   cablecar   public/rail/cablecar.json: the cable car's track (OSM)
 #   buildings  public/buildings (WCC I3S, and the footprints past it; less
-#              what's on the cable car's track and the highways' own
-#              structures)
+#              what's on the cable car's track, the highways' own
+#              structures and the sign gantries; decks, not walls, over the
+#              highways' lanes and the railway, so it reads the trains
+#              step's network.json: when that changes, run this again)
 #   heroes     src/components/scene/buildings/heroes.ts: floodlit landmarks (OSM)
 #   airport    public/airport + src/components/scene/airport/airfield.ts
 #   landmarks  src/components/scene/landmarks/sites.ts

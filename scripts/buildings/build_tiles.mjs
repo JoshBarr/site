@@ -25,8 +25,9 @@
 // Shell Gully. The scene lays the highways itself (public/roads/roads.json,
 // so build that first), lanes, traffic and decks at the lidar's heights,
 // and a block there buries them: any model with a stretch of its roof on a
-// highway's lanes, at the road's level, is left out. A bridge that crosses
-// over a highway is well above it, and stays.
+// highway's lanes, at the road's level, is left out. So is a sign gantry,
+// a small model mostly over the lanes (the scene draws its own). A bridge
+// that crosses over a highway is well above it, and stays.
 //
 // Each building keeps its roof, simplified, and gets new walls dropped
 // straight down from the roof's outline to below the ground. The source's
@@ -92,6 +93,7 @@ const CACHE_DIR = path.join(ROOT, ".cache/buildings");
 const FOOTPRINTS = path.join(CACHE_DIR, "footprints.json");
 const CABLE_CAR = path.join(ROOT, "public/rail/cablecar.json");
 const ROADS = path.join(ROOT, "public/roads/roads.json");
+const RAIL = path.join(ROOT, "public/rail/network.json");
 
 /**
  * A building with this share of its roof within `ON_TRACK` m of the cable
@@ -110,6 +112,48 @@ const ON_TRACK_SHARE = 0.9;
 const HIGHWAY_ROOF = 500;
 const BESIDE_LANES = 3;
 const ROAD_LEVEL = 3;
+
+/**
+ * A model smaller than `HIGHWAY_ROOF` with this share of its roof over a
+ * highway's lanes, and above them, is a sign gantry: the council models
+ * them as solid strips across the road, which walls dropped to the ground
+ * make into a block the traffic drives through. The four modelled have
+ * half or more of their roofs over the lanes (5–15 m up); the next most,
+ * a building whose eaves reach the kerb, has a tenth. The scene draws the
+ * gantries itself (traffic/signs).
+ */
+const GANTRY_SHARE = 0.35;
+
+/**
+ * Over a highway's lanes or a railway's track (out of the tunnels) and
+ * `SHOULDER` m past them, a model's walls stop `DECK_DEPTH` under its roof,
+ * where that's `DECK_CLEARANCE` or more above the road or rails. The
+ * council's overbridges, road and rail, are roofs with walls to the ground
+ * like any building's: solid blocks across the lanes and tracks. Cut,
+ * they're decks on abutments, with an underside. The depth is a guess.
+ * Walls are cut in `WALL_STEP` m steps, so their foot follows the edge.
+ */
+const SHOULDER = 1.5;
+const DECK_DEPTH = 1.5;
+const DECK_CLEARANCE = 5;
+const WALL_STEP = 1;
+
+/**
+ * A model with this share of its roof over the lanes or tracks is a
+ * bridge: no windows, and no lights at night.
+ */
+const BRIDGE_SHARE = 0.1;
+
+/** Half a railway track's width, m, from its centreline. */
+const TRACK_HALF = 1.5;
+
+/**
+ * How far from a railway bridge's centreline its deck reaches, m: a model
+ * there with its roof at the track's level is the bridge, and is all deck,
+ * whatever's under it. Wide enough for a double track and its parapets; a
+ * guess.
+ */
+const BRIDGE_HALF = 6;
 
 /** Highway lanes, m, as build_roads.mjs has them: open road, and town. */
 const LANE = 3.5;
@@ -178,10 +222,11 @@ const WINDOWLESS_ASPECT = 0.3;
 const WINDOWLESS_MIN_AREA = 1000;
 const WINDOWLESS_BIT = 0x8000;
 
-function windowless({ area, top, base }) {
+function windowless({ area, top, base, bridge }) {
   return (
-    area >= WINDOWLESS_MIN_AREA &&
-    top - base < WINDOWLESS_ASPECT * Math.sqrt(area)
+    bridge ||
+    (area >= WINDOWLESS_MIN_AREA &&
+      top - base < WINDOWLESS_ASPECT * Math.sqrt(area))
   );
 }
 
@@ -564,10 +609,12 @@ function prepareBuilding({ id, soup }) {
 
 /**
  * The building at one level of detail: simplified roof, plus walls from each
- * outline edge down to `bottom` (NZTM height). Returns positions (e, n, h)
- * and triangles wound counter-clockwise seen from outside.
+ * outline edge down to `bottom` (NZTM height). Where `deckAt(e, n, h)` gives
+ * a height instead (over a highway's lanes), the wall stops there, and the
+ * roof gets an underside that far down. Returns positions (e, n, h) and
+ * triangles wound counter-clockwise seen from outside.
  */
-function lodMesh(building, { error, islandArea }, bottom) {
+function lodMesh(building, { error, islandArea }, bottom, deckAt) {
   const { positions, local, roof } = building;
 
   const [simplified] = MeshoptSimplifier.simplify(roof, local, 3, 0, error, [
@@ -640,14 +687,74 @@ function lodMesh(building, { error, islandArea }, bottom) {
   };
 
   let wallLength = 0;
+  let decked = false;
 
   for (const { a, b, count } of edges.values()) {
     if (count !== 1 || hidden(out, triangles, roofCount, a, b)) continue;
-    triangles.push(a, foot(b), b, a, foot(a), foot(b));
-    wallLength += Math.hypot(
-      out[b * 3] - out[a * 3],
-      out[b * 3 + 1] - out[a * 3 + 1]
-    );
+    const [ax, ay, ah] = out.slice(a * 3, a * 3 + 3);
+    const [bx, by, bh] = out.slice(b * 3, b * 3 + 3);
+    const length = Math.hypot(bx - ax, by - ay);
+
+    wallLength += length;
+
+    // Along the edge in steps, each with its own foot: the ground's, or a
+    // deck's over the lanes.
+    const steps = deckAt ? Math.max(1, Math.ceil(length / WALL_STEP)) : 1;
+    const along = [];
+
+    for (let k = 0; k <= steps; k++) {
+      const f = k / steps;
+
+      const [x, y, h] = [
+        ax + (bx - ax) * f,
+        ay + (by - ay) * f,
+        ah + (bh - ah) * f,
+      ];
+
+      along.push({ x, y, h, deck: deckAt?.(x, y, h) });
+    }
+
+    if (along.every(({ deck }) => deck === undefined)) {
+      triangles.push(a, foot(b), b, a, foot(a), foot(b));
+      continue;
+    }
+
+    decked = true;
+    let top = a;
+    let under = out.length / 3;
+    out.push(ax, ay, along[0].deck ?? bottom);
+
+    for (let k = 1; k <= steps; k++) {
+      const { x, y, h, deck } = along[k];
+      let next = b;
+
+      if (k < steps) {
+        next = out.length / 3;
+        out.push(x, y, h);
+      }
+
+      const nextUnder = out.length / 3;
+      out.push(x, y, deck ?? bottom);
+      triangles.push(top, nextUnder, next, top, under, nextUnder);
+      top = next;
+      under = nextUnder;
+    }
+  }
+
+  // The deck's underside: the roof again, under itself and facing down.
+  // Where the walls reach the ground, it's inside them, or in the ground.
+  if (decked) {
+    const first = out.length / 3;
+
+    // The roof's vertices are numbered first.
+    for (let v = 0; v < remap.size; v++) {
+      out.push(out[v * 3], out[v * 3 + 1], out[v * 3 + 2] - DECK_DEPTH);
+    }
+
+    for (let t = 0; t < roofCount; t += 3) {
+      const [i, j, k] = triangles.slice(t, t + 3);
+      triangles.push(first + i, first + k, first + j);
+    }
   }
 
   return { positions: out, triangles, wallLength };
@@ -885,51 +992,113 @@ async function loadHighways() {
 }
 
 /**
- * How much of `b`'s roof is a highway's, m² in plan: over its lanes (or
- * just beside them) and at its level, each triangle by its centre.
+ * The highway lane nearest e, n: how far outside its lanes that is (m,
+ * negative over them), and the road's height there.
+ */
+function nearestLane(highways, e, n) {
+  const ce = Math.floor(e / HIGHWAY_CELL);
+  const cn = Math.floor(n / HIGHWAY_CELL);
+  let beside = Infinity;
+  let road = 0;
+
+  for (let x = ce - 1; x <= ce + 1; x++) {
+    for (let y = cn - 1; y <= cn + 1; y++) {
+      for (const s of highways.get(`${x},${y}`) ?? []) {
+        const de = s.b[0] - s.a[0];
+        const dn = s.b[1] - s.a[1];
+
+        const along =
+          ((e - s.a[0]) * de + (n - s.a[1]) * dn) / (de * de + dn * dn || 1);
+
+        const u = Math.min(Math.max(along, 0), 1);
+        const off = Math.hypot(e - s.a[0] - u * de, n - s.a[1] - u * dn);
+
+        if (off - s.half < beside) {
+          beside = off - s.half;
+          road = s.a[2] + (s.b[2] - s.a[2]) * u;
+        }
+      }
+    }
+  }
+
+  return { beside, road };
+}
+
+/**
+ * The railway out of its tunnels (public/rail/network.json, so build the
+ * trains step first): `under`, its track added to a copy of `highways`,
+ * what decks clear; `bridges`, its bridges' spans, OSM's, abutment to
+ * abutment at the deck's height.
+ */
+async function loadRail(highways) {
+  const under = new Map([...highways].map(([key, list]) => [key, [...list]]));
+  const bridges = new Map();
+
+  if (!existsSync(RAIL)) {
+    console.log("no rail network: decks are over the highways only");
+
+    return { under, bridges };
+  }
+
+  const rail = JSON.parse(await readFile(RAIL, "utf8"));
+  const node = (i) => rail.nodes.slice(i * 3, i * 3 + 3);
+
+  const add = (grid, segment) => {
+    const [e, n] = segment.a;
+    const key = `${Math.floor(e / HIGHWAY_CELL)},${Math.floor(n / HIGHWAY_CELL)}`;
+
+    if (!grid.has(key)) grid.set(key, []);
+    grid.get(key).push(segment);
+  };
+
+  for (const [flags, ...points] of rail.ways) {
+    if (flags & rail.flags.tunnel) continue;
+
+    for (let i = 0; i + 1 < points.length; i++) {
+      const [a, b] = [node(points[i]), node(points[i + 1])];
+      add(under, { a, b, half: TRACK_HALF });
+
+      if (flags & rail.flags.bridge) add(bridges, { a, b, half: BRIDGE_HALF });
+    }
+  }
+
+  return { under, bridges };
+}
+
+/**
+ * How much of `b`'s roof is a highway's, m² in plan, each triangle by its
+ * centre: `on`, over its lanes (or just beside them) and at its level;
+ * `over`, over its lanes and above them.
  */
 function onHighway(b, highways) {
   const { positions: p, roof } = b;
   let on = 0;
+  let over = 0;
 
   for (let t = 0; t < roof.length; t += 3) {
     const [a, c, d] = [roof[t], roof[t + 1], roof[t + 2]];
     const e = (p[a * 3] + p[c * 3] + p[d * 3]) / 3;
     const n = (p[a * 3 + 1] + p[c * 3 + 1] + p[d * 3 + 1]) / 3;
     const h = (p[a * 3 + 2] + p[c * 3 + 2] + p[d * 3 + 2]) / 3 + b.shift;
-    const ce = Math.floor(e / HIGHWAY_CELL);
-    const cn = Math.floor(n / HIGHWAY_CELL);
-    let nearest = Infinity;
-    let road = 0;
+    const { beside, road } = nearestLane(highways, e, n);
+    const plan = Math.abs(triangleNormal(p, a, c, d)[2]) / 2;
 
-    for (let x = ce - 1; x <= ce + 1; x++) {
-      for (let y = cn - 1; y <= cn + 1; y++) {
-        for (const s of highways.get(`${x},${y}`) ?? []) {
-          const de = s.b[0] - s.a[0];
-          const dn = s.b[1] - s.a[1];
+    if (beside < BESIDE_LANES && Math.abs(h - road) < ROAD_LEVEL) on += plan;
 
-          const along =
-            ((e - s.a[0]) * de + (n - s.a[1]) * dn) / (de * de + dn * dn || 1);
-
-          const u = Math.min(Math.max(along, 0), 1);
-
-          const beside =
-            Math.hypot(e - s.a[0] - u * de, n - s.a[1] - u * dn) - s.half;
-
-          if (beside < nearest) {
-            nearest = beside;
-            road = s.a[2] + (s.b[2] - s.a[2]) * u;
-          }
-        }
-      }
-    }
-
-    if (nearest < BESIDE_LANES && Math.abs(h - road) < ROAD_LEVEL) {
-      on += Math.abs(triangleNormal(p, a, c, d)[2]) / 2;
-    }
+    if (beside < 0 && h - road >= ROAD_LEVEL) over += plan;
   }
 
-  return on;
+  return { on, over };
+}
+
+/** Whether `b` is a highway's own structure, or a gantry over one. */
+function highwayStructure(b, highways) {
+  const { on, over } = onHighway(b, highways);
+
+  return (
+    on >= HIGHWAY_ROOF ||
+    (b.area < HIGHWAY_ROOF && over >= GANTRY_SHARE * b.area)
+  );
 }
 
 /**
@@ -1135,11 +1304,68 @@ async function main() {
   const highways = await loadHighways();
 
   const off = buildings.filter(
-    (b) => b.footprint || onHighway(b, highways) < HIGHWAY_ROOF
+    (b) => b.footprint || !highwayStructure(b, highways)
   );
 
   console.log(`${buildings.length - off.length} the highways' own structures`);
   buildings = off;
+
+  // Anything else over the lanes, or the railway's tracks, gets a deck
+  // there, not walls.
+  const { under, bridges } = await loadRail(highways);
+  let decked = 0;
+
+  for (const b of buildings) {
+    let span = false;
+
+    const deckAt = (e, n, h) => {
+      const { beside, road } = nearestLane(under, e, n);
+
+      if (beside < SHOULDER && h + b.shift - road >= DECK_CLEARANCE) {
+        return h - DECK_DEPTH;
+      }
+
+      // A railway bridge's own model: its roof at the track's level.
+      const bridge = nearestLane(bridges, e, n);
+
+      if (
+        bridge.beside < 0 &&
+        Math.abs(h + b.shift - bridge.road) < ROAD_LEVEL
+      ) {
+        span = true;
+
+        return h - DECK_DEPTH;
+      }
+
+      return undefined;
+    };
+
+    // Along the roof's edges: a bridge's corners can all be past the lanes.
+    const { positions: p, roof } = b;
+    let over = false;
+
+    for (let t = 0; t < roof.length && !over; t++) {
+      const a = roof[t] * 3;
+      const c = roof[t % 3 === 2 ? t - 2 : t + 1] * 3;
+      const steps = Math.ceil(Math.hypot(p[c] - p[a], p[c + 1] - p[a + 1]) / 2);
+
+      for (let k = 0; k <= steps && !over; k++) {
+        const f = k / Math.max(steps, 1);
+        const at = (o) => p[a + o] + (p[c + o] - p[a + o]) * f;
+        over = deckAt(at(0), at(1), at(2)) !== undefined;
+      }
+    }
+
+    if (!over) continue;
+    b.deckAt = deckAt;
+    b.bridge = span || onHighway(b, under).over >= BRIDGE_SHARE * b.area;
+    decked++;
+  }
+
+  console.log(
+    `${decked} over the lanes or tracks, ` +
+      `${buildings.filter((b) => b.bridge).length} of them bridges`
+  );
 
   await rm(OUT_DIR, { recursive: true, force: true });
   const manifestLevels = [];
@@ -1174,7 +1400,7 @@ async function main() {
       if (lod.level !== finest && !b.wall) continue;
 
       const light = () => {
-        if (lod.level === finest) return;
+        if (lod.level === finest || b.bridge) return;
         const left = buildingLights(b, b.shift, false, toWorld);
         tileFor(b).lights.push(...left);
         lights += left.length;
@@ -1208,7 +1434,7 @@ async function main() {
         WALL_SINK -
         shift;
 
-      const mesh = lodMesh(b, lod, bottom);
+      const mesh = lodMesh(b, lod, bottom, b.deckAt);
 
       if (!mesh) {
         light();

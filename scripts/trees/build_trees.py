@@ -10,8 +10,10 @@ difference cached. Building footprints from OpenStreetMap (the terrain
 build's cache) are cut out, and the scene's own towers, turbines and
 lighthouses with the blades the lidar caught mid-turn, and Transpower's
 pylons, substations and the conductors between them, and the highways'
-bridge decks (public/roads/roads.json, if the traffic build's written it),
-then each crown is a local maximum of the smoothed canopy, its radius from
+lanes, where the lidar finds only gantries and bridges, and wider over
+their decks (public/roads/roads.json, if the traffic build's written it),
+and the railway's bridges (public/rail/network.json, the same).
+Then each crown is a local maximum of the smoothed canopy, its radius from
 the watershed around it.
 
 Each tree's ground is the published terrain's under it, from the finest
@@ -60,6 +62,7 @@ CHM_DIR = CACHE_DIR / "chm"
 SITES_TS = ROOT_DIR / "src" / "components" / "scene" / "landmarks" / "sites.ts"
 GRID_TS = ROOT_DIR / "src" / "components" / "scene" / "power" / "grid.ts"
 ROADS_JSON = ROOT_DIR / "public" / "roads" / "roads.json"
+RAIL_JSON = ROOT_DIR / "public" / "rail" / "network.json"
 
 _spec = importlib.util.spec_from_file_location(
     "terrain", ROOT_DIR / "scripts" / "terrain" / "build_tiles.py"
@@ -591,24 +594,29 @@ def port_yards(grid, shape):
 
 # Highway lanes, m, as build_roads.mjs has them, and how far past the
 # outer lanes a deck is cleared: its shoulder and parapet, and a sample.
+# Elsewhere the lanes are cleared, and a little past them.
 HIGHWAY_LANE = 3.5
 HIGHWAY_TOWN_LANE = 3.2
 DECK_MARGIN = 4.0
+LANE_MARGIN = 1.0
 
 
-def highway_decks(grid, shape):
+def highway_lanes(grid, shape):
     """
-    1 over the highways' bridges and the approaches lifted with them: a
-    deck's edge is a drop of its whole height, as rough as any crown, and
-    the scene lays the decks itself.
+    1 over the highways' lanes out of their tunnels. Nothing grows there:
+    what the lidar finds over them is a sign gantry or a bridge, and the
+    scene draws both. Wider over the highways' bridges and the approaches
+    lifted with them: a deck's edge is a drop of its whole height, as rough
+    as any crown.
     """
     mask = np.zeros(shape, dtype=np.uint8)
     if not ROADS_JSON.exists():
-        print(f"  no {ROADS_JSON.name}: the highways' decks aren't cleared")
+        print(f"  no {ROADS_JSON.name}: the highways' lanes aren't cleared")
         return mask
     roads = json.loads(ROADS_JSON.read_text())
     bridge = roads["flags"]["bridge"]
-    decks = []
+    tunnel = roads["flags"]["tunnel"]
+    strips = []
     for carriageway in roads["carriageways"].values():
         points = np.array(carriageway["points"]).reshape(-1, 3)[:, :2]
         lifted = np.zeros(len(points), dtype=bool)
@@ -617,10 +625,12 @@ def highway_decks(grid, shape):
         spans = carriageway["spans"]
         for k, (start, _, lanes, flags, limit) in enumerate(spans):
             end = spans[k + 1][0] if k + 1 < len(spans) else len(points)
-            half = lanes * (HIGHWAY_LANE if limit > 50 else HIGHWAY_TOWN_LANE) / 2 + DECK_MARGIN
+            if flags & tunnel:
+                continue
+            lane_half = lanes * (HIGHWAY_LANE if limit > 50 else HIGHWAY_TOWN_LANE) / 2
             for i in range(start, min(end, len(points) - 1)):
-                if not (flags & bridge or (lifted[i] and lifted[i + 1])):
-                    continue
+                deck = flags & bridge or (lifted[i] and lifted[i + 1])
+                half = lane_half + (DECK_MARGIN if deck else LANE_MARGIN)
                 (ea, na), (eb, nb) = points[i], points[i + 1]
                 length = np.hypot(eb - ea, nb - na)
                 if length < 1e-6:
@@ -634,9 +644,51 @@ def highway_decks(grid, shape):
                     (eb + ax - ox, nb + ay - oy),
                     (ea - ax - ox, na - ay - oy),
                 ]
-                decks.append(({"type": "Polygon", "coordinates": [corners + corners[:1]]}, 1))
-    if decks:
-        rasterize(decks, out=mask, transform=grid, all_touched=True)
+                strips.append(({"type": "Polygon", "coordinates": [corners + corners[:1]]}, 1))
+    if strips:
+        rasterize(strips, out=mask, transform=grid, all_touched=True)
+    return mask
+
+
+# How far from a railway bridge's centreline its deck is cleared, m: a
+# double track, its parapets and beams, and a sample. A guess.
+RAIL_BRIDGE_HALF = 7.0
+
+
+def rail_bridges(grid, shape):
+    """
+    1 over the railway's bridges, abutment to abutment: their beams and
+    parapets are a drop as rough as any crown, and the council's models
+    of them are drawn as decks.
+    """
+    mask = np.zeros(shape, dtype=np.uint8)
+    if not RAIL_JSON.exists():
+        print(f"  no {RAIL_JSON.name}: the railway's bridges aren't cleared")
+        return mask
+    rail = json.loads(RAIL_JSON.read_text())
+    nodes = np.array(rail["nodes"]).reshape(-1, 3)[:, :2]
+    bridge = rail["flags"]["bridge"]
+    strips = []
+    for flags, *points in rail["ways"]:
+        if not flags & bridge:
+            continue
+        for (ea, na), (eb, nb) in zip(nodes[points[:-1]], nodes[points[1:]]):
+            length = np.hypot(eb - ea, nb - na)
+            if length < 1e-6:
+                continue
+            # Along a little past each end, so bends leave no gaps.
+            ax, ay = (eb - ea) / length * 2, (nb - na) / length * 2
+            ox = -(nb - na) / length * RAIL_BRIDGE_HALF
+            oy = (eb - ea) / length * RAIL_BRIDGE_HALF
+            corners = [
+                (ea - ax + ox, na - ay + oy),
+                (eb + ax + ox, nb + ay + oy),
+                (eb + ax - ox, nb + ay - oy),
+                (ea - ax - ox, na - ay - oy),
+            ]
+            strips.append(({"type": "Polygon", "coordinates": [corners + corners[:1]]}, 1))
+    if strips:
+        rasterize(strips, out=mask, transform=grid, all_touched=True)
     return mask
 
 
@@ -713,7 +765,8 @@ def build():
     built = footprints(grid, (rows, cols))
     built |= port_yards(grid, (rows, cols))
     built |= substations(grid, (rows, cols))
-    built |= highway_decks(grid, (rows, cols))
+    built |= highway_lanes(grid, (rows, cols))
+    built |= rail_bridges(grid, (rows, cols))
     towers, corridors = power_grid()
     sites = landmark_sites() + towers
     print(f"  clearing {len(sites)} landmarks and towers, and under {len(corridors)} spans")
