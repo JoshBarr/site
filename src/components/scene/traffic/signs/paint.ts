@@ -2,14 +2,14 @@ import type { DirectionFace, SpeedFace } from "./file";
 import { layOutDirection, LETTER, type Slot } from "./layout";
 
 // The fixed signs' faces, painted into one sheet with the canvas's 2D
-// drawing. Colours are those of New Zealand's signs as near as can be told
-// (white on green for directions, a red shield for a state highway, a red
-// ring round a speed limit); the lettering is the system's sans, not the
-// signs' own face, which isn't to hand.
+// drawing. New Zealand's are white on green for directions, with a red
+// shield for a state highway and a red ring round a speed limit; here
+// they're black and white, like the rest of the scene (the user's call):
+// white on black for directions, a white shield, a black ring. The
+// lettering is the system's sans, not the signs' own face, which isn't to
+// hand.
 
-const GREEN = "#087a52";
 const WHITE = "#f4f6f4";
-const RED = "#c4161c";
 const BLACK = "#141414";
 
 const FACE = '"Helvetica Neue", Helvetica, Arial, sans-serif';
@@ -57,9 +57,7 @@ function shield(
 ) {
   const round = width * 0.16;
 
-  context.fillStyle = RED;
-  context.strokeStyle = WHITE;
-  context.lineWidth = Math.max(width * 0.06, 1);
+  context.fillStyle = WHITE;
   context.beginPath();
   context.moveTo(x + round, y);
   context.lineTo(x + width - round, y);
@@ -76,9 +74,8 @@ function shield(
   context.quadraticCurveTo(x, y, x + round, y);
   context.closePath();
   context.fill();
-  context.stroke();
 
-  context.fillStyle = WHITE;
+  context.fillStyle = BLACK;
   context.font = `700 ${height * 0.62}px ${FACE}`;
   context.textAlign = "center";
   context.textBaseline = "middle";
@@ -97,7 +94,7 @@ export function paintDirection(
   const unit = capital * k;
 
   context.save();
-  context.fillStyle = GREEN;
+  context.fillStyle = BLACK;
   context.fillRect(
     slot.x - GUTTER,
     slot.y - GUTTER,
@@ -162,7 +159,7 @@ export function paintSpeed(context: Context, face: SpeedFace, slot: Slot) {
     across + GUTTER * 2,
     across + GUTTER * 2
   );
-  context.strokeStyle = RED;
+  context.strokeStyle = BLACK;
   context.lineWidth = across * 0.105;
   context.beginPath();
   context.arc(x, y, across * (0.5 - 0.0525) - 1, 0, Math.PI * 2);
