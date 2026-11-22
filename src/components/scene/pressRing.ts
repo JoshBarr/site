@@ -51,6 +51,10 @@ export function pressRing(x: number, y: number, hold: number): PressRing {
     }
   );
 
+  // Ending the press cancels it, which rejects this (AbortError): expected,
+  // and left unhandled it fails the test run.
+  closing.finished.catch(() => {});
+
   let done = false;
 
   const end = (frames: Keyframe[], duration: number) => {
