@@ -1639,7 +1639,7 @@ function Controls({
       clearAround.value.copy(rig.at);
       clearRadius.value = rig.length * CLEARING;
       const inTunnel = buried();
-      seeThrough(inTunnel ? rig.at : null, rig.length);
+      seeThrough(inTunnel ? rig.at : null, rig.length, rig.grade, rig.course);
       probe(camera, delta, Boolean(around), inTunnel);
       overTrees.current +=
         ((inTunnel ? OVER_TREES : 0) - overTrees.current) *

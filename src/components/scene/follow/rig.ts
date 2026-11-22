@@ -5,7 +5,7 @@ import { Category, getSnapshot, next, subject } from "./store";
 
 // Where the camera goes to follow a vehicle, shot by shot:
 //
-// - buses, trains and taxiing aircraft from overhead, three-quarters
+// - buses, trains, the cable car and taxiing aircraft from overhead, three-quarters
 //   behind and to one side;
 // - ships from astern, or circling them slowly when they're stopped;
 // - aircraft taking off from just ahead of them and off to one side, as a
@@ -46,6 +46,7 @@ const ZOOM = 1;
 const TURN: Record<Category, number> = {
   bus: 2.5,
   train: 2.5,
+  cablecar: 2.5,
   ship: 4,
   plane: 1.5,
   // Not followed by the rig: the trip to orbit has the camera.
@@ -212,6 +213,9 @@ export class FollowRig {
   /** Where the subject was last seen, how long it is, and if it's on the ground. */
   readonly at = new Vector3();
   length = 10;
+  /** Its grade, up per metre ahead, the way it faces (not eased). */
+  grade = 0;
+  course = 0;
   ground = true;
   private mode: PlaneMode | null = null;
   /** How far up to lift the shot (0..1), what it's at, and seconds clear. */
@@ -325,6 +329,8 @@ export class FollowRig {
     subject.fresh = false;
     this.lost = 0;
     this.length = subject.length;
+    this.grade = subject.grade;
+    this.course = subject.heading;
     this.ground = subject.ground;
 
     if (!this.ready) {
@@ -434,6 +440,7 @@ export class FollowRig {
     switch (this.category) {
       case "bus":
       case "train":
+      case "cablecar":
         return this.overhead(h);
       case "ship":
         return this.astern(h);

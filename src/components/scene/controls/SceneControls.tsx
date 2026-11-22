@@ -60,6 +60,7 @@ const VEHICLES: Record<
 > = {
   bus: { name: "Buses", icon: "bus", still: "stopped" },
   train: { name: "Trains", icon: "train", still: "stopped" },
+  cablecar: { name: "Cable car", icon: "funicular", still: "stopped" },
   ship: { name: "Ships", icon: "ship", still: "stopped" },
   plane: { name: "Aircraft", icon: "plane", still: "on the ground" },
   satellite: { name: "Satellites", icon: "satellite", still: "in shadow" },

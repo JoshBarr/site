@@ -8,6 +8,13 @@ import {
   Vector3,
 } from "three/webgpu";
 import { sceneNow, useSeek } from "../clock";
+import {
+  Candidate,
+  followed,
+  publish,
+  useFollowCandidates,
+  useFollowSpots,
+} from "../follow/store";
 import { castsNearShadow } from "../landmarks/nearShadow";
 import { createModelMaterial } from "../models/lod";
 import { switchedOff } from "../stats";
@@ -16,6 +23,7 @@ import { RAIL_TOP } from "../trains/network";
 import { Tracks } from "../trains/Railway";
 import { railBores } from "../tunnels/bores";
 import { Bores } from "../tunnels/Tunnels";
+import { seenUnderground } from "../tunnels/reveal";
 import { orient } from "../trains/run";
 import { createRunTrails } from "../trains/Trains";
 import { CAR, createCableCarGeometry } from "./model";
@@ -58,9 +66,14 @@ const TRAIL_HEIGHT = 1.6;
 
 /**
  * The line's tunnels: from a track to the wall, and the floor to the crown,
- * m. A car's 2.5 m wide; the rest is a guess.
+ * m. A car's 2.5 m wide; the rest is a guess. Its three are each about
+ * 100 m long, and the passing loop starts inside the top one: its far side
+ * there is mapped as a tunnel of its own, 10 m long, kept.
  */
-const BORE = { half: 2, height: 4.6 };
+const BORE = { half: 2, height: 4.6, shortest: 5 };
+
+/** The cars' names in the list to follow, by which is which here. */
+const CAR_NAMES = ["Car 1", "Car 2"];
 
 /**
  * Behind a car its trail fades out by age, s: whole at the car, gone this
@@ -69,6 +82,12 @@ const BORE = { half: 2, height: 4.6 };
 const TAIL_FADE = 2 * 60;
 
 type Trails = ReturnType<typeof createRunTrails>;
+
+/** Whether the cars are under way, and which is going down. */
+interface Motion {
+  moving: boolean;
+  down: number;
+}
 
 /** Puts the car `at` (0 at the top to 1 at the bottom) on `way`. */
 function place(way: CarWay, at: number) {
@@ -160,10 +179,35 @@ function Cars({
   lights: number;
 }) {
   const { epoch } = useSeek();
+  const spots = useFollowSpots("cablecar");
+  const [motion, setMotion] = useState<Motion>({ moving: false, down: 0 });
+  /** What the list was last told, as the frames see it. */
+  const told = useRef(motion);
+
+  useFollowCandidates(
+    "cablecar",
+    useMemo(
+      () =>
+        CAR_NAMES.map((name, car): Candidate => ({
+          id: String(car + 1),
+          label: "Cable car",
+          detail: motion.moving
+            ? `${name} · going ${car === motion.down ? "down" : "up"}`
+            : name,
+          moving: motion.moving,
+        })),
+      [motion]
+    )
+  );
 
   const cars = useMemo(() => {
     const { material, lit } = createModelMaterial({ roughness: 0.5 });
-    const mesh = new InstancedMesh(createCableCarGeometry(), material, 2);
+
+    // Seen through the ground in their tunnels, when followed.
+    const mesh = seenUnderground(
+      new InstancedMesh(createCableCarGeometry(), material, 2)
+    );
+
     // They move every frame; their bounds would always be stale.
     mesh.frustumCulled = false;
     castsNearShadow(mesh);
@@ -238,10 +282,46 @@ function Cars({
     trails.playheads.array[0] = trails.playheads.array[1] =
       (now - epoch) / 1000;
 
+    // Before the day's first run, the cars wait for it: car 0 at the top.
+    const current = day.runs[run];
+    const down = current?.down ?? 0;
+    const last = current?.times[current.times.length - 1] ?? -Infinity;
+    const moving = now >= (current?.times[0] ?? Infinity) && now < last;
+
+    if (moving !== told.current.moving || down !== told.current.down) {
+      told.current = { moving, down };
+      setMotion(told.current);
+    }
+
+    const watched = followed("cablecar");
+    const later = carsAt(day.runs, now + 1000);
+    spots.begin();
+
     carsAt(day.runs, now).forEach((at, car) => {
-      place(line.ways[car], at);
+      const way = line.ways[car];
+      place(way, at);
       orient(along.subVectors(front, back), rotation);
       cars.mesh.setMatrixAt(car, matrix.compose(centre, rotation, ONE));
+
+      const id = String(car + 1);
+      spots.add(id, centre.x, centre.y, centre.z, CAR.length);
+
+      if (id !== watched) return;
+
+      // Facing the way it's going, or last went: down, from `back` to
+      // `front`, or up.
+      const sign = car === down ? 1 : -1;
+      const flat = Math.hypot(along.x, along.z) || 1;
+
+      publish({
+        x: centre.x,
+        y: centre.y,
+        z: centre.z,
+        heading: Math.atan2(sign * along.x, -sign * along.z),
+        length: CAR.length,
+        speed: Math.abs(later[car] - at) * (way.length - CAR.length),
+        grade: (sign * along.y) / flat,
+      });
     });
 
     cars.mesh.instanceMatrix.needsUpdate = true;
@@ -309,7 +389,7 @@ export function CableCar({
     <>
       <Tracks network={line.network} />
       {!switchedOff("tunnels") && (
-        <Bores bores={bores} name="cable car tunnels" lined={false} />
+        <Bores bores={bores} name="cable car tunnels" />
       )}
       <Terminal index={index} line={line} lights={lights} />
       {timetable && <Cars line={line} timetable={timetable} lights={lights} />}

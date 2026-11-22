@@ -299,6 +299,18 @@ describe("the linings", () => {
     expect(Math.max(...across)).toBeCloseTo(2.125, 6);
   });
 
+  it("keeps shorter tunnels where it's told what's long enough", () => {
+    // The underpass, 9 m: as a branch of the cable car's passing loop is.
+    const kept = railBores(new RailNetwork(file, index), {
+      half: 2,
+      height: 4.6,
+      shortest: 5,
+    });
+
+    expect(kept).toHaveLength(5);
+    expect(kept[3].along.at(-1)).toBe(9);
+  });
+
   it("lays track in a rail bore, and hangs lamps only by a wall", () => {
     const geometry = createLinings([down, up]);
 
@@ -349,6 +361,33 @@ describe("the cutaway", () => {
 
     expect(cutRadius.value).toBe(0);
     expect(cut.mesh.scale.x).toBe(0);
+    cut.dispose();
+  });
+
+  it("slopes with what's followed up a grade", () => {
+    const cut = createCutaway();
+
+    // A cable car heading east, up 1 in 5.
+    seeThrough(new Vector3(0, 50, 0), 10.5, 0.2, Math.PI / 2);
+    cut.update(1);
+
+    const radius = cut.mesh.scale.x;
+
+    const floor = (x: number, z: number) =>
+      new Vector3(x, 0, z).applyMatrix4(cut.mesh.matrix);
+
+    // Up ahead, down behind, level across; its middle where it was.
+    expect(floor(0, 0).toArray()).toEqual([0, 50 - 1.6, 0]);
+    expect(floor(1, 0).y - floor(-1, 0).y).toBeCloseTo(2 * radius * 0.2, 6);
+    expect(floor(1, 0).x).toBeCloseTo(radius, 6);
+    expect(floor(0, 1).y).toBeCloseTo(50 - 1.6, 6);
+
+    // Its walls still upright.
+    const top = new Vector3(1, 1, 0).applyMatrix4(cut.mesh.matrix);
+    expect(top.x).toBeCloseTo(radius, 6);
+
+    seeThrough(null);
+    cut.update(1);
     cut.dispose();
   });
 

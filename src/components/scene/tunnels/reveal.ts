@@ -3,6 +3,7 @@ import {
   CustomBlending,
   CylinderGeometry,
   GreaterDepth,
+  Matrix4,
   Mesh,
   MeshBasicNodeMaterial,
   Object3D,
@@ -66,6 +67,8 @@ const FADE_FROM = 0.55;
 const cutAt = uniform(new Vector3(0, -1e7, 0));
 export const cutRadius = uniform(0);
 
+const shear = new Matrix4();
+
 /** 1 at the middle of the cut, fading to 0 at its edge: for what's blended into it. */
 export function cutaway(position = positionWorld) {
   const out = position.xz.distance(cutAt.xz).div(max(cutRadius, 0.01));
@@ -81,18 +84,34 @@ export function seenUnderground<T extends Object3D>(object: T) {
 }
 
 /** What's to be seen through the ground, as whoever has the camera last said. */
-const wanted = { at: new Vector3(), radius: 0, open: false };
+const wanted = {
+  at: new Vector3(),
+  radius: 0,
+  open: false,
+  /** Up per metre east, and per metre south: the floor's slope. */
+  slope: [0, 0],
+};
 
 /**
  * Cuts the ground away around `at`, the middle of something `length` m
- * long in a tunnel, from this frame on; with null, closes it up again.
+ * long in a tunnel, from this frame on; with null, closes it up again. On
+ * a `grade` (up per metre ahead) facing `heading` (radians clockwise from
+ * north), the cut's floor and top slope with it, as the tunnel's do: on
+ * the cable car's 1 in 5, a level floor would be over the tunnel's a few
+ * metres downhill, and hide it.
  */
-export function seeThrough(at: Vector3 | null, length = 0) {
+export function seeThrough(
+  at: Vector3 | null,
+  length = 0,
+  grade = 0,
+  heading = 0
+) {
   wanted.open = at !== null;
 
   if (!at) return;
   wanted.at.copy(at);
   wanted.radius = length * AROUND + MARGIN;
+  wanted.slope = [grade * Math.sin(heading), -grade * Math.cos(heading)];
 }
 
 /**
@@ -121,6 +140,8 @@ export function createCutaway() {
 
   const cut = new Mesh(drum, material);
   cut.renderOrder = CUT_ORDER;
+  // Placed by hand, to shear it up the slope.
+  cut.matrixAutoUpdate = false;
   // Shut, it's a point: drawn all the same, so its pipeline's built with
   // the rest and not when something first goes underground.
   cut.frustumCulled = false;
@@ -139,6 +160,15 @@ export function createCutaway() {
     cutAt.value.copy(wanted.at);
     cut.position.set(wanted.at.x, wanted.at.y - UNDER, wanted.at.z);
     cut.scale.set(radius, radius > 0 ? UNDER + OVER : 0, radius);
+
+    // Rising `slope` per metre across, from its middle: sheared, its walls
+    // still upright.
+    const [east, south] = wanted.slope;
+    cut.matrix
+      .makeScale(cut.scale.x, cut.scale.y, cut.scale.z)
+      .premultiply(shear.makeShear(east, 0, 0, 0, 0, south))
+      .setPosition(cut.position);
+    cut.matrixWorldNeedsUpdate = true;
   };
 
   const dispose = () => {

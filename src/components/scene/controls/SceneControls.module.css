@@ -737,6 +737,10 @@
   --tint: #e69eff;
 }
 
+.Theme [data-tint="cablecar"] {
+  --tint: #ff9933;
+}
+
 .Theme [data-tint="ship"] {
   --tint: #59b3ff;
 }

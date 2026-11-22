@@ -12,6 +12,7 @@ import type { Aircraft } from "../../src/lib/flights";
 import type { Train } from "../../src/lib/trains";
 import {
   follow,
+  followVehicle,
   getSnapshot,
   setCut,
   stop,
@@ -183,6 +184,8 @@ describe("the scene", { timeout: 30_000 }, () => {
       "road tunnels",
       "tunnel cutaway",
       "trains",
+      "cable cars",
+      "cable car tunnels",
       "buses",
       "ships",
       "jets",
@@ -352,6 +355,45 @@ describe("the scene", { timeout: 30_000 }, () => {
 
     expect(getSnapshot().following).toBeNull();
     expect(cut.scale.x).toBe(0);
+  });
+
+  it("follows a cable car into its tunnel, cut away up the line's grade", async () => {
+    scene = await renderScene(NOON);
+    const { drawn, until } = scene;
+    await until(() => getSnapshot().counts.cablecar === 2);
+
+    const [cut] = drawn("tunnel cutaway");
+
+    // Waiting at Lambton Quay for its first run, in the bottom tunnel.
+    setCut(true);
+    await act(async () =>
+      followVehicle({ category: "cablecar", id: "2", label: "Cable car" })
+    );
+    await frames(60);
+
+    expect(subject.length).toBe(10.5);
+    expect(cut.scale.x).toBeGreaterThan(subject.length / 2);
+    expect(cut.position.x).toBeCloseTo(subject.x, 3);
+    expect(cut.position.z).toBeCloseTo(subject.z, 3);
+
+    // Facing up the line, toward Kelburn, where it goes next: about 1 in
+    // 5. The cut's floor climbs with it.
+    expect(subject.grade).toBeGreaterThan(0.1);
+    expect(subject.grade).toBeLessThan(0.3);
+
+    const ahead = new Vector3(
+      Math.sin(subject.heading),
+      0,
+      -Math.cos(subject.heading)
+    );
+
+    const floorAt = (way: number) =>
+      new Vector3(ahead.x * way, 0, ahead.z * way).applyMatrix4(cut.matrix).y;
+
+    expect(floorAt(1) - floorAt(-1)).toBeCloseTo(
+      2 * cut.scale.x * subject.grade,
+      3
+    );
   });
 
   it("hands back from a shot on the ground stepped back far enough to turn", async () => {

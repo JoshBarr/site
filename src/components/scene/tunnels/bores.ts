@@ -117,6 +117,11 @@ export async function loadRoadBores(index: TileIndex) {
 interface RailSection {
   half: number;
   height: number;
+  /**
+   * Track mapped as in a tunnel for less than this, m, is under a bridge or
+   * a building: nothing the bare ground has a hill for.
+   */
+  shortest?: number;
 }
 
 /** The suburban lines': wired, and to the main line's gauge. Near enough. */
@@ -132,10 +137,7 @@ const LEVEL = 3;
 /** Of the way to another track, this much is sideways when it's alongside. */
 const SIDEWAYS = 0.8;
 
-/**
- * Track mapped as in a tunnel for less than this, m, is under a bridge or a
- * building: nothing the bare ground has a hill for.
- */
+/** The railway's underpasses are shorter than this, m: see RailSection. */
 const SHORTEST = 25;
 
 /** How far from `p`, across the ground, and where, the nearest of `line` is. */
@@ -233,7 +235,7 @@ export function railBores(network: RailNetwork, section = RAIL): Bore[] {
         0
       );
 
-    return length < SHORTEST ? [] : [{ run, line }];
+    return length < (section.shortest ?? SHORTEST) ? [] : [{ run, line }];
   });
 
   const lines = tunnels.map(({ line }) => line);

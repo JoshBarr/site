@@ -5,11 +5,18 @@ import { PerspectiveCamera, Vector3 } from "three/webgpu";
 // the ones that can be followed and, each frame, publish where the followed
 // one is; the camera rig frames it, and the controls pick which.
 
-export type Category = "bus" | "train" | "ship" | "plane" | "satellite";
+export type Category =
+  | "bus"
+  | "train"
+  | "cablecar"
+  | "ship"
+  | "plane"
+  | "satellite";
 
 export const CATEGORIES: Category[] = [
   "bus",
   "train",
+  "cablecar",
   "ship",
   "plane",
   "satellite",
@@ -56,6 +63,11 @@ export interface Subject {
   climb: number;
   /** Gaining speed, m/s². */
   accel: number;
+  /**
+   * Up per metre ahead, the way it's facing: a road's or a track's grade.
+   * The ground's cut away round it in a tunnel at the same slope.
+   */
+  grade: number;
   /** On the ground (or the sea, the road, the rails). */
   ground: boolean;
   /** Above the ground, m, when it isn't on it. */
@@ -74,6 +86,7 @@ export const subject: Subject & {
   speed: 0,
   climb: 0,
   accel: 0,
+  grade: 0,
   ground: true,
   height: 0,
   fresh: false,
@@ -177,6 +190,7 @@ const countsOf = (): Record<Category, number> => {
   return {
     bus: count("bus"),
     train: count("train"),
+    cablecar: count("cablecar"),
     ship: count("ship"),
     plane: count("plane"),
     satellite: count("satellite"),
@@ -220,6 +234,7 @@ export function publish(at: Partial<Subject> & Pick<Subject, "x" | "y" | "z">) {
     speed: 0,
     climb: 0,
     accel: 0,
+    grade: 0,
     ground: true,
     height: 0,
     ...at,

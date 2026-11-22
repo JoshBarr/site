@@ -65,6 +65,16 @@ function serve(aircraft: Aircraft[], trains: Train[]) {
         legs: {},
       })
     ),
+    // A cable car timetable with no runs: the cars wait at either end, car
+    // 2 at Lambton Quay, in the bottom tunnel.
+    http.get(`${ORIGIN}/api/cablecar`, () =>
+      HttpResponse.json({
+        start: "20260101",
+        end: "20261231",
+        services: {},
+        trips: [],
+      })
+    ),
     // One message sign showing a travel time, the rest blank.
     http.get(`${ORIGIN}/api/signs`, () =>
       HttpResponse.json({
