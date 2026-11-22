@@ -29,23 +29,20 @@ import { switchedOff } from "./stats";
 // Thin-lens depth of field. The blur circle is A·f/s · |1 − s/d| for aperture
 // A, focal length f, focus distance s and depth d. A real lens focused
 // hundreds of metres away is sharp to the horizon, so the aperture here is
-// miniature-scale, and grows with s so that A·f/s holds steady: every shot
-// gets the same softness behind the subject, zoomed in or out. It grows with
-// where autofocus would focus, though, not with the focus shift: focusing
-// nearer than that softens the distance, and farther sharpens it, as on a
-// real lens.
+// miniature-scale, and grows with s so that A·f/s holds steady: the blur at
+// the horizon is set by the f-number alone, wherever the focus is, and the
+// depth of field is the same share of the focus distance at every range.
+// Focus is autofocus's: the orbit target, or a landmark in front of it, or
+// exactly a point the viewer held a press on to orbit around.
+
+/** Blur at the horizon, as a fraction of the largest blur, at f/4. */
+const BLUR_AT_F4 = 0.3;
 
 /** Blur at the horizon, as a fraction of the largest blur. */
-const backgroundBlur = uniform(0.3);
+const backgroundBlur = uniform(BLUR_AT_F4);
 
 /** Distance to the plane of focus, metres. */
 const focusDistance = uniform(1000);
-
-/**
- * Autofocus's distance over the focus distance: how much more blur the focus
- * shift leaves behind the subject, 1 for none.
- */
-const shiftBlur = uniform(1);
 
 /** Largest blur radius, pixels. Set as a fraction of the frame height. */
 const maxRadius = uniform(7);
@@ -90,19 +87,41 @@ const FOCUS_TIME = 0.3;
 const FOCUS_SLOP = 0.01;
 
 /**
- * The most focus can be moved from where autofocus puts it, in stops: each
- * one doubles its distance, or halves it.
+ * The target within this share of its distance of the picked point is still
+ * on it: the controls' bounds and easing leave it a hair off.
  */
-export const FOCUS_SHIFT_MAX = 2;
+const PICKED_SLOP = 0.01;
 
-/** Focus moved from where autofocus puts it, in stops; 0 leaves it there. */
-let focusShift = 0;
+/** Full and third stops, widest first, as a camera's dial has them. */
+export const F_NUMBERS = [
+  1, 1.1, 1.2, 1.4, 1.6, 1.8, 2, 2.2, 2.5, 2.8, 3.2, 3.5, 4, 4.5, 5, 5.6, 6.3,
+  7.1, 8, 9, 10, 11, 13, 14, 16, 18, 20, 22,
+];
 
-export const getFocusShift = () => focusShift;
+/** The scene's own: autofocus's look before there were controls. */
+export const DEFAULT_F_NUMBER = 4;
 
-/** Moves focus beyond (more) or in front of (less) where autofocus puts it. */
-export function setFocusShift(stops: number) {
-  focusShift = Math.min(Math.max(stops, -FOCUS_SHIFT_MAX), FOCUS_SHIFT_MAX);
+let fNumber = DEFAULT_F_NUMBER;
+
+/** A point the viewer picked to orbit around, focused on exactly. */
+let picked: Vector3 | null = null;
+
+/**
+ * Focuses exactly on `point` while the orbit target's there: picked by the
+ * viewer, it's the subject itself, not the ground behind one.
+ */
+export function focusOn(point: Vector3) {
+  picked = (picked ?? new Vector3()).copy(point);
+}
+
+export const getFNumber = () => fNumber;
+
+/** Opens (smaller) or stops down (larger) the lens: more blur or less. */
+export function setFNumber(n: number) {
+  fNumber = Math.min(
+    Math.max(n, F_NUMBERS[0]),
+    F_NUMBERS[F_NUMBERS.length - 1]
+  );
 }
 
 /** Something standing on the ground that autofocus can land on. */
@@ -194,14 +213,16 @@ function landmarkDistance(slop: number) {
 /**
  * Focus on what the camera orbits around, `target`, racking smoothly as it
  * moves, and size the blur to the frame. A landmark in the middle of the
- * frame, in front of the target, gets the focus to itself. The focus shift
- * moves it nearer or farther from there.
+ * frame, in front of the target, gets the focus to itself, unless the target
+ * was picked by the viewer. With `own`, the telescope's: the scene's
+ * f-number, whatever the viewer set.
  */
 export function updateLens(
   renderer: WebGPURenderer,
   camera: Camera,
   target: Vector3,
-  delta: number
+  delta: number,
+  own = false
 ) {
   renderer.getDrawingBufferSize(size);
   maxRadius.value = size.y * MAX_RADIUS_OF_HEIGHT;
@@ -212,31 +233,35 @@ export function updateLens(
     far.value = camera.far;
   }
 
+  backgroundBlur.value =
+    (BLUR_AT_F4 * DEFAULT_F_NUMBER) / (own ? DEFAULT_F_NUMBER : fNumber);
+
   camera.getWorldPosition(origin);
   camera.getWorldDirection(axis);
-  const fov = camera instanceof PerspectiveCamera ? camera.fov : 50;
-  const slop = 2 * Math.tan((fov * Math.PI) / 360) * FOCUS_SLOP;
   // Along the view axis, as depth is.
   const subject = Math.max(toTarget.subVectors(target, origin).dot(axis), 10);
-  const landmark = landmarkDistance(slop);
+  let focus: number;
 
-  // Landmarks are the subject themselves: no pull toward the camera.
-  // Then moved in or out as the viewer asks.
-  const focus =
-    (landmark < subject ? landmark : subject * FOCUS_PULL) * 2 ** focusShift;
+  if (picked && picked.distanceTo(target) < subject * PICKED_SLOP) {
+    focus = subject;
+  } else {
+    const fov = camera instanceof PerspectiveCamera ? camera.fov : 50;
+    const slop = 2 * Math.tan((fov * Math.PI) / 360) * FOCUS_SLOP;
+    const landmark = landmarkDistance(slop);
+
+    // Landmarks are the subject themselves: no pull toward the camera.
+    focus = landmark < subject ? landmark : subject * FOCUS_PULL;
+  }
 
   // Ease by ratio, so racking 200 m → 2 km takes as long as 2 km → 20 km.
   const ease = 1 - Math.exp(-delta / FOCUS_TIME);
   focusDistance.value *= Math.pow(focus / focusDistance.value, ease);
-  shiftBlur.value *= Math.pow(2 ** -focusShift / shiftBlur.value, ease);
 }
 
 /** Signed blur at a scene depth (negative in front of focus), -1..1. */
 const blurAt = (viewZ) =>
   clamp(
-    backgroundBlur
-      .mul(shiftBlur)
-      .mul(float(1).sub(focusDistance.div(viewZ.negate()))),
+    backgroundBlur.mul(float(1).sub(focusDistance.div(viewZ.negate()))),
     -1,
     1
   );

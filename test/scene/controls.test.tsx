@@ -23,9 +23,9 @@ import {
 import { connectCamera, SHOTS } from "../../src/components/scene/shots/shots";
 import { getMapView, setMapView } from "../../src/components/scene/mapView";
 import {
-  FOCUS_SHIFT_MAX,
-  getFocusShift,
-  setFocusShift,
+  DEFAULT_F_NUMBER,
+  getFNumber,
+  setFNumber,
 } from "../../src/components/scene/lens";
 
 // The scene's controls: the toolbar's panels for places, following and
@@ -107,7 +107,7 @@ afterEach(() => {
   setCut(false);
   setSceneTime(null);
   setMapView(false);
-  setFocusShift(0);
+  setFNumber(DEFAULT_F_NUMBER);
 });
 
 describe("the scene's controls", () => {
@@ -204,32 +204,31 @@ describe("the scene's controls", () => {
       expect(getSnapshot().cut).toBe(false);
     });
 
-    it("bring the focus nearer or farther than autofocus has it", async () => {
+    it("open the aperture for more blur or stop it down for less", async () => {
       const { user } = setup();
-      let panel = await open(user, "Camera");
-      const focus = within(panel).getByRole("slider", { name: "Focus" });
+      const panel = await open(user, "Camera");
+      const aperture = within(panel).getByRole("slider", { name: "Aperture" });
 
-      expect(getFocusShift()).toBe(0);
-      expect(panel.textContent).toContain("Auto");
+      expect(getFNumber()).toBe(DEFAULT_F_NUMBER);
+      expect(panel.textContent).toContain("f/4");
 
-      focus.focus();
-      await user.keyboard("{ArrowRight}{ArrowRight}");
-      expect(getFocusShift()).toBeCloseTo(0.2);
+      // A third of a stop wider, then all the way each way.
+      aperture.focus();
+      await user.keyboard("{ArrowRight}");
+      expect(getFNumber()).toBe(3.5);
       await user.keyboard("{End}");
-      expect(getFocusShift()).toBe(FOCUS_SHIFT_MAX);
-      expect(panel.textContent).toContain("×4.0");
-
-      // Shut and opened again, it shows where focus is.
-      await user.keyboard("{Escape}");
-      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-      panel = await open(user, "Camera");
-      expect(
-        within(panel).getByRole("slider", { name: "Focus" })
-      ).toHaveProperty("value", String(FOCUS_SHIFT_MAX));
-
-      within(panel).getByRole("slider", { name: "Focus" }).focus();
+      expect(getFNumber()).toBe(1);
       await user.keyboard("{Home}");
-      expect(getFocusShift()).toBe(-FOCUS_SHIFT_MAX);
+      expect(getFNumber()).toBe(22);
+      expect(panel.textContent).toContain("f/22");
+    });
+
+    it("say how to pick what to orbit and focus on, there being no slider for it", async () => {
+      const { user } = setup();
+      const panel = await open(user, "Camera");
+
+      expect(within(panel).queryByRole("slider", { name: "Focus" })).toBeNull();
+      expect(panel.textContent).toContain("Press and hold on anything");
     });
   });
 

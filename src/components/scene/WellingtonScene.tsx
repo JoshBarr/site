@@ -117,7 +117,9 @@ import {
 } from "./scope/scope";
 import { cloudsSeen } from "./clouds/density";
 import { withMirroredCloud } from "./clouds/mirrored";
-import { updateLens } from "./lens";
+import { focusOn, updateLens } from "./lens";
+import { pivotAt, pivotView, pointAt } from "./pivot";
+import { pressRing, PressRing } from "./pressRing";
 import { DEFAULT_FOV, flightFor, FollowRig, smootherstep } from "./follow/rig";
 import { groundAlong } from "./ground";
 import {
@@ -250,6 +252,18 @@ const WALK_PRIORITY = -2;
 const CLICK_SLOP = 6;
 const CLICK_TIME = 500;
 
+/**
+ * A press held as still as a click this long, ms, picks what's under it to
+ * orbit around: just past a click, so it's never both.
+ */
+const HOLD_TIME = CLICK_TIME + 20;
+
+/** Seconds to turn onto a point picked to orbit around. */
+const PIVOT_TIME = 0.8;
+
+/** Depth past this share of the far plane is the sky: nothing to orbit. */
+const SKY_DEPTH = 0.99;
+
 /** Pixels from a vehicle that a tap picks it: fingers are blunter than a mouse. */
 const TAP_REACH = 24;
 
@@ -320,6 +334,8 @@ interface ViewFlight {
    * limits back, say, flying in from outside them.
    */
   arrive?: () => void;
+  /** Turning onto a point to orbit, steadily (see pivotAt), not over the top. */
+  pivot?: boolean;
 }
 
 const flown: [Vector3, Vector3] = [new Vector3(), new Vector3()];
@@ -916,6 +932,134 @@ function Controls({
       );
     };
 
+    // Holding a press still on something makes it the orbit point: the
+    // camera turns to look at it from where it is (or the map slides over
+    // to it), and focuses on it. Following, it stops first.
+    const orbitAround = (point: Vector3) => {
+      const c = controls.current;
+
+      if (!c) return;
+      touched.current = true;
+
+      if (getSnapshot().following) {
+        stopFollowing();
+        handBack();
+
+        // Out of bounds, it's flying back in: that, not this.
+        if (flight.current) return;
+      }
+
+      land();
+      const map = getMapView();
+      const from = c.camera.position.clone();
+      const aim = c.getTarget(new Vector3());
+
+      const to = map
+        ? pivotView(from, point, 0, Infinity, aim)
+        : pivotView(from, point, MIN_DISTANCE, MAX_DISTANCE);
+
+      focusOn(point);
+
+      if (getSnapshot().cut) {
+        const [p, t] = to;
+        c.setLookAt(p.x, p.y, p.z, t.x, t.y, t.z, false);
+
+        return;
+      }
+
+      flight.current = {
+        from: [from, aim],
+        to,
+        time: 0,
+        duration: PIVOT_TIME,
+        arc: 0,
+        pivot: true,
+      };
+    };
+
+    // What's drawn under a held press, if there's anything to orbit there.
+    const pick = async (clientX: number, clientY: number) => {
+      const camera = controls.current?.camera;
+
+      if (
+        !(camera instanceof PerspectiveCamera) ||
+        scope.active ||
+        getSnapshot().following?.category === "satellite"
+      ) {
+        return null;
+      }
+
+      const rect = element.getBoundingClientRect();
+      const x = ((clientX - rect.left) / rect.width) * 2 - 1;
+      const y = 1 - ((clientY - rect.top) / rect.height) * 2;
+      // As it was when the depth was read: following, it moves on.
+      const seen = camera.clone();
+      const [depth] = (await sceneDepthsAt(renderer, seen, [{ x, y }])) ?? [];
+
+      if (!(depth > 0) || depth > seen.far * SKY_DEPTH) return null;
+      const point = pointAt(seen, x, y, depth);
+
+      if (
+        point.x < boundary.min.x ||
+        point.x > boundary.max.x ||
+        point.z < boundary.min.z ||
+        point.z > boundary.max.z
+      ) {
+        return null;
+      }
+
+      point.y = Math.min(Math.max(point.y, boundary.min.y), boundary.max.y);
+
+      return point;
+    };
+
+    let hold: {
+      x: number;
+      y: number;
+      timer: ReturnType<typeof setTimeout>;
+      ring: PressRing;
+    } | null = null;
+
+    const letGo = () => {
+      if (!hold) return;
+      clearTimeout(hold.timer);
+      hold.ring.cancel();
+      hold = null;
+    };
+
+    const startHold = (e: PointerEvent) => {
+      letGo();
+      const { clientX: x, clientY: y } = e;
+      const ring = pressRing(x, y, HOLD_TIME);
+
+      const timer = setTimeout(() => {
+        hold = null;
+
+        pick(x, y).then(
+          (point) => {
+            if (!point || disposed) return ring.miss();
+            ring.lock();
+            orbitAround(point);
+          },
+          (error) => {
+            ring.miss();
+            console.error(error);
+          }
+        );
+      }, HOLD_TIME);
+
+      hold = { x, y, timer, ring };
+    };
+
+    const moved = (e: PointerEvent) => {
+      if (
+        hold &&
+        Math.hypot(e.clientX - hold.x, e.clientY - hold.y) > CLICK_SLOP
+      ) {
+        letGo();
+      }
+    };
+
     const down = (e: PointerEvent) => {
       pointers.add(e.pointerId);
       still();
@@ -932,10 +1076,15 @@ function Controls({
         pointers.size === 1 && e.button === 0
           ? { x: e.clientX, y: e.clientY, time: e.timeStamp, took }
           : null;
+
+      // A second finger is a pinch, not a hold.
+      if (press) startHold(e);
+      else letGo();
     };
 
     const up = (e: PointerEvent) => {
       pointers.delete(e.pointerId);
+      letGo();
       const p = press;
       press = null;
 
@@ -961,6 +1110,7 @@ function Controls({
     const cancel = (e: PointerEvent) => {
       pointers.delete(e.pointerId);
       press = null;
+      letGo();
     };
 
     // A hand over anything that can be clicked. One look at a time: the
@@ -1017,6 +1167,7 @@ function Controls({
     element.addEventListener("pointerdown", down, { capture: true });
     window.addEventListener("pointerup", up, { capture: true });
     window.addEventListener("pointercancel", cancel, { capture: true });
+    window.addEventListener("pointermove", moved, { capture: true });
     element.addEventListener("pointermove", hover);
     element.addEventListener("pointerleave", still);
     element.addEventListener("wheel", take, { capture: true });
@@ -1028,6 +1179,7 @@ function Controls({
       element.removeEventListener("pointerdown", down, { capture: true });
       window.removeEventListener("pointerup", up, { capture: true });
       window.removeEventListener("pointercancel", cancel, { capture: true });
+      window.removeEventListener("pointermove", moved, { capture: true });
       element.removeEventListener("pointermove", hover);
       element.removeEventListener("pointerleave", still);
       element.removeEventListener("wheel", take, { capture: true });
@@ -1036,10 +1188,11 @@ function Controls({
       window.removeEventListener("blur", blur);
       walk.clear();
       still();
+      letGo();
       disposed = true;
       element.style.cursor = "";
     };
-  }, [events, renderer, lookAround, putBack, walk, land]);
+  }, [events, renderer, lookAround, putBack, walk, land, handBack, boundary]);
 
   // Set views, picked from the shot panel, and the view now, for copying.
   useEffect(
@@ -1303,7 +1456,7 @@ function Controls({
 
       camera.updateProjectionMatrix();
       c.setLookAt(p.x, p.y, p.z, aim.x, aim.y, aim.z, false);
-      updateLens(renderer, camera, aim, delta);
+      updateLens(renderer, camera, aim, delta, scope.active);
 
       const from = scopeFrom.current;
 
@@ -1511,18 +1664,25 @@ function Controls({
     if (shot) {
       flight.current = null;
     } else if (f) {
-      // Over the top, turning to the view in the first half of the way.
       f.time += delta;
       const u = Math.min(f.time / f.duration, 1);
       const s = smootherstep(u);
-      const p = flown[0].lerpVectors(f.from[0], f.to[0], s);
-      p.y = arcUnder(p.y, f.arc * Math.sin(Math.PI * s), ceiling.current);
+      let p: Vector3;
+      let t: Vector3;
 
-      const t = flown[1].lerpVectors(
-        f.from[1],
-        f.to[1],
-        smootherstep(Math.min(u * 2, 1))
-      );
+      if (f.pivot) {
+        [p, t] = pivotAt(f.from, f.to, s, flown);
+      } else {
+        // Over the top, turning to the view in the first half of the way.
+        p = flown[0].lerpVectors(f.from[0], f.to[0], s);
+        p.y = arcUnder(p.y, f.arc * Math.sin(Math.PI * s), ceiling.current);
+
+        t = flown[1].lerpVectors(
+          f.from[1],
+          f.to[1],
+          smootherstep(Math.min(u * 2, 1))
+        );
+      }
 
       camera.position.copy(p);
       camera.lookAt(t);

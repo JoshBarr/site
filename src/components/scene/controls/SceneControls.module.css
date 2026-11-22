@@ -622,7 +622,17 @@
 .SliderEnds {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 10px;
+}
+
+/* How to do what there's no control for. */
+.Hint {
+  margin: 2px 0 0;
+  padding: 0 12px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .SliderEnds {
@@ -644,18 +654,6 @@
   height: 4px;
   border-radius: 2px;
   background: var(--surface-active);
-
-  /* Autofocus, in the middle. */
-  &::before {
-    content: "";
-    position: absolute;
-    top: -3px;
-    left: calc(50% - 1px);
-    width: 2px;
-    height: 10px;
-    border-radius: 1px;
-    background: var(--muted);
-  }
 }
 
 .Thumb {

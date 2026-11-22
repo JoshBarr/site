@@ -27,7 +27,7 @@ import { jump } from "../time/jump";
 import { toggleMapView, useMapView } from "../mapView";
 import { TimeTravel } from "../time/TimeTravel";
 import { useVisibleHeight } from "../useVisibleHeight";
-import { FOCUS_SHIFT_MAX, getFocusShift, setFocusShift } from "../lens";
+import { F_NUMBERS, getFNumber, setFNumber } from "../lens";
 import {
   Credit,
   LicenceLink,
@@ -270,14 +270,12 @@ const TransportPanel: React.FC = () => {
   );
 };
 
-/** Focus's distance, as a multiple of where autofocus puts it. */
-const focusText = (stops: number) =>
-  stops === 0 ? "Auto" : `×${(2 ** stops).toPrecision(2)}`;
+const fStop = (n: number) => `f/${n}`;
 
-/** How the camera moves to a place, and where it focuses. */
+/** How the camera moves to a place, and how much it blurs. */
 const CameraPanel: React.FC = () => {
   const { cut } = useFollow();
-  const [shift, setShift] = useState(getFocusShift);
+  const [fIndex, setFIndex] = useState(() => F_NUMBERS.indexOf(getFNumber()));
 
   return (
     <div className={styles.Panel}>
@@ -303,38 +301,39 @@ const CameraPanel: React.FC = () => {
       </div>
       <Slider.Root
         className={cx(styles.Row, styles.SliderRow)}
-        value={shift}
-        min={-FOCUS_SHIFT_MAX}
-        max={FOCUS_SHIFT_MAX}
-        step={0.1}
-        onValueChange={(stops) => {
-          setShift(stops);
-          setFocusShift(stops);
+        // Stopped down at the left, wide open at the right: more blur.
+        value={F_NUMBERS.length - 1 - fIndex}
+        min={0}
+        max={F_NUMBERS.length - 1}
+        step={1}
+        onValueChange={(at) => {
+          const i = F_NUMBERS.length - 1 - at;
+          setFIndex(i);
+          setFNumber(F_NUMBERS[i]);
         }}
       >
         <div className={styles.SliderHead}>
-          <Slider.Label className={styles.RowLabel}>Focus</Slider.Label>
+          <Slider.Label className={styles.RowLabel}>Aperture</Slider.Label>
           <Slider.Value className={styles.Value}>
-            {(_, [stops]) => focusText(stops)}
+            {() => fStop(F_NUMBERS[fIndex])}
           </Slider.Value>
         </div>
         <Slider.Control className={styles.SliderControl}>
           <Slider.Track className={styles.Track}>
             <Slider.Thumb
               className={styles.Thumb}
-              getAriaValueText={(_, stops) =>
-                stops === 0
-                  ? "Autofocus"
-                  : `${(2 ** stops).toPrecision(2)} times as far as autofocus`
-              }
+              getAriaValueText={() => fStop(F_NUMBERS[fIndex])}
             />
           </Slider.Track>
         </Slider.Control>
         <div className={styles.SliderEnds} aria-hidden>
-          <span>Nearer</span>
-          <span>Farther</span>
+          <span>Deep</span>
+          <span>Shallow</span>
         </div>
       </Slider.Root>
+      <p className={styles.Hint}>
+        Press and hold on anything to orbit around it and focus there.
+      </p>
     </div>
   );
 };
