@@ -1909,9 +1909,10 @@ export function Scene({
       sunDirection(sun),
       lights,
       light.moon ? light.intensity : 0,
-      conditions.cloudCover
+      conditions.cloudCover,
+      conditions.visibility
     );
-  }, [sky, sun, lights, light, conditions.cloudCover]);
+  }, [sky, sun, lights, light, conditions.cloudCover, conditions.visibility]);
 
   useEffect(() => {
     environment.skyBrightness.value = environment.skyBrightnessFor(

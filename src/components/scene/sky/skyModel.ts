@@ -97,34 +97,75 @@ const MAX_EXPOSURE = 400;
 
 /**
  * Of the glow the model gives the haze, how much is drawn. All of it is the
- * bright veil a camera sees, the far shore lost in it on a wet day. The scene
- * was balanced with a darker haze, which the city reads through: at a half,
- * the haze side-on to the reference sun is as bright as that was (0.095 of
- * the model's 0.197), and the model has the say over how it changes from
- * there. ?veil= tries another.
+ * bright veil a camera sees, the far shore lost in it on a wet day, and under
+ * a clear sky that's what's drawn: sunlit ground keeps its contrast through
+ * bright air, and it's the far hills going pale that gives a fine day its
+ * depth. At less they faded to a grey as dark as themselves, and midday came
+ * out flat (2026-11-23).
  *
- * Half was the default until a grey 9 km morning (2026-11-21) came out flat
- * and glaring: at 0.4 the hills keep their relief and the far shore its
- * edge under a deck, and the darker band 0.35 left at the horizon is
- * softer (a faint step still shows there on a clear day).
- * ?veil=0.5 is the old look.
+ * Under cloud the ground's dim and the same veil glares, so it's drawn
+ * darker, as the scene was first balanced: a half until a grey 9 km morning
+ * (2026-11-21) came out flat and glaring, 0.4 since, where the hills keep
+ * their relief and the far shore its edge under a deck.
+ *
+ * And in thick air there's so much of it that all of it, toward a low sun,
+ * whites out the far hills and half the city: under a clear sky it's eased
+ * to 0.6 as the visibility falls from 15 km to 10.
+ *
+ * ?veil= holds it at one level whatever the sky: 0.4 is the look before it
+ * followed the cloud.
  */
-const VEIL = 0.4;
+const VEIL_CLEAR = 1;
+const VEIL_THICK = 0.6;
+const VEIL_CLOUDED = 0.4;
 
-const hazeVeil = (() => {
-  let veil: number | null = null;
+/** The cloud cover the veil's all a clear sky's up to, and all a clouded one's from. */
+const CLEAR_TO = 0.25;
+const CLOUDED_FROM = 0.75;
+
+/** The visibility, m, a clear sky's veil is all thick air's down to, and all clear air's from. */
+const THICK_TO = 10000;
+const CLEAR_FROM = 15000;
+
+/** 0 at `from` or under to 1 at `to` or over, eased at both ends. */
+function eased(from: number, to: number, value: number) {
+  const t = Math.min(Math.max((value - from) / (to - from), 0), 1);
+
+  return t * t * (3 - 2 * t);
+}
+
+const askedVeil = (() => {
+  let veil: number | null | undefined;
 
   return () => {
-    if (veil === null) {
+    if (veil === undefined) {
       const params = new URLSearchParams(globalThis.location?.search ?? "");
       const asked = Number(params.get("veil"));
 
-      veil = params.has("veil") && asked >= 0 && asked <= 2 ? asked : VEIL;
+      veil = params.has("veil") && asked >= 0 && asked <= 2 ? asked : null;
     }
 
     return veil;
   };
 })();
+
+/**
+ * How much of the haze's glow is drawn with `cloudCover` of the sky clouded,
+ * through air you can see `visibility` m through.
+ */
+function veilFor(cloudCover: number, visibility: number) {
+  const asked = askedVeil();
+
+  if (asked !== null) return asked;
+
+  const clear =
+    VEIL_THICK +
+    (VEIL_CLEAR - VEIL_THICK) * eased(THICK_TO, CLEAR_FROM, visibility);
+
+  return (
+    clear + (VEIL_CLOUDED - clear) * eased(CLEAR_TO, CLOUDED_FROM, cloudCover)
+  );
+}
 
 /** Of the old sky's greys, what's left of them on a moonless night. */
 const NIGHT_SKY = 0.2;
@@ -170,6 +211,9 @@ const around = uniform(0);
 
 /** Of the sun, what gets through the cloud to light the air under it. */
 const sunlit = uniform(1);
+
+/** Of the model's glow, how much the haze is drawn with: see veilFor. */
+const veil = uniform(VEIL_CLOUDED);
 
 /**
  * Under a full deck the sun's a seventh of itself (see Sun), and the even
@@ -254,7 +298,7 @@ function towards(direction, level: boolean) {
 
   const cosine = dot(direction, skySun);
   // The haze's glow is the level light, drawn as far as the veil goes.
-  const drawn = level ? hazeVeil() : 1;
+  const drawn = level ? veil : 1;
 
   return {
     sun: scattered.r
@@ -346,14 +390,16 @@ export function skyFor(
 /**
  * Shows `sky` in the nodes above: with the sun toward `direction`, `night`
  * (0 by day to 1) of the way into night, the `moonlight` (the light's
- * intensity while it's the moon's), and `cloudCover` of the sky clouded.
+ * intensity while it's the moon's), `cloudCover` of the sky clouded, and
+ * the `visibility`, m.
  */
 export function showSky(
   sky: Sky,
   direction: [number, number, number],
   night: number,
   moonlight: number,
-  cloudCover: number
+  cloudCover: number,
+  visibility: number
 ) {
   const { light, scale } = sky;
 
@@ -376,6 +422,7 @@ export function showSky(
 
   daylight.value = scale * day;
   sunlit.value = 1 - DECK_SUN * deck;
+  veil.value = veilFor(cloudCover, visibility);
   around.value = light.around * scale * day * (1 + DECK_GLOW * deck);
   skyMean.value = (sky.sky * day) / Math.PI;
   nightSky.value = NIGHT_SKY * night + MOON_SKY * moonlight;

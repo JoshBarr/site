@@ -74,6 +74,9 @@ interface Settings {
   view: string;
 }
 
+/** The bench's air: what you can see through it, m. */
+const VISIBILITY = 30000;
+
 /** Haze over the sea and a plain sky, as the scene's Atmosphere has. */
 function Sky() {
   const scene = useThree((state) => state.scene);
@@ -154,7 +157,16 @@ function Sun({ altitude, bearing, cover }) {
     environment.sunIntensity.value = lit / 3;
     environment.skylight.value = skylight;
 
-    if (sky) showSky(sky, [direction.x, direction.y, direction.z], 0, 0, cover);
+    if (sky) {
+      showSky(
+        sky,
+        [direction.x, direction.y, direction.z],
+        0,
+        0,
+        cover,
+        VISIBILITY
+      );
+    }
   }, [direction, lit, cover, sky, skylight]);
 
   return (
@@ -293,7 +305,7 @@ export const CloudsPreview: React.FC = () => {
       time: new Date(0).toISOString(),
       cloudCover: settings.cover / 100,
       cloudBase: settings.base,
-      visibility: 30000,
+      visibility: VISIBILITY,
       humidity: 0.7,
       precipitation: 0,
       wind: {
