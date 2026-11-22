@@ -46,6 +46,8 @@ export interface BuildingTile {
   /** Tallest building above its ground. */
   maxRel: number;
   triangles: number;
+  /** The tile file's size, so its URL changes when a rebuild changes it. */
+  bytes: number;
   /** Buildings drawn as a point of light: the ones this level leaves out. */
   lights: number;
   /** Wall with windows on buildings under the tile, m². */
@@ -114,8 +116,13 @@ export class BuildingIndex {
     return this.manifest.rootSize / 2 ** level;
   }
 
-  url({ level, x, y }: BuildingTile) {
-    return `${BUILDINGS_URL}/${level}/${x}/${y}.bin`;
+  /**
+   * Versioned by what the manifest says of the tile: tiles are cached for
+   * an hour and served stale for a day after (next.config.ts), so a
+   * rebuilt one needs a new URL to be seen. Unchanged tiles keep theirs.
+   */
+  url({ level, x, y, triangles, bytes, lights }: BuildingTile) {
+    return `${BUILDINGS_URL}/${level}/${x}/${y}.bin?v=${triangles}.${bytes}.${lights}`;
   }
 }
 
@@ -131,7 +138,7 @@ function createTile(level: number, entry: number[]): BuildingTile {
     maxGround,
     maxRel,
     triangles,
-    ,
+    bytes = 0,
     lights = 0,
     windowWall = 0,
   ] = entry;
@@ -145,6 +152,7 @@ function createTile(level: number, entry: number[]): BuildingTile {
     y,
     ...own,
     triangles,
+    bytes,
     lights,
     windowWall,
     bounds: { ...own },

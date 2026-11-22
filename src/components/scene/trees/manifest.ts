@@ -72,8 +72,13 @@ export class TreeIndex {
     );
   }
 
-  url({ x, y }: TreeTile, band: number) {
-    return `${TREES_URL}/${band}/${x}/${y}.bin`;
+  /**
+   * Versioned by the tile's tree count: tiles are cached for an hour and
+   * served stale for a day after (next.config.ts), so a rebuilt one needs
+   * a new URL to be seen. Unchanged tiles keep theirs.
+   */
+  url({ x, y, count }: TreeTile, band: number) {
+    return `${TREES_URL}/${band}/${x}/${y}.bin?v=${count}`;
   }
 }
 
