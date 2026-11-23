@@ -1,7 +1,7 @@
 // Mirrors the manifest written by scripts/trees/build_trees.py.
 
 // Tiles can be served from elsewhere (e.g. Vercel Blob) without code changes.
-const TREES_URL = process.env.NEXT_PUBLIC_TREES_URL ?? "/trees";
+export const TREES_URL = process.env.NEXT_PUBLIC_TREES_URL ?? "/trees";
 
 /** Bytes per tree: x, z, ground, height << 8 | radius, as u16s. */
 export const TREE_BYTES = 8;

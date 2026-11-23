@@ -54,6 +54,12 @@ export const SHOTS: Shot[] = [
     view: [1749761, 5427673, 60, 1749212, 5427462, 15],
   },
   {
+    id: "playground",
+    name: "Frank Kitts playground",
+    group: "City and harbour",
+    view: [1748972, 5427888, 20, 1748946, 5427918, 3],
+  },
+  {
     id: "petone",
     name: "Petone and the Hutt",
     group: "City and harbour",

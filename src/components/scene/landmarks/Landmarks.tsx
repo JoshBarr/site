@@ -15,6 +15,8 @@ import {
 import { CRANES, WHARF_BEARING, YARD } from "../port/terminal";
 import { nztmToWorld, TileIndex } from "../terrain/manifest";
 import { useGridFlow } from "../power/flow";
+import { Playground } from "../playground/Playground";
+import { switchedOff } from "../stats";
 import { verticalScale } from "../terrain/Terrain";
 import { obstructionLights, usePixelAngle } from "./common";
 import { LatticeTower, towerLights } from "./LatticeTower";
@@ -124,8 +126,8 @@ const CRANE_POSES: CranePose[] = [
 
 /**
  * Wellington's wind turbines and transmitter towers, CentrePort's cranes
- * and container stacks, and the harbour's lighthouses, standing on the
- * terrain and casting shadows on it. `lights` (0..1) turns on their aviation
+ * and container stacks, the harbour's lighthouses and Frank Kitts Park's
+ * playground, standing on the terrain and casting shadows on it. `lights` (0..1) turns on their aviation
  * lights and the lighthouses, for night.
  */
 export function Landmarks({
@@ -200,6 +202,8 @@ export function Landmarks({
 
   useEffect(() => addFocusSubjects(placed.focus), [placed]);
 
+  const playground = useMemo(() => !switchedOff("playground"), []);
+
   // What the two farms are sending out, where the grid says: West Wind's
   // turbines, then Mill Creek's, as they're placed.
   const { farms } = useGridFlow();
@@ -226,6 +230,7 @@ export function Landmarks({
       <ContainerCranes spec={CENTREPORT_CRANE} cranes={placed.cranes} />
       <ContainerYard index={index} yard={YARD} wharfBearing={WHARF_BEARING} />
       <Lighthouses lighthouses={placed.lighthouses} />
+      {playground && <Playground index={index} />}
       <ObstructionLights lights={placed.lights} />
     </>
   );

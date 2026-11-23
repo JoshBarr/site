@@ -12,7 +12,8 @@
 #              canopy the lidar made of the decks, and the buildings step
 #              leaves out the council's models of them: when a bridge
 #              changes, run trees, landcover and buildings again
-#   trees      public/trees: lidar-found trees (needs terrain's caches;
+#   trees      public/trees: lidar-found trees, and scrub.png, the scrub
+#              cover the scene scatters shrubs by (needs terrain's caches;
 #              clears the highways' lanes and the railway's bridges, so
 #              reads roads.json and the trains step's network.json)
 #   landcover  public/terrain/landcover.png, with the trees' canopy folded in
@@ -34,6 +35,8 @@
 #   airport    public/airport + src/components/scene/airport/airfield.ts
 #   landmarks  src/components/scene/landmarks/sites.ts
 #   port       src/components/scene/port/terminal.ts
+#   playground src/components/scene/playground/site.ts: Frank Kitts Park's
+#              playground's anchor (OSM) and the DEM's ground under it
 #   power      src/components/scene/power/grid.ts: Transpower's towers and
 #              lines, their heights from the lidar, and the Cook Strait
 #              cables. The trees step reads it, to clear what the lidar
@@ -58,7 +61,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-ALL=(terrain traffic trees landcover farland wind-stations wind footprints cablecar buildings heroes airport landmarks port power signs tunnels buses trains stars)
+ALL=(terrain traffic trees landcover farland wind-stations wind footprints cablecar buildings heroes airport landmarks port playground power signs tunnels buses trains stars)
 VENV=.venv-terrain
 PY="$VENV/bin/python"
 
@@ -104,6 +107,7 @@ wants landcover && run landcover "$PY" -I scripts/terrain/build_tiles.py landcov
 wants farland && run farland "$PY" -I scripts/farland/build_farland.py
 wants wind-stations && run wind-stations "$PY" -I scripts/wind/build_stations.py
 wants wind && run wind "$PY" -I scripts/wind/build_wind.py
+wants trees && run scrub "$PY" -I scripts/trees/build_trees.py scrub
 wants footprints && run footprints "$PY" -I scripts/buildings/build_footprints.py
 wants cablecar && run cablecar node scripts/trains/build_cablecar.mjs
 wants buildings && run buildings node scripts/buildings/build_tiles.mjs
@@ -111,6 +115,7 @@ wants heroes && run heroes node scripts/buildings/build_heroes.mjs
 wants airport && run airport node scripts/airport/build_airfield.mjs
 wants landmarks && run landmarks node scripts/landmarks/build_sites.mjs
 wants port && run port node scripts/port/build_port.mjs
+wants playground && run playground node scripts/playground/build_playground.mjs
 wants power && run power "$PY" -I scripts/power/build_power.py
 wants signs && run signs node scripts/traffic/build_signs.mjs
 wants tunnels && run tunnels node scripts/tunnels/build_tunnels.mjs
