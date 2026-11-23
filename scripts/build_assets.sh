@@ -12,8 +12,7 @@
 #              canopy the lidar made of the decks, and the buildings step
 #              leaves out the council's models of them: when a bridge
 #              changes, run trees, landcover and buildings again
-#   trees      public/trees: lidar-found trees, and scrub.png, the scrub
-#              cover the scene scatters shrubs by (needs terrain's caches;
+#   trees      public/trees: lidar-found trees (needs terrain's caches;
 #              clears the highways' lanes and the railway's bridges, so
 #              reads roads.json and the trains step's network.json)
 #   landcover  public/terrain/landcover.png, with the trees' canopy folded in
@@ -107,7 +106,6 @@ wants landcover && run landcover "$PY" -I scripts/terrain/build_tiles.py landcov
 wants farland && run farland "$PY" -I scripts/farland/build_farland.py
 wants wind-stations && run wind-stations "$PY" -I scripts/wind/build_stations.py
 wants wind && run wind "$PY" -I scripts/wind/build_wind.py
-wants trees && run scrub "$PY" -I scripts/trees/build_trees.py scrub
 wants footprints && run footprints "$PY" -I scripts/buildings/build_footprints.py
 wants cablecar && run cablecar node scripts/trains/build_cablecar.mjs
 wants buildings && run buildings node scripts/buildings/build_tiles.mjs

@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { type RootState, useFrame, useThree } from "@react-three/fiber";
-import { Frustum, Matrix4, Object3D, Vector3 } from "three/webgpu";
+import { Matrix4, Object3D, Vector3 } from "three/webgpu";
 import {
   NEAR_SHADOW_LAYER,
   nearShadowLight,
@@ -55,26 +55,6 @@ export function castsNearShadow(object: Object3D) {
     child.castShadow = true;
     child.receiveShadow = true;
   });
-}
-
-const shadowView = new Matrix4();
-
-/**
- * The near shadow map's view, as last fitted, into `out`: casters outside it
- * needn't be drawn into the map at all.
- */
-export function nearShadowFrustum(out: Frustum) {
-  const { shadow } = nearShadowLight;
-  shadow.updateMatrices(nearShadowLight);
-  shadowView.multiplyMatrices(
-    shadow.camera.projectionMatrix,
-    shadow.camera.matrixWorldInverse
-  );
-
-  return out.setFromProjectionMatrix(
-    shadowView,
-    shadow.camera.coordinateSystem
-  );
 }
 
 const target = new Vector3();

@@ -23,8 +23,6 @@ Output (public/trees/):
   manifest.json        world frame, encoding, per-tile counts
   {x}/{y}.bin          one TILE_LEVEL tile's trees, in random order, so a
                        prefix is an even thinning of the whole tile
-  scrub.png            share of each land cover texel under scrub (1 to
-                       3m), from the `scrub` step, for the scene's shrubs
 
 Also caches the canopy's cover on the terrain's land cover grid, which the
 terrain's landcover step folds into its forest channel: far off, where the
@@ -37,7 +35,6 @@ Usage:
   .venv-terrain/bin/python -I scripts/trees/build_trees.py fetch
   .venv-terrain/bin/python -I scripts/trees/build_trees.py
   .venv-terrain/bin/python -I scripts/terrain/build_tiles.py landcover
-  .venv-terrain/bin/python -I scripts/trees/build_trees.py scrub
 """
 
 import importlib.util
@@ -49,7 +46,6 @@ from pathlib import Path
 
 import numpy as np
 import rasterio
-from PIL import Image
 from affine import Affine
 from rasterio.enums import MergeAlg, Resampling
 from rasterio.features import rasterize
@@ -879,8 +875,8 @@ def build():
 COVER_BLOCK = 4
 
 
-def cover_map(canopy, grid):
-    """Share of each land cover texel where `canopy` (on the tree grid) is set."""
+def canopy_cover(canopy, grid):
+    """Share of each land cover texel under canopy, cached for the terrain's landcover step."""
     k = COVER_BLOCK
     rows, cols = (canopy.shape[0] // k) * k, (canopy.shape[1] // k) * k
     blocks = np.zeros((rows // k, cols // k), dtype=np.float32)
@@ -903,66 +899,8 @@ def cover_map(canopy, grid):
         src_nodata=None,
         dst_nodata=0,
     )
-    return out
-
-
-def canopy_cover(canopy, grid):
-    """Share of each land cover texel under canopy, cached for the terrain's landcover step."""
-    out = cover_map(canopy, grid)
     np.save(CACHE_DIR / "canopy.npy", out)
     print(f"  canopy cover {out.shape[1]}x{out.shape[0]}, {out.mean():.1%} of the land cover map")
-
-
-# Scrub: canopy from this high up to MIN_HEIGHT, the gorse, flax, mānuka
-# and hedges under the trees' threshold. Lower is long pasture, kerbs and
-# noise.
-SCRUB_MIN = 1.0
-# Scrub shares are stored in this many steps: the shrubs scattered from them
-# don't need finer, and the PNG is a third smaller.
-SCRUB_LEVELS = 16
-
-
-def build_scrub():
-    """
-    Share of each land cover texel under scrub (public/trees/scrub.png, on
-    the terrain's land cover grid), for the shrubs the scene scatters there.
-    In town it takes in parked cars and fences as well; the scene keeps its
-    shrubs off streets and roofs itself.
-    """
-    grid, (rows, cols), _ = tree_grid()
-    built = footprints(grid, (rows, cols))
-    built |= port_yards(grid, (rows, cols))
-    built |= substations(grid, (rows, cols))
-    built |= highway_lanes(grid, (rows, cols))
-    built |= rail_bridges(grid, (rows, cols))
-    towers, corridors = power_grid()
-    sites = landmark_sites() + towers
-    scrub = np.zeros((rows, cols), dtype=np.uint8)
-    res = grid.a
-    west0, north0 = grid.c, grid.f
-    for tx, ty in sorted(tiles(), key=lambda t: (t[1], t[0])):
-        chm, window = chm_tile(tx, ty)
-        clear_landmarks(chm, window, grid, sites)
-        clear_wires(chm, window, grid, corridors)
-        west, north, size = tile_bounds(tx, ty)
-        n = int(size / res)
-        r = int((north0 - north) / res)
-        c = int((west - west0) / res)
-        rs = slice(max(r, 0), min(r + n, rows))
-        cs = slice(max(c, 0), min(c + n, cols))
-        local = (
-            slice(rs.start - window[0].start, rs.stop - window[0].start),
-            slice(cs.start - window[1].start, cs.stop - window[1].start),
-        )
-        low = chm[local]
-        scrub[rs, cs] = (low >= SCRUB_MIN) & (low < MIN_HEIGHT) & (built[rs, cs] == 0)
-    del built
-    out = cover_map(scrub, grid)
-    step = 255 / (SCRUB_LEVELS - 1)
-    image = np.round(np.round(np.clip(out, 0, 1) * (SCRUB_LEVELS - 1)) * step).astype(np.uint8)
-    Image.fromarray(image, "L").save(OUT_DIR / "scrub.png", optimize=True)
-    size = (OUT_DIR / "scrub.png").stat().st_size
-    print(f"  scrub {out.shape[1]}x{out.shape[0]}, {out.mean():.1%} of the land cover map, {size / 1e6:.1f}MB")
 
 
 def band_end(count, fraction):
@@ -973,9 +911,6 @@ def band_end(count, fraction):
 def main():
     if sys.argv[1:] == ["fetch"]:
         fetch()
-        return
-    if sys.argv[1:] == ["scrub"]:
-        build_scrub()
         return
     build()
 
