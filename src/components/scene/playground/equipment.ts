@@ -2,14 +2,15 @@ import {
   BoxGeometry,
   BufferGeometry,
   CatmullRomCurve3,
+  CircleGeometry,
   Color,
   CylinderGeometry,
   Float32BufferAttribute,
   Quaternion,
   SphereGeometry,
   TorusGeometry,
-  TubeGeometry,
   Vector3,
+  type Curve,
 } from "three/webgpu";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { EQUIPMENT, groundAt, type Point } from "./layout";
@@ -21,16 +22,17 @@ import { EQUIPMENT, groundAt, type Point } from "./layout";
 
 const COLOURS = {
   white: "#f1f0ea",
-  frame: "#e9e7e0",
   glass: "#2b3438",
-  teal: "#2f8c8a",
+  window: "#3f8fd2",
+  lantern: "#7c8589",
+  iron: "#262b2e",
+  teal: "#1f9e9a",
   yellow: "#f2b51c",
   steel: "#a9b0b4",
   post: "#6f777b",
   rope: "#d8ad3a",
   hoop: "#8f989d",
   rubber: "#2d2f31",
-  deck: "#a88454",
   timber: "#9a7b55",
   grey: "#9b978d",
   sail: "#e6e1cf",
@@ -102,16 +104,6 @@ class Kit {
     return this.add(post, colour);
   }
 
-  /** A round tube along a smooth curve through `points`. */
-  tube(points: Vector3[], radius: number, colour: Colour, segments = 48) {
-    const curve = new CatmullRomCurve3(points);
-
-    return this.add(
-      new TubeGeometry(curve, segments, radius, 10, false),
-      colour
-    );
-  }
-
   /**
    * A shape swept along a smooth curve through `points`: `profile(t)` gives
    * its cross-section at t (0..1 along), as [across, up] pairs.
@@ -123,16 +115,33 @@ class Kit {
     segments = 32
   ) {
     const curve = new CatmullRomCurve3(points);
+
+    return this.along(curve, [0, 1], profile, colour, segments);
+  }
+
+  /**
+   * A shape swept along `curve` between two shares of its length:
+   * `profile(t)` gives its cross-section at t (0..1 over that stretch), as
+   * [across, up] pairs.
+   */
+  along(
+    curve: Curve<Vector3>,
+    [from, to]: [number, number],
+    profile: (t: number) => [number, number][],
+    colour: Colour,
+    segments = 32
+  ) {
     const position: number[] = [];
     const index: number[] = [];
     let width = 0;
 
     for (let i = 0; i <= segments; i++) {
       const t = i / segments;
-      const at = curve.getPointAt(t);
-      const along = curve.getTangentAt(t);
-      const across = new Vector3().crossVectors(along, UP).normalize();
-      const up = new Vector3().crossVectors(across, along).normalize();
+      const u = from + (to - from) * t;
+      const at = curve.getPointAt(u);
+      const ahead = curve.getTangentAt(u);
+      const across = new Vector3().crossVectors(ahead, UP).normalize();
+      const up = new Vector3().crossVectors(across, ahead).normalize();
       const section = profile(t);
       width = section.length;
 
@@ -158,6 +167,21 @@ class Kit {
     return this.add(geometry, colour);
   }
 
+  /** `geometry` turned from pointing along `from` to along `to`, set `at`. */
+  aim(
+    geometry: BufferGeometry,
+    from: Vector3,
+    to: Vector3,
+    at: Vector3,
+    colour: Colour
+  ) {
+    geometry.applyQuaternion(
+      new Quaternion().setFromUnitVectors(from, to.clone().normalize())
+    );
+
+    return this.add(geometry.translate(at.x, at.y, at.z), colour);
+  }
+
   geometry() {
     const merged = mergeGeometries(this.parts);
     this.parts.forEach((part) => part.dispose());
@@ -172,87 +196,389 @@ const yawOf = (bearing: number) => Math.PI / 2 - (bearing * Math.PI) / 180;
 /** A point `height` m over the ground at (east, north). */
 type Place = (east: number, north: number, height: number) => Vector3;
 
-/** Ground to the lighthouse's weathervane, m. */
-export const LIGHTHOUSE_HEIGHT = 8.5;
+/** Ground to the top of the gull on the lighthouse's dome, m. */
+export const LIGHTHOUSE_HEIGHT = 9;
+
+/** An octagon's corners are this many times further out than its faces. */
+const CORNER = 1 / Math.cos(Math.PI / 8);
+
+/** A closed circle of `radius`, as a sweep's cross-section. */
+const ring = (radius: number, sides = 8) =>
+  Array.from({ length: sides + 1 }, (_, k): [number, number] => {
+    const a = (k / sides) * Math.PI * 2;
+
+    return [radius * Math.cos(a), radius * Math.sin(a)];
+  });
+
+// The lighthouse, by eye from photos: octagonal throughout, its faces to the
+// compass points. A weatherboard base with portholes, a railed deck on
+// struts, a tapering weatherboard tower braced on one face, a lattice
+// lantern, and for a dome a teal kina, spotted and spined, a gull on top.
+
+/** Ground to the deck's floor, and to the top of the tower, m. */
+const DECK = 2.8;
+const TOWER = 6;
 
 function lighthouse(kit: Kit, place: Place) {
   const [e, n] = EQUIPMENT.lighthouse;
   const base = place(e, n, 0);
 
-  const at = (x: number, y: number, z: number) =>
-    new Vector3(base.x + x, base.y + y, base.z + z);
+  /** `distance` m out on compass `bearing`, `height` m up. */
+  const out = (bearing: number, distance: number, height: number) => {
+    const b = (bearing * Math.PI) / 180;
 
-  // A square white frame on four posts, braced.
-  const half = 1.3;
-  const top = 4;
-
-  const corners: [number, number][] = [
-    [-half, -half],
-    [half, -half],
-    [half, half],
-    [-half, half],
-  ];
-
-  for (const [x, z] of corners) {
-    kit.member(at(x, -0.3, z), at(x, top, z), 0.18, "frame");
-  }
-
-  corners.forEach(([x, z], i) => {
-    const [x2, z2] = corners[(i + 1) % 4];
-
-    for (const y of [0.9, 1.8, 3.1]) {
-      kit.member(at(x, y, z), at(x2, y, z2), 0.1, "frame");
-    }
-
-    kit.member(at(x, 1.8, z), at(x2, top, z2), 0.08, "frame");
-    kit.member(at(x2, 1.8, z2), at(x, top, z), 0.08, "frame");
-  });
-
-  // The lower deck the open slide leaves from.
-  kit.box(at(0, 1.75, 0), [2.6, 0.12, 2.6], "deck");
-
-  // The gallery: an octagonal deck, railed in white.
-  const gallery = new CylinderGeometry(2.4, 2.4, 0.25, 8).rotateY(Math.PI / 8);
-  kit.add(gallery.translate(base.x, base.y + top + 0.125, base.z), "deck");
-
-  // Its rail: a post at each corner, a top rail and a middle one.
-  const corner = (k: number, y: number) => {
-    const a = (k / 8) * Math.PI * 2;
-
-    return at(Math.cos(a) * 2.3, y, Math.sin(a) * 2.3);
+    return new Vector3(
+      base.x + distance * Math.sin(b),
+      base.y + height,
+      base.z - distance * Math.cos(b)
+    );
   };
 
-  for (let k = 0; k < 8; k++) {
-    kit.member(corner(k, top + 0.25), corner(k, top + 1.2), 0.08, "white");
-
-    for (const y of [top + 0.7, top + 1.15]) {
-      kit.member(corner(k, y), corner(k + 1, y), 0.07, "white");
-    }
-  }
-
-  // The lantern house: white walls, dark glazing, a white cornice.
-  const room = (radius: number, y: number, height: number, colour: Colour) =>
+  /** An octagon from `y` up `height`, `bottom` m to its faces at its foot. */
+  const octagon = (
+    bottom: number,
+    top: number,
+    y: number,
+    height: number,
+    colour: Colour,
+    open = false
+  ) =>
     kit.add(
-      new CylinderGeometry(radius, radius, height, 8)
+      new CylinderGeometry(top * CORNER, bottom * CORNER, height, 8, 1, open)
         .rotateY(Math.PI / 8)
         .translate(base.x, base.y + y + height / 2, base.z),
       colour
     );
 
-  room(1.35, top + 0.25, 0.8, "white");
-  room(1.3, top + 1.05, 0.9, "glass");
-  room(1.5, top + 1.95, 0.2, "white");
+  /** Lapped weatherboards from `from` to `to`, `apothem(y)` m out. */
+  const boards = (from: number, to: number, apothem: (y: number) => number) => {
+    const count = Math.round((to - from) / 0.2);
+    const step = (to - from) / count;
 
-  // The teal dome, a finial and a weathervane.
-  const dome = top + 2.15;
+    for (let i = 0; i < count; i++) {
+      const y = from + i * step;
+      octagon(apothem(y) + 0.02, apothem(y + step), y, step, "white", true);
+    }
+  };
+
+  const BASE = 1.6;
+  const tower = (y: number) => 1.35 - (0.2 * (y - DECK)) / (TOWER - DECK);
+  boards(-0.2, DECK, () => BASE);
+  boards(DECK, TOWER, tower);
+
+  /** A blue-rimmed oval window on the face at `bearing`. */
+  const porthole = (
+    bearing: number,
+    apothem: number,
+    y: number,
+    width: number,
+    height: number
+  ) => {
+    const facing = Math.PI - (bearing * Math.PI) / 180;
+
+    for (const [inset, depth, colour] of [
+      [0, 0.06, "window"],
+      [0.16, 0.09, "glass"],
+    ] as const) {
+      const pane = new CylinderGeometry(0.5, 0.5, depth, 20)
+        .rotateX(Math.PI / 2)
+        .scale(width - inset, height - inset, 1)
+        .rotateY(facing);
+
+      const at = out(bearing, apothem + 0.02, y);
+      kit.add(pane.translate(at.x, at.y, at.z), colour);
+    }
+  };
+
+  for (const bearing of [0, 90, 180, 270]) {
+    porthole(bearing, BASE, 1.35, 0.5, 0.95);
+  }
+
+  for (const bearing of [180, 270]) {
+    porthole(bearing, tower(4.4), 4.4, 0.45, 0.8);
+  }
+
+  // The deck, overhanging the base on struts at its corners.
+  const DECK_OUT = 2.3;
+  octagon(DECK_OUT, DECK_OUT, DECK - 0.2, 0.2, "white");
+
+  for (let k = 0; k < 8; k++) {
+    const corner = 22.5 + k * 45;
+    kit.member(
+      out(corner, BASE * CORNER, DECK - 1),
+      out(corner, (DECK_OUT - 0.1) * CORNER, DECK - 0.2),
+      0.1,
+      "white"
+    );
+  }
+
+  // Its rail: corner posts, top and bottom rails, close-set balusters, and
+  // a gap on the north-west face where the steel slide leaves.
+  const RAIL = DECK_OUT - 0.08;
+  const SLIDE_FACE = 7;
+
+  for (let k = 0; k < 8; k++) {
+    const left = out(k * 45 - 22.5, RAIL * CORNER, DECK);
+    const right = out(k * 45 + 22.5, RAIL * CORNER, DECK);
+    const width = left.distanceTo(right);
+    const lift = (p: Vector3, y: number) => p.clone().setY(p.y + y);
+
+    kit.member(left, lift(left, 1.05), 0.09, "white");
+    kit.member(lift(left, 1), lift(right, 1), 0.1, "white", 0.06);
+    kit.member(lift(left, 0.08), lift(right, 0.08), 0.06, "white");
+
+    const count = Math.round(width / 0.12);
+
+    for (let i = 1; i < count; i++) {
+      if (k === SLIDE_FACE && Math.abs(i / count - 0.5) < 0.27) continue;
+
+      const p = left.clone().lerp(right, i / count);
+      kit.member(lift(p, 0.08), lift(p, 1), 0.04, "white");
+    }
+  }
+
+  // The tower's north-east face is braced: a frame proud of the boards with
+  // a cross in each of its two panels.
+  const brace = (bearing: number, y: number) =>
+    out(bearing, (tower(y) + 0.05) * CORNER, y);
+
+  const levels = [DECK + 0.1, (DECK + TOWER) / 2, TOWER - 0.1];
+
+  for (const bearing of [22.5, 67.5]) {
+    kit.member(brace(bearing, DECK), brace(bearing, TOWER), 0.1, "white");
+  }
+
+  levels.forEach((y, i) => {
+    kit.member(brace(22.5, y), brace(67.5, y), 0.1, "white");
+
+    if (i === 0) return;
+
+    const below = levels[i - 1];
+    kit.member(brace(22.5, below), brace(67.5, y), 0.07, "white");
+    kit.member(brace(67.5, below), brace(22.5, y), 0.07, "white");
+  });
+
+  // A white cap, then the lantern: grey glazing behind iron corner posts,
+  // a cross and a mullion on each face, and an iron ring over it.
+  octagon(1.45, 1.45, TOWER, 0.15, "white");
+  const LANTERN = TOWER + 0.15;
+  const GLAZED = 0.9;
+  octagon(1.3, 1.3, LANTERN, GLAZED, "lantern", true);
+
+  for (let k = 0; k < 8; k++) {
+    const a = k * 45 - 22.5;
+    const b = k * 45 + 22.5;
+    const top = LANTERN + GLAZED;
+    const r = 1.33 * CORNER;
+
+    kit.member(out(a, r, LANTERN), out(a, r, top), 0.08, "iron");
+    kit.member(out(a, r, LANTERN), out(b, r, top), 0.045, "iron");
+    kit.member(out(b, r, LANTERN), out(a, r, top), 0.045, "iron");
+    kit.member(
+      out(k * 45, 1.33, LANTERN),
+      out(k * 45, 1.33, top),
+      0.04,
+      "iron"
+    );
+  }
+
+  octagon(1.5, 1.5, LANTERN + GLAZED, 0.15, "iron");
+
+  // The kina: a squat teal dome, white-rimmed, spotted in rows.
+  const DOME = LANTERN + GLAZED + 0.15;
+  const RADIUS = 1.6;
+  const SQUASH = 0.7;
+  const crown = DOME + RADIUS * SQUASH;
+  const centre = new Vector3(base.x, base.y + DOME, base.z);
+
   kit.add(
-    new SphereGeometry(1.45, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2)
-      .rotateY(Math.PI / 8)
-      .translate(base.x, base.y + dome, base.z),
+    new SphereGeometry(RADIUS, 32, 10, 0, Math.PI * 2, 0, Math.PI / 2)
+      .scale(1, SQUASH, 1)
+      .translate(centre.x, centre.y, centre.z),
     "teal"
   );
-  kit.post(at(0, dome + 1.3, 0), 1, 0.05, "post");
-  kit.box(at(0, dome + 2.1, 0), [0.6, 0.18, 0.05], "post", 0.6);
+  kit.add(
+    new TorusGeometry(RADIUS, 0.07, 6, 40)
+      .rotateX(Math.PI / 2)
+      .translate(centre.x, centre.y, centre.z),
+    "white"
+  );
+
+  const SPOTS: [rise: number, count: number, size: number][] = [
+    [0.3, 14, 0.17],
+    [0.7, 10, 0.15],
+    [1.08, 6, 0.12],
+  ];
+
+  SPOTS.forEach(([rise, count, size], row) => {
+    for (let k = 0; k < count; k++) {
+      const b = ((k + row / 2) / count) * Math.PI * 2;
+
+      const local = new Vector3(
+        Math.sin(b) * Math.cos(rise) * RADIUS,
+        Math.sin(rise) * RADIUS * SQUASH,
+        -Math.cos(b) * Math.cos(rise) * RADIUS
+      );
+
+      const normal = new Vector3(
+        local.x,
+        local.y / SQUASH ** 2,
+        local.z
+      ).normalize();
+
+      kit.aim(
+        new CircleGeometry(size, 10),
+        new Vector3(0, 0, 1),
+        normal,
+        local.add(centre).addScaledVector(normal, 0.012),
+        "white"
+      );
+    }
+  });
+
+  // Its spines: long and short in turn round the rim, curling up, and a
+  // tuft of short ones round the top.
+  const spine = (points: Vector3[], thick: number) =>
+    kit.sweep(points, (t) => ring(thick * (1 - t) + 0.008), "white", 8);
+
+  for (let k = 0; k < 18; k++) {
+    const bearing = (k / 18) * 360 + 10;
+    const length = k % 2 === 0 ? 0.85 : 0.5;
+
+    spine(
+      [
+        out(bearing, RADIUS - 0.1, DOME + 0.05),
+        out(bearing, RADIUS + length * 0.55, DOME + length * 0.12),
+        out(bearing, RADIUS + length * 0.95, DOME + length * 0.45),
+      ],
+      k % 2 === 0 ? 0.13 : 0.09
+    );
+  }
+
+  for (let k = 0; k < 6; k++) {
+    const bearing = k * 60 + 30;
+
+    spine(
+      [
+        out(bearing, 0.2, crown - 0.05),
+        out(bearing, 0.42, crown + 0.2),
+        out(bearing, 0.5, crown + 0.38),
+      ],
+      0.07
+    );
+  }
+
+  // A gull on a stalk, wings out, facing north.
+  const GULL = crown + 0.5;
+  kit.post(out(0, 0, crown - 0.1), GULL - crown, 0.03, "iron");
+
+  const gull = (x: number, y: number, z: number) =>
+    out(0, 0, GULL).add(new Vector3(x, y, z));
+
+  kit.add(
+    new SphereGeometry(0.1, 8, 6)
+      .scale(1, 1, 2.8)
+      .translate(...gull(0, 0, 0).toArray()),
+    "white"
+  );
+  kit.add(
+    new SphereGeometry(0.07, 8, 6).translate(...gull(0, 0.05, -0.27).toArray()),
+    "white"
+  );
+  kit.member(gull(0, 0, 0.15), gull(0, -0.02, 0.4), 0.14, "white", 0.02);
+
+  for (const s of [-1, 1]) {
+    kit.member(
+      gull(s * 0.05, 0.02, 0),
+      gull(s * 0.45, 0.17, 0.03),
+      0.025,
+      "white",
+      0.24
+    );
+    kit.member(
+      gull(s * 0.45, 0.17, 0.03),
+      gull(s * 0.82, 0.12, 0.1),
+      0.02,
+      "white",
+      0.16
+    );
+  }
+}
+
+/**
+ * An open chute: a half-round of `radius`, lipped, its bottom kept level
+ * with the tube's as it flares by `flare` to its mouth.
+ */
+const chute =
+  (radius: number, flare: number) =>
+  (t: number): [number, number][] => {
+    const r = radius * (1 + flare * t * t);
+    const lift = r - radius;
+    const section: [number, number][] = [[-r - 0.12, 0.06 + lift]];
+
+    for (let k = 0; k <= 10; k++) {
+      const a = Math.PI * (k / 10);
+      section.push([-r * Math.cos(a), lift - r * Math.sin(a)]);
+    }
+
+    section.push([r + 0.12, 0.06 + lift]);
+
+    return section;
+  };
+
+/**
+ * A tube slide down `curve`: a tube of `radius`, ribbed every `every` m at
+ * its joints, opening into a chute for its last `open` m.
+ */
+function tubeSlide(
+  kit: Kit,
+  curve: Curve<Vector3>,
+  radius: number,
+  colour: Colour,
+  open: number,
+  every: number
+) {
+  const length = curve.getLength();
+  const mouth = 1 - open / length;
+  const ALONG = new Vector3(0, 0, 1);
+
+  kit.along(
+    curve,
+    [0, mouth],
+    () => ring(radius, 14),
+    colour,
+    Math.ceil(length * 6)
+  );
+  kit.along(curve, [mouth, 1], chute(radius, 0.35), colour, 12);
+
+  for (let d = every; d < length - open; d += every) {
+    const u = d / length;
+
+    kit.aim(
+      new TorusGeometry(radius + 0.02, 0.03, 4, 16),
+      ALONG,
+      curve.getTangentAt(u),
+      curve.getPointAt(u),
+      colour
+    );
+  }
+}
+
+/** The share of `curve`'s length at which it passes nearest `point`. */
+function nearest(curve: Curve<Vector3>, point: Vector3) {
+  let best = 0;
+  let closest = Infinity;
+
+  for (let i = 0; i <= 400; i++) {
+    const distance = curve.getPointAt(i / 400).distanceTo(point);
+
+    if (distance < closest) {
+      closest = distance;
+      best = i / 400;
+    }
+  }
+
+  return best;
 }
 
 function slides(kit: Kit, place: Place) {
@@ -260,42 +586,72 @@ function slides(kit: Kit, place: Place) {
   // Both leave the lighthouse, so measure their heights from its foot.
   const foot = place(e, n, 0).y;
 
-  const along = (points: [number, number, number][]) =>
-    points.map(([pe, pn, h]) => {
-      const p = place(pe, pn, 0);
+  const at = (pe: number, pn: number, height: number) => {
+    const p = place(pe, pn, 0);
 
-      return new Vector3(p.x, foot + h, p.z);
-    });
+    return new Vector3(p.x, foot + height, p.z);
+  };
 
-  const tube = along(EQUIPMENT.tubeSlide);
-  kit.tube(tube, 0.42, "yellow", 64);
-
-  // Steel legs under the tube's bends.
-  for (const point of [tube[3], tube[4]]) {
-    const ground = place(point.x, -point.z, 0);
+  const leg = (point: Vector3, radius: number) =>
     kit.member(
-      ground,
-      new Vector3(point.x, point.y - 0.4, point.z),
+      place(point.x, -point.z, -0.2),
+      point.clone().setY(point.y - radius),
       0.1,
-      "post"
+      "white"
+    );
+
+  // The yellow tube: out of the tower, once round the helix clockwise from
+  // its west side and on a twelfth more, to leave it heading for the chute.
+  const { start, helix, end } = EQUIPMENT.tubeSlide;
+  const TURN = 390;
+
+  const coil = Array.from({ length: 14 }, (_, i) => {
+    const turned = (i / 13) * TURN;
+    const b = ((270 + turned) * Math.PI) / 180;
+
+    return at(
+      helix.at[0] + helix.radius * Math.sin(b),
+      helix.at[1] + helix.radius * Math.cos(b),
+      helix.from + ((helix.to - helix.from) * turned) / TURN
+    );
+  });
+
+  // Then straight down, easing level into the chute.
+  const leaves = coil[coil.length - 1];
+  const mouth = at(...end);
+  const run = [0.35, 0.7, 0.88].map((f) => leaves.clone().lerp(mouth, f));
+  run[2].y = mouth.y + 0.17;
+
+  const yellow = new CatmullRomCurve3(
+    [at(...start), ...coil, ...run, mouth],
+    false,
+    "centripetal"
+  );
+
+  tubeSlide(kit, yellow, 0.45, "yellow", 1.4, 0.7);
+
+  // Big flanges where it leaves the tower and where it leaves the coil.
+  for (const u of [0.4 / yellow.getLength(), nearest(yellow, leaves)]) {
+    kit.aim(
+      new CylinderGeometry(0.75, 0.75, 0.05, 24),
+      UP,
+      yellow.getTangentAt(u),
+      yellow.getPointAt(u),
+      "yellow"
     );
   }
 
-  // The open slide: a steel trough, a half-round with lips.
-  const trough = (): [number, number][] => {
-    const section: [number, number][] = [[-0.36, 0.3]];
+  for (const point of [coil[3], leaves, run[0], run[1]]) leg(point, 0.45);
 
-    for (let k = 0; k <= 8; k++) {
-      const a = Math.PI * (k / 8);
-      section.push([-0.3 * Math.cos(a), 0.3 - 0.3 * Math.sin(a)]);
-    }
+  // The steel tube off the deck.
+  const steel = new CatmullRomCurve3(
+    EQUIPMENT.steelSlide.map((spot) => at(...spot)),
+    false,
+    "centripetal"
+  );
 
-    section.push([0.36, 0.3]);
-
-    return section;
-  };
-
-  kit.sweep(along(EQUIPMENT.openSlide), trough, "steel", 32);
+  tubeSlide(kit, steel, 0.4, "steel", 1.2, 0.9);
+  leg(steel.getPointAt(0.5), 0.4);
 }
 
 /** An A-frame swing beam from a to b, `height` m up, on splayed legs. */

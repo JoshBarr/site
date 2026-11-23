@@ -401,8 +401,12 @@ type Spot = [east: number, north: number, value: number];
 
 interface Equipment {
   lighthouse: Point;
-  tubeSlide: Spot[];
-  openSlide: Spot[];
+  tubeSlide: {
+    start: Spot;
+    helix: { at: Point; radius: number; from: number; to: number };
+    end: Spot;
+  };
+  steelSlide: Spot[];
   swings: [Point, Point];
   nestSwing: [Point, Point];
   carousel: Point;
@@ -418,23 +422,25 @@ interface Equipment {
 export const EQUIPMENT: Equipment = {
   /** Centre of the lighthouse's tower. */
   lighthouse: [-7.6, -8.8],
-  /** The yellow tube slide off its gallery, top to bottom, with heights. */
-  tubeSlide: [
-    [-7.1, -6.4, 4.4],
-    [-6.5, -5.3, 3.95],
-    [-7.2, -4.4, 3.45],
-    [-6.6, -3.4, 2.95],
-    [-5.5, -1.2, 1.8],
-    [-4.6, 0.6, 0.8],
-    [-4.3, 1.3, 0.5],
-  ],
-  /** The open steel slide off the lighthouse's lower deck. */
-  openSlide: [
-    [-9.2, -7.2, 1.9],
-    [-9.7, -4.8, 1.4],
-    [-9.4, -2.5, 0.9],
-    [-8.4, -1.1, 0.5],
-    [-7.9, -0.6, 0.4],
+  /**
+   * The yellow tube slide. It leaves the tower's north face under the
+   * lantern, coils once round a helix in front of it (clockwise from above,
+   * from its west side, with heights in and out), then runs straight down
+   * to its chute. The run is traced from the aerial; the coil is by eye
+   * from photos.
+   */
+  tubeSlide: {
+    start: [-7.9, -7.7, 5.5],
+    helix: { at: [-7.2, -5.2], radius: 1, from: 5.35, to: 3.6 },
+    end: [-4.3, 1.3, 0.45],
+  },
+  /** The steel tube slide off the lighthouse's deck, top to bottom. */
+  steelSlide: [
+    [-9.2, -7.2, 3.2],
+    [-9.7, -4.8, 2.4],
+    [-9.4, -2.5, 1.5],
+    [-8.4, -1.1, 0.75],
+    [-7.9, -0.6, 0.5],
   ],
   /** Two-bay swing set: its top beam, end to end. */
   swings: [
