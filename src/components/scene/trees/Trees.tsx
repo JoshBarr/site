@@ -12,12 +12,12 @@ import {
   Vector3,
   Vector4,
 } from "three/webgpu";
-import { castsNearShadow } from "../landmarks/nearShadow";
+import { castsNearShadow, nearShadowFrustum } from "../landmarks/nearShadow";
 import { addLoadingSource, countLoaded, track } from "../loading";
 import { TileIndex } from "../terrain/manifest";
 import { verticalScale } from "../terrain/Terrain";
 import { windVector } from "../weather";
-import { treeAttributes } from "./geometry";
+import { FAR_RANGES, treeAttributes } from "./geometry";
 import {
   bandEnd,
   loadTreeIndex,
@@ -30,6 +30,7 @@ import {
   drawnShare,
   treeFullDistance,
   treeMaxDistance,
+  treeNearDistance,
   treeViewer,
   treeWind,
 } from "./material";
@@ -43,6 +44,8 @@ export interface TreesQuality {
   shadows: boolean;
   /** Trees kept loaded, drawn or not. */
   maxTrees: number;
+  /** Closer than this, m, trees get lobed crowns. Inside fullDistance. */
+  nearDistance: number;
 }
 
 export const TREES_DESKTOP: TreesQuality = {
@@ -50,6 +53,7 @@ export const TREES_DESKTOP: TreesQuality = {
   maxDistance: 8000,
   shadows: true,
   maxTrees: 800_000,
+  nearDistance: 200,
 };
 
 export const TREES_MOBILE: TreesQuality = {
@@ -57,11 +61,22 @@ export const TREES_MOBILE: TreesQuality = {
   maxDistance: 4000,
   shadows: false,
   maxTrees: 250_000,
+  nearDistance: 100,
 };
 
 /** Thinned crowns grow up to this much, so tile bounds allow for it, m. */
 const BOUNDS_MARGIN = 30;
 const MAX_IN_FLIGHT = 6;
+
+/**
+ * Near trees are gathered this far past the near distance, and again once
+ * the camera has moved half of it: the shader picks each frame which of
+ * them are close enough, m.
+ */
+const NEAR_SLACK = 40;
+
+/** Tiles further than this draw their trees' lobes as octahedra, m. */
+const DISTANT = 700;
 
 interface Resident {
   /** Trees loaded so far, in the tile's order. */
@@ -119,6 +134,7 @@ export function Trees({
 
 const box = new Box3();
 const frustum = new Frustum();
+const shadowFrustum = new Frustum();
 const projScreen = new Matrix4();
 const cameraPosition = new Vector3();
 
@@ -147,18 +163,31 @@ function TreeTiles({
 }) {
   const camera = useThree((state) => state.camera);
 
-  const { group, material } = useMemo(() => {
+  const { group, material, near } = useMemo(() => {
     const group = new Group();
     // Tiles are placed in the shader; their matrices never change.
     group.matrixAutoUpdate = false;
 
-    return { group, material: createTreeMaterial(index.manifest) };
+    const near = new NearTrees(createTreeMaterial(index.manifest, "near"));
+    near.groundEncoding = index.manifest.encoding.ground;
+    group.add(near.mesh);
+
+    return {
+      group,
+      material: createTreeMaterial(index.manifest, "far"),
+      near,
+    };
   }, [index]);
 
   useEffect(() => {
     treeFullDistance.value = quality.fullDistance;
     treeMaxDistance.value = quality.maxDistance;
-  }, [quality]);
+    treeNearDistance.value = Math.min(
+      quality.nearDistance,
+      quality.fullDistance
+    );
+    near.shadows(quality.shadows);
+  }, [quality, near]);
 
   const state = useMemo(
     () => ({
@@ -193,8 +222,9 @@ function TreeTiles({
       state.resident.clear();
       group.clear();
       material.dispose();
+      near.dispose();
     },
-    [state, group, material]
+    [state, group, material, near]
   );
 
   useFrame(() => {
@@ -207,6 +237,10 @@ function TreeTiles({
       camera.matrixWorldInverse
     );
     frustum.setFromProjectionMatrix(projScreen, camera.coordinateSystem);
+
+    // Only tiles inside the near shadow map cast into it; the rest would
+    // be drawn into it only to be clipped.
+    nearShadowFrustum(shadowFrustum);
 
     const wanted: { tile: TreeTile; band: number; priority: number }[] = [];
     let loadedTrees = 0;
@@ -246,8 +280,18 @@ function TreeTiles({
         entry.lastUsed = state.frame;
 
         if (entry.mesh) {
-          entry.mesh.visible = true;
-          entry.mesh.geometry.instanceCount = Math.min(count, loaded);
+          const { mesh } = entry;
+          mesh.visible = true;
+          mesh.geometry.instanceCount = Math.min(count, loaded);
+
+          const { start, count: indices } =
+            FAR_RANGES[distance > DISTANT ? 1 : 0];
+
+          mesh.geometry.setDrawRange(start, indices);
+
+          if (quality.shadows) {
+            mesh.castShadow = shadowFrustum.intersectsBox(box);
+          }
         }
       }
     }
@@ -276,10 +320,12 @@ function TreeTiles({
         if (loadedTrees <= quality.maxTrees) break;
         loadedTrees -= entry.data.length / 4;
         remove(entry);
+        near.invalidate();
         resident.delete(key);
       }
     }
 
+    near.update(index.tiles, resident, cameraPosition, treeNearDistance.value);
     state.frame++;
   });
 
@@ -326,6 +372,7 @@ function TreeTiles({
         : undefined;
 
       if (mesh) group.add(mesh);
+      near.invalidate();
       resident.set(tile.key, {
         data,
         bands: band + 1,
@@ -351,8 +398,8 @@ function createTileMesh(
   shadows: boolean
 ) {
   const geometry = new InstancedBufferGeometry();
-  const { lathe, index } = treeAttributes();
-  geometry.setAttribute("lathe", lathe);
+  const { lobe, index } = treeAttributes("far");
+  geometry.setAttribute("lobe", lobe);
   geometry.setIndex(index);
   geometry.setAttribute("tree", new InstancedBufferAttribute(data, 4, true));
   geometry.instanceCount = 0;
@@ -368,4 +415,140 @@ function createTileMesh(
   else mesh.receiveShadow = true;
 
   return mesh;
+}
+
+/**
+ * The trees close to the camera, drawn with lobed crowns: copied out of the
+ * resident tiles into one instanced mesh whenever the camera has moved far
+ * enough or tiles have come or gone.
+ */
+class NearTrees {
+  readonly mesh: Mesh<InstancedBufferGeometry>;
+  private material: Material;
+  private capacity = 0;
+  private trees = new Uint16Array(0);
+  private tiles = new Float32Array(0);
+  private attributes: InstancedBufferAttribute[] = [];
+  private gatheredAt = new Vector3(Infinity, 0, 0);
+  private stale = true;
+  private castsShadows = false;
+
+  constructor(material: Material) {
+    this.material = material;
+    this.mesh = new Mesh(this.allocate(4096), material);
+    this.mesh.matrixAutoUpdate = false;
+    // Placed in the shader; there's no position attribute to bound.
+    this.mesh.frustumCulled = false;
+    this.mesh.name = "near trees";
+  }
+
+  shadows(on: boolean) {
+    this.castsShadows = on;
+
+    if (on) castsNearShadow(this.mesh);
+    else this.mesh.receiveShadow = true;
+  }
+
+  invalidate() {
+    this.stale = true;
+  }
+
+  update(
+    tiles: TreeTile[],
+    resident: Map<string, Resident>,
+    camera: Vector3,
+    nearDistance: number
+  ) {
+    if (
+      !this.stale &&
+      camera.distanceToSquared(this.gatheredAt) < (NEAR_SLACK / 2) ** 2
+    ) {
+      return;
+    }
+
+    this.stale = false;
+    this.gatheredAt.copy(camera);
+    const reach = nearDistance + NEAR_SLACK;
+    const scale = verticalScale.value;
+    let count = 0;
+
+    for (const tile of tiles) {
+      const entry = resident.get(tile.key);
+
+      if (!entry || setBox(tile).distanceToPoint(camera) > reach) continue;
+      const { data } = entry;
+      const { minX, minZ, size } = tile;
+      const unit = size / 65535;
+      const { scale: groundScale, offset } = this.groundEncoding;
+
+      for (let i = 0; i < data.length; i += 4) {
+        const dx = minX + data[i] * unit - camera.x;
+        const dz = minZ + data[i + 1] * unit - camera.z;
+        const dy = (data[i + 2] / groundScale - offset) * scale - camera.y;
+
+        if (dx * dx + dy * dy + dz * dz > reach * reach) continue;
+
+        if (count === this.capacity) {
+          this.mesh.geometry.dispose();
+          this.mesh.geometry = this.allocate(this.capacity * 2, count);
+        }
+
+        this.trees.set(data.subarray(i, i + 4), count * 4);
+        this.tiles[count * 4] = minX;
+        this.tiles[count * 4 + 1] = minZ;
+        this.tiles[count * 4 + 2] = size;
+        this.tiles[count * 4 + 3] = tile.count;
+        count++;
+      }
+    }
+
+    const geometry = this.mesh.geometry;
+    geometry.instanceCount = count;
+    this.mesh.visible = count > 0;
+
+    for (const attribute of this.attributes) {
+      attribute.clearUpdateRanges();
+      attribute.addUpdateRange(0, count * 4);
+      attribute.needsUpdate = true;
+    }
+  }
+
+  /** Set by the owner from the manifest. */
+  groundEncoding = { scale: 1, offset: 0 };
+
+  /** A geometry for `capacity` trees, keeping the first `keep` of the old. */
+  private allocate(capacity: number, keep = 0) {
+    const trees = new Uint16Array(capacity * 4);
+    const tiles = new Float32Array(capacity * 4);
+    trees.set(this.trees.subarray(0, keep * 4));
+    tiles.set(this.tiles.subarray(0, keep * 4));
+    this.trees = trees;
+    this.tiles = tiles;
+    this.capacity = capacity;
+
+    const geometry = new InstancedBufferGeometry();
+    const { lobe, index } = treeAttributes("near");
+    geometry.setAttribute("lobe", lobe);
+    geometry.setIndex(index);
+    this.attributes = [
+      new InstancedBufferAttribute(trees, 4, true),
+      new InstancedBufferAttribute(tiles, 4),
+    ];
+    geometry.setAttribute("tree", this.attributes[0]);
+    geometry.setAttribute("treeTile", this.attributes[1]);
+    geometry.instanceCount = 0;
+
+    if (this.mesh) {
+      this.mesh.geometry = geometry;
+
+      if (this.castsShadows) castsNearShadow(this.mesh);
+    }
+
+    return geometry;
+  }
+
+  dispose() {
+    this.mesh.geometry.dispose();
+    this.material.dispose();
+  }
 }
