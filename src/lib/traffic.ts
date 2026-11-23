@@ -1,4 +1,4 @@
-// Live traffic speeds on State Highways 1 and 2 around Wellington: shared
+// Live traffic speeds on State Highways 1, 2, 58 and 59 around Wellington: shared
 // by /api/traffic and the scene.
 
 /** Speeds as NZTA last gave them. km/h. */

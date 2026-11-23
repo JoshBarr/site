@@ -29,6 +29,16 @@
 // a small model mostly over the lanes (the scene draws its own). A bridge
 // that crosses over a highway is well above it, and stays.
 //
+// OpenStreetMap has some of the lighthouses as buildings too (Baring Head's
+// tower, Point Halswell's), and the scene draws its own there
+// (src/components/scene/landmarks): any small building with its roof over
+// a lighthouse's site is left out.
+//
+// The council modelled Queens Wharf's level-luffing crane into the shed
+// beside it (a tall wedge), and the scene draws its own cranes there too:
+// any piece of a model's roof lying wholly within a crane's reach is cut
+// out of it.
+//
 // Each building keeps its roof, simplified, and gets new walls dropped
 // straight down from the roof's outline to below the ground. The source's
 // walls (window reveals, ledges, balconies) are most of its triangles and
@@ -81,6 +91,14 @@ import draco3d from "draco3d";
 import { MeshoptEncoder, MeshoptSimplifier } from "meshoptimizer";
 import { ShapeUtils, Vector2 } from "three";
 import { createGroundSampler, fromWebMercator, toNztm } from "../lib/geo.mjs";
+import {
+  BARING_HEAD,
+  LUFFING_CRANE,
+  PENCARROW,
+  PENCARROW_LOWER,
+  POINT_HALSWELL,
+  TRIPOD_CRANE,
+} from "../../src/components/scene/landmarks/sites.ts";
 
 const ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -528,8 +546,46 @@ function dropSmallIslands(p, index, minArea) {
 }
 
 /**
+ * The roof less any piece of it (triangles joined by shared corners) lying
+ * wholly within a crane's reach of its site, in plan. Null if none is.
+ * (Its walls join a crane to the building; its roof doesn't.)
+ */
+function withoutCranes(positions, roof) {
+  const near = (v) =>
+    CRANES.some(
+      ([[e, n], reach]) =>
+        Math.hypot(positions[v * 3] - e, positions[v * 3 + 1] - n) < reach
+    );
+
+  if (!roof.some(near)) return null;
+
+  const parent = new Map(roof.map((v) => [v, v]));
+
+  const root = (v) => {
+    while (parent.get(v) !== v) v = parent.get(v);
+
+    return v;
+  };
+
+  for (let t = 0; t < roof.length; t += 3) {
+    parent.set(root(roof[t]), root(roof[t + 1]));
+    parent.set(root(roof[t + 2]), root(roof[t + 1]));
+  }
+
+  // A piece with any corner out of reach is the building's.
+  const kept = new Set(roof.filter((v) => !near(v)).map(root));
+  const out = [];
+
+  for (let t = 0; t < roof.length; t += 3) {
+    if (kept.has(root(roof[t]))) out.push(...roof.slice(t, t + 3));
+  }
+
+  return out;
+}
+
+/**
  * One building's roof (triangles facing up, wound counter-clockwise from
- * above) and stats, from its source triangles.
+ * above) and stats, from its source triangles, less any crane in it.
  */
 function prepareBuilding({ id, soup }) {
   const { positions, index } = weld(soup);
@@ -559,6 +615,14 @@ function prepareBuilding({ id, soup }) {
     // The source is double-sided, so its winding means nothing.
     if (normal[2] < 0) [b, c] = [c, b];
     roof.push(a, b, c);
+  }
+
+  // Without a crane, the building's as tall as its roof.
+  const cut = withoutCranes(positions, roof);
+
+  if (cut) {
+    roof.splice(0, roof.length, ...cut);
+    top = Math.max(...roof.map((v) => positions[v * 3 + 2]));
   }
 
   if (!roof.length) return null;
@@ -939,6 +1003,49 @@ function onTrack(b, track) {
   return on >= ON_TRACK_SHARE * b.area;
 }
 
+/** Where the scene's lighthouses stand, NZTM. */
+const LIGHTHOUSES = [BARING_HEAD, PENCARROW, PENCARROW_LOWER, POINT_HALSWELL];
+
+/** Lighthouses are smaller than this, m²; a bigger building isn't one. */
+const LIGHTHOUSE_AREA = 150;
+
+/**
+ * Whether `b` is a lighthouse the scene draws itself: small, with a roof
+ * triangle over one's site.
+ */
+function lighthouse(b) {
+  if (b.area > LIGHTHOUSE_AREA) return false;
+  const { positions: p, roof } = b;
+
+  // Which side of a-c the site is on, in plan.
+  const side = (a, c, e, n) =>
+    (p[c * 3] - p[a * 3]) * (n - p[a * 3 + 1]) -
+    (p[c * 3 + 1] - p[a * 3 + 1]) * (e - p[a * 3]);
+
+  return LIGHTHOUSES.some(([e, n]) => {
+    for (let t = 0; t < roof.length; t += 3) {
+      const [a, c, d] = [roof[t], roof[t + 1], roof[t + 2]];
+      const sides = [side(a, c, e, n), side(c, d, e, n), side(d, a, e, n)];
+
+      if (sides.every((s) => s >= 0) || sides.every((s) => s <= 0)) {
+        return true;
+      }
+    }
+
+    return false;
+  });
+}
+
+/**
+ * Queens Wharf's heritage cranes, which the scene draws itself, and how far
+ * each reaches from its site in plan, m. The council modelled the luffing
+ * crane into the shed beside it, as pieces of that shed's roof.
+ */
+const CRANES = [
+  [LUFFING_CRANE, 9],
+  [TRIPOD_CRANE, 9],
+];
+
 /** The cable car's track as segments [e0, n0, e1, n1], NZTM. */
 async function loadCableCarTrack() {
   const { nodes, ways } = JSON.parse(await readFile(CABLE_CAR, "utf8"));
@@ -1309,6 +1416,11 @@ async function main() {
 
   console.log(`${buildings.length - off.length} the highways' own structures`);
   buildings = off;
+
+  // And the lighthouses, which the scene draws itself.
+  const ashore = buildings.filter((b) => !lighthouse(b));
+  console.log(`${buildings.length - ashore.length} lighthouses`);
+  buildings = ashore;
 
   // Anything else over the lanes, or the railway's tracks, gets a deck
   // there, not walls.

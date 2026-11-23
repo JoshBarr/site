@@ -1,8 +1,10 @@
-// Builds public/roads/roads.json: State Highways 1 and 2 around Wellington
-// as one-way carriageways for the scene's traffic to drive, with where
-// NZTA's live speeds apply along each.
+// Builds public/roads/roads.json: State Highways 1, 2, 58 and 59 around
+// Wellington as one-way carriageways for the scene's traffic to drive, with
+// where NZTA's live speeds apply along each, and the Mungavin Interchange's
+// raised roundabout over SH59 at Porirua with its ramps.
 //
 //   node scripts/traffic/build_roads.mjs [--osm cached.json] [--nzta cached.json]
+//     [--save-osm to.json]
 //
 // Road geometry, lanes and limits come from OpenStreetMap (© OpenStreetMap
 // contributors, ODbL); speeds from NZTA's traffic API (CC BY 4.0), whose
@@ -29,17 +31,39 @@ const OUT_DIR = path.join(ROOT, "public/roads");
 
 /** Generous around the terrain root; clipped to it below. */
 const BBOX = "-41.62,174.52,-40.88,175.45";
-const SH = `["highway"]["ref"~"(^|;) *SH ?(1|2)($|;)"]`;
+const SH = `["highway"]["ref"~"(^|;) *SH ?(1|2|58|59)($|;)"]`;
 
-// The highways, and every road that meets them, for where traffic joins
-// and leaves.
+/** The highways the scene draws, as refsOf has them. */
+const HIGHWAYS = ["SH1", "SH2", "SH58", "SH59"];
+
+/**
+ * SH59's raised roundabout at Porirua: its ring, as OSM names it, and how
+ * far from the ring its ramps reach, m.
+ */
+const RING = "Mungavin Interchange";
+const RAMP_REACH = 700;
+
+/**
+ * OSM leaves SH58's and SH59's ref off some of their pieces: roundabouts,
+ * and stretches redrawn since. Roads like theirs without a ref, this near
+ * them, m, can fill the gaps.
+ */
+const GAP_REACH = 20;
+
+// The highways, the interchange, what might fill the gaps in SH58 and SH59,
+// and every road that meets them, for where traffic joins and leaves.
 const QUERY = `[out:json][timeout:180];
 way${SH}(${BBOX})->.sh;
-node(w.sh)->.n;
+way["highway"]["ref"~"(^|;) *SH ?(58|59)($|;)"](${BBOX})->.minor;
+way["highway"~"^(trunk|primary)$"][!"ref"](around.minor:${GAP_REACH})->.gaps;
+way["highway"]["junction"="roundabout"]["name"="${RING}"](${BBOX})->.ring;
+way["highway"~"_link$"](around.ring:${RAMP_REACH})->.ramps;
+(.sh; .gaps; .ring; .ramps;)->.core;
+node(w.core)->.n;
 way(bn.n)["highway"]->.touching;
-(.sh; .touching;)->.ways;
+(.core; .touching;)->.ways;
 .ways out body;
-node(w.sh);
+node(w.core);
 out skel qt;`;
 
 const NZTA =
@@ -135,8 +159,12 @@ const loadOsm = () =>
     });
 
     if (!response.ok) throw new Error(`overpass: ${response.status}`);
+    const osm = await response.json();
+    const save = process.argv.indexOf("--save-osm");
 
-    return response.json();
+    if (save > 0) await writeFile(process.argv[save + 1], JSON.stringify(osm));
+
+    return osm;
   });
 
 const loadNzta = () =>
@@ -170,7 +198,7 @@ const refsOf = (w) =>
   (w.tags.ref ?? "").split(";").map((r) => r.replace(/\s+/g, "").toUpperCase());
 
 const highwayWays = allWays.filter((w) =>
-  refsOf(w).some((r) => r === "SH1" || r === "SH2")
+  refsOf(w).some((r) => HIGHWAYS.includes(r))
 );
 
 const isTunnel = (w) => w.tags.tunnel && w.tags.tunnel !== "building_passage";
@@ -198,8 +226,11 @@ const distance = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 /**
  * The shortest way along `ways` from any of `sources` to any of `targets`
  * (node ids), keeping to their one-way rules: each step's node and way.
+ * Each metre on a way costs `cost(way)`. Sources and targets can be Maps
+ * of node to what starting or finishing there costs on top, to favour the
+ * ends of a road over the nodes just short of them.
  */
-function route(ways, sources, targets) {
+function route(ways, sources, targets, cost = () => 1) {
   const out = new Map();
 
   for (const w of ways) {
@@ -214,7 +245,7 @@ function route(ways, sources, targets) {
 
       const add = (from, to) => {
         if (!out.has(from)) out.set(from, []);
-        out.get(from).push([to, w]);
+        out.get(from).push([to, w, cost(w)]);
       };
 
       if (way >= 0) add(a, b);
@@ -223,25 +254,36 @@ function route(ways, sources, targets) {
     }
   }
 
-  const cost = new Map();
+  const costs = new Map();
   /** How each node was reached: the node before, and the way between. */
   const previous = new Map();
   const open = new Heap();
 
-  for (const s of sources) {
-    cost.set(s, 0);
-    open.push(0, s);
+  const extra = (set, node) => (set instanceof Map ? set.get(node) : 0);
+
+  // Queued: a node reached, or (`finished`) one finished at, once what
+  // finishing there costs on top is counted.
+  for (const s of sources.keys()) {
+    costs.set(s, extra(sources, s));
+    open.push(extra(sources, s), { node: s, finished: false });
   }
 
   const done = new Set();
 
   while (open.size) {
-    const [, node] = open.pop();
+    const [c0, { node, finished }] = open.pop();
 
-    if (done.has(node)) continue;
+    if (!finished && done.has(node)) continue;
     done.add(node);
 
-    if (targets.has(node)) {
+    // Finishing here, short of the end, costs more: queued, and on past it.
+    const short = !finished && targets.has(node) && extra(targets, node) > 0;
+
+    if (short) {
+      open.push(c0 + extra(targets, node), { node, finished: true });
+    }
+
+    if (targets.has(node) && !short) {
       // Each step: a node, and the way on to the next.
       const steps = [[node, null]];
 
@@ -254,13 +296,15 @@ function route(ways, sources, targets) {
       return steps;
     }
 
-    for (const [next, way] of out.get(node) ?? []) {
-      const c = cost.get(node) + distance(points.get(node), points.get(next));
+    for (const [next, way, perMetre] of out.get(node) ?? []) {
+      const c =
+        costs.get(node) +
+        distance(points.get(node), points.get(next)) * perMetre;
 
-      if (c < (cost.get(next) ?? Infinity)) {
-        cost.set(next, c);
+      if (c < (costs.get(next) ?? Infinity)) {
+        costs.set(next, c);
         previous.set(next, [node, way]);
-        open.push(c, next);
+        open.push(c, { node: next, finished: false });
       }
     }
   }
@@ -343,15 +387,78 @@ const sh2Far = new Set(
 const sh1Set = new Set(sh1Nodes);
 const sh2Meets = new Set(sh2Nodes.filter((id) => sh1Set.has(id)));
 
+// SH58 over Haywards Hill, from SH2 at Haywards to SH59 at Paremata; SH59,
+// the old SH1, from where it leaves Transmission Gully at Linden north
+// through Porirua and Paremata to the terrain's edge.
+const gapWays = allWays.filter(
+  (w) =>
+    !w.tags.ref && (w.tags.highway === "trunk" || w.tags.highway === "primary")
+);
+
+/** Gaps are filled only where the highway's own ways don't go. */
+const GAP_COST = 4;
+const gapCost = (w) => (w.tags.ref ? 1 : GAP_COST);
+
+const sh58 = highwayWays.filter((w) => refsOf(w).includes("SH58"));
+const sh59 = highwayWays.filter((w) => refsOf(w).includes("SH59"));
+const sh58Nodes = nodesOf(sh58);
+const sh59Nodes = nodesOf(sh59);
+
+/** `nodes` toward the furthest any goes along `axis` (0 east, 1 north), `sign` ways. */
+const endOf = (nodes, axis, sign) => {
+  const most = Math.max(...nodes.map((id) => sign * points.get(id)[axis]));
+
+  return towardEnd(nodes, (id) => most - sign * points.get(id)[axis]);
+};
+
+/**
+ * Within 300 m of an end, by how far short of it, m, costing this many
+ * times that: more than a gap costs to cross, so a road's carried through
+ * an unnamed roundabout at its end rather than stopping short of it.
+ */
+const SHORT_COST = 2 * GAP_COST;
+
+const towardEnd = (nodes, short) =>
+  new Map(
+    nodes
+      .map((id) => [id, short(id)])
+      .filter(([, d]) => d < 300)
+      .map(([id, d]) => [id, SHORT_COST * d])
+  );
+
+// Its southernmost, at the Haywards roundabout above SH2 (the hill bulges
+// further east), and its westernmost, at Paremata.
+const sh58East = endOf(sh58Nodes, 1, -1);
+const sh58West = endOf(sh58Nodes, 0, -1);
+const sh59North = endOf(sh59Nodes, 1, 1);
+const sh59Leaves = new Set(sh59Nodes.filter((id) => sh1Set.has(id)));
+
 const routes = {
   SH1S: { road: "SH1", steps: route(sh1, sh1North, sh1Airport) },
   SH1N: { road: "SH1", steps: route(sh1, sh1Airport, sh1North) },
   SH2S: { road: "SH2", steps: route(sh2, sh2Far, sh2Meets) },
   SH2N: { road: "SH2", steps: route(sh2, sh2Meets, sh2Far) },
+  SH58W: {
+    road: "SH58",
+    steps: route([...sh58, ...gapWays], sh58East, sh58West, gapCost),
+  },
+  SH58E: {
+    road: "SH58",
+    steps: route([...sh58, ...gapWays], sh58West, sh58East, gapCost),
+  },
+  SH59S: {
+    road: "SH59",
+    steps: route([...sh59, ...gapWays], sh59North, sh59Leaves, gapCost),
+  },
+  SH59N: {
+    road: "SH59",
+    steps: route([...sh59, ...gapWays], sh59Leaves, sh59North, gapCost),
+  },
 };
 
-// --- Each carriageway densified, with what the road's like along it. ---
+// --- The Mungavin Interchange: a roundabout raised over SH59, and ramps. ---
 
+/** The ways through each node. */
 const byNode = new Map();
 
 for (const w of allWays) {
@@ -361,11 +468,129 @@ for (const w of allWays) {
   }
 }
 
+// The ring's one way round, clockwise as NZ drives them, as steps like a
+// route's: from a point clear of the ramps and bridges, back to it. Cars
+// that reach its end carry on at its start.
+const ringWays = allWays.filter(
+  (w) => w.tags.junction === "roundabout" && w.tags.name === RING
+);
+
+const rampWays = allWays.filter(
+  (w) => w.tags.highway.endsWith("_link") && !ringWays.includes(w)
+);
+
+const ringNodes = new Set(ringWays.flatMap((w) => w.nodes));
+const sh59Set = new Set(sh59Nodes);
+
+/** A ramp's from its first node to its last, by the way each is drawn. */
+function chainsBetween(starts, ends) {
+  const chains = [];
+  const from = new Map();
+
+  for (const w of rampWays) {
+    const nodes = onewayOf(w) < 0 ? [...w.nodes].reverse() : w.nodes;
+
+    if (!from.has(nodes[0])) from.set(nodes[0], []);
+    from.get(nodes[0]).push({ w, nodes });
+  }
+
+  const walk = (node, steps, seen) => {
+    for (const { w, nodes } of from.get(node) ?? []) {
+      if (seen.has(w)) continue;
+      const next = [...steps];
+
+      for (let k = 0; k < nodes.length - 1; k++) next.push([nodes[k], w]);
+      const end = nodes[nodes.length - 1];
+
+      if (ends.has(end)) chains.push([...next, [end, null]]);
+      else if (next.length < 400) walk(end, next, new Set([...seen, w]));
+    }
+  };
+
+  for (const start of starts) walk(start, [], new Set());
+
+  return chains;
+}
+
+const interchange = {};
+
+if (ringWays.length) {
+  // Round the ring: each way leads into the one starting where it ends.
+  const byFirst = new Map(ringWays.map((w) => [w.nodes[0], w]));
+  const loop = [];
+
+  for (let w = ringWays[0]; w && !loop.some(([, v]) => v === w);) {
+    for (let k = 0; k < w.nodes.length - 1; k++) loop.push([w.nodes[k], w]);
+    w = byFirst.get(w.nodes[w.nodes.length - 1]);
+  }
+
+  if (loop[0][0] !== byFirst.get(loop.at(-1)[1].nodes.at(-1))?.nodes[0]) {
+    throw new Error(`${RING} isn't a closed ring`);
+  }
+
+  // Start halfway between its bridges, so their decks have ground either
+  // side to be measured from (build_decks.py doesn't go round a loop).
+  const avoid = loop.filter(([, w]) => isBridge(w));
+
+  const clearance = ([node, w]) =>
+    isBridge(w)
+      ? -Infinity
+      : Math.min(
+          ...avoid.map(([m]) => distance(points.get(node), points.get(m)))
+        );
+
+  const start = loop.reduce(
+    (best, step, k) => (clearance(step) > clearance(loop[best]) ? k : best),
+    0
+  );
+
+  const ring = [...loop.slice(start), ...loop.slice(0, start)];
+  interchange.MUNGAVIN = { road: RING, steps: [...ring, [ring[0][0], null]] };
+
+  // Off SH59 onto the ring, and off the ring back onto SH59.
+  const ramps = [
+    ...chainsBetween(sh59Set, ringNodes).map((steps) => ["OFF", steps]),
+    ...chainsBetween(ringNodes, sh59Set).map((steps) => ["ON", steps]),
+  ];
+
+  for (const [kind, steps] of ramps) {
+    const [, n] = points.get(steps[0][0]);
+    const [, nn] = points.get(steps.at(-1)[0]);
+    // Named for which way the ramp heads: north or south.
+    const way = nn > n ? "N" : "S";
+    const name = `MUNGAVIN_${kind}_${way}`;
+
+    if (interchange[name]) {
+      console.warn(`${name}: a second ramp, left out`);
+      continue;
+    }
+
+    interchange[name] = { road: RING, steps };
+  }
+
+  console.log(
+    `${RING}: ring of ${ring.length} nodes, ramps ${Object.keys(interchange)
+      .filter((k) => k !== "MUNGAVIN")
+      .join(" ")}`
+  );
+}
+
+Object.assign(routes, interchange);
+
+/** Ways the interchange's ramps run on: one way, tagged so or not. */
+const rampsOneWay = new Set(
+  Object.entries(interchange)
+    .filter(([name]) => name !== "MUNGAVIN")
+    .flatMap(([, { steps }]) => steps.map(([, w]) => w).filter(Boolean))
+);
+
+// --- Each carriageway densified, with what the road's like along it. ---
+
 /** This direction's lanes on `w`, travelling `forward` along it, and all. */
 function lanesOf(w, forward) {
   const total = Math.max(Number.parseInt(w.tags.lanes) || 0, 1);
 
-  if (onewayOf(w) !== 0) return [total, total];
+  if (onewayOf(w) !== 0 || rampsOneWay.has(w)) return [total, total];
   const f = Number.parseInt(w.tags["lanes:forward"]);
   const b = Number.parseInt(w.tags["lanes:backward"]);
   const ahead = forward ? f : b;
@@ -458,6 +683,8 @@ const TAPER = 0.05;
 const PAIRS = [
   ["SH1S", "SH1N"],
   ["SH2S", "SH2N"],
+  ["SH58W", "SH58E"],
+  ["SH59S", "SH59N"],
 ];
 
 /** Lanes' width at a segment's attrs, as the scene has it. */
@@ -772,9 +999,13 @@ const projectOnto = (cw, [e, n]) => {
   return best;
 };
 
+// I is the way a highway's route positions increase: south on SH1, SH2 and
+// SH59 (which start in the north), west on SH58 (from SH2).
 const directionOf = {
   SH1: { I: "SH1S", D: "SH1N" },
   SH2: { I: "SH2S", D: "SH2N" },
+  SH58: { I: "SH58W", D: "SH58E" },
+  SH59: { I: "SH59S", D: "SH59N" },
 };
 
 const parseLine = (wkt) =>
@@ -963,11 +1194,12 @@ for (const chain of CHAINS) {
 const meets = {};
 
 for (const [name, cw] of Object.entries(carriageways)) {
+  if (interchange[name]) continue;
   const first = cw.pts[0];
   const last = cw.pts[cw.pts.length - 1];
 
   for (const [other, ocw] of Object.entries(carriageways)) {
-    if (other === name || ocw.road === cw.road) continue;
+    if (other === name || ocw.road === cw.road || interchange[other]) continue;
     const into = projectOnto(ocw, [last.e, last.n]);
 
     if (into.distance < 5 && into.s > 1) {
@@ -979,6 +1211,42 @@ for (const [name, cw] of Object.entries(carriageways)) {
     if (out.distance < 5 && out.s < ocw.s[ocw.s.length - 1] - 1) {
       meets[name] = { ...meets[name], from: [other, Math.round(out.s)] };
     }
+  }
+}
+
+// The interchange: the ring runs on into itself; each ramp leaves the
+// carriageway its first point's on and runs into the one its last is on.
+// The ramps' ends are nodes the roads share, but SH59's lines may have
+// been moved apart a little for the median since.
+const RAMP_MEETS = 8;
+
+if (interchange.MUNGAVIN) {
+  meets.MUNGAVIN = { into: ["MUNGAVIN", 0] };
+
+  const nearest = (names, p) =>
+    names
+      .map((other) => [other, projectOnto(carriageways[other], [p.e, p.n])])
+      .sort((a, b) => a[1].distance - b[1].distance)[0];
+
+  for (const name of Object.keys(interchange)) {
+    if (name === "MUNGAVIN") continue;
+    const { pts } = carriageways[name];
+    const off = name.includes("_OFF_");
+    const highway = ["SH59N", "SH59S"];
+    const [fromName, from] = nearest(off ? highway : ["MUNGAVIN"], pts[0]);
+    const [intoName, into] = nearest(off ? ["MUNGAVIN"] : highway, pts.at(-1));
+
+    if (from.distance > RAMP_MEETS || into.distance > RAMP_MEETS) {
+      throw new Error(
+        `${name} doesn't meet ${fromName} (${from.distance.toFixed(1)} m) ` +
+          `and ${intoName} (${into.distance.toFixed(1)} m)`
+      );
+    }
+
+    meets[name] = {
+      from: [fromName, Math.round(from.s)],
+      into: [intoName, Math.round(into.s)],
+    };
   }
 }
 

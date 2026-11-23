@@ -1,10 +1,10 @@
 import { nztmToWorld, TileIndex } from "../terrain/manifest";
 import { verticalScale } from "../terrain/Terrain";
 
-// State Highways 1 and 2 as one-way carriageways, from
-// public/roads/roads.json (built by scripts/traffic/build_roads.mjs): where
-// traffic can be put and run along, lane by lane, and where NZTA's speeds
-// apply.
+// State Highways 1, 2, 58 and 59 (and SH59's Mungavin Interchange) as
+// one-way carriageways, from public/roads/roads.json (built by
+// scripts/traffic/build_roads.mjs): where traffic can be put and run along,
+// lane by lane, and where NZTA's speeds apply.
 
 const ROADS_URL = process.env.NEXT_PUBLIC_ROADS_URL ?? "/roads";
 

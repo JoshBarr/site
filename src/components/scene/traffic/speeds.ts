@@ -60,6 +60,89 @@ const CITY_WEEKEND = [
 ];
 
 /**
+ * SH58 over Haywards Hill, at NZTA's Pāuatahanui East counter (TMS site 73,
+ * one lane each way), June 2024 like the rest: weekdays west, toward
+ * Porirua and Transmission Gully, busiest in the morning, and east, toward
+ * the Hutt, in the evening; weekends the mean of both ways. Vehicles an
+ * hour each way, however many lanes there are: ~9,500 a weekday.
+ */
+const HAYWARDS_WEST = [
+  30, 20, 10, 30, 40, 130, 620, 1160, 870, 600, 460, 460, 470, 540, 620, 800,
+  980, 820, 440, 230, 170, 140, 80, 50,
+];
+
+const HAYWARDS_EAST = [
+  20, 20, 20, 20, 40, 130, 520, 800, 790, 550, 480, 470, 490, 530, 630, 810,
+  1100, 940, 400, 240, 180, 140, 90, 50,
+];
+
+const HAYWARDS_WEEKEND = [
+  70, 60, 30, 20, 20, 40, 80, 130, 260, 400, 560, 640, 660, 670, 700, 700, 640,
+  490, 330, 220, 170, 110, 70, 40,
+];
+
+/** The commute either way, for roads it runs both ways round: a ring. */
+const COMMUTE_BOTH = [
+  50, 30, 40, 50, 80, 230, 740, 1000, 950, 760, 680, 710, 740, 760, 840, 860,
+  940, 860, 680, 480, 390, 310, 180, 100,
+];
+
+/** Weekdays toward the city and away from it, and weekends, an hour. */
+interface Profiles {
+  inbound: readonly number[];
+  outbound: readonly number[];
+  weekend: readonly number[];
+}
+
+const COMMUTE: Profiles = {
+  inbound: COMMUTE_IN,
+  outbound: COMMUTE_OUT,
+  weekend: COMMUTE_WEEKEND,
+};
+
+const TOWN: Profiles = {
+  inbound: CITY_WEEKDAY,
+  outbound: CITY_WEEKDAY,
+  weekend: CITY_WEEKEND,
+};
+
+/**
+ * How busy roads other than SH1 and SH2 are, by roads.json's `road`: as
+ * `scale` times a profile, vehicles an hour each way, spread over the
+ * lanes (SH1's and SH2's are per lane). Which way's toward the city is
+ * taken over the whole carriageway, not bin by bin, since these wind.
+ * SH59 has no counter between Linden and the edge of the map (only at
+ * Paekākāriki, past it, ~4,500 a day each way): the commute's shape at
+ * ~9,600 a day each way is a guess, busier through Porirua than up the
+ * coast. The Mungavin Interchange's ring and ramps are guesses too.
+ */
+const ROAD_DEMAND = new Map<string, { profiles: Profiles; scale: number }>([
+  [
+    "SH58",
+    {
+      profiles: {
+        inbound: HAYWARDS_WEST,
+        outbound: HAYWARDS_EAST,
+        weekend: HAYWARDS_WEEKEND,
+      },
+      scale: 1,
+    },
+  ],
+  ["SH59", { profiles: COMMUTE, scale: 0.7 }],
+  [
+    "Mungavin Interchange",
+    {
+      profiles: {
+        inbound: COMMUTE_BOTH,
+        outbound: COMMUTE_BOTH,
+        weekend: COMMUTE_WEEKEND,
+      },
+      scale: 0.35,
+    },
+  ],
+]);
+
+/**
  * Where "toward the city" is toward, and south of which traffic's the
  * city's: Lambton Quay, NZTM.
  */
@@ -82,15 +165,25 @@ const NARROWS = 600;
 const CRAWL = 1.5;
 
 /**
- * How busy it is, per lane, vehicles a second: between the hours' counts,
- * each an average over its hour, so at its middle. Public holidays
- * ("YYYY-MM-DD") are as quiet as weekends.
+ * How busy it is on SH1 and SH2, per lane, vehicles a second: between the
+ * hours' counts, each an average over its hour, so at its middle. Public
+ * holidays ("YYYY-MM-DD") are as quiet as weekends.
  */
 export function demand(
   date: Date,
   holidays: ReadonlySet<string> | null,
   inbound: boolean,
   city: boolean
+) {
+  return hourly(city ? TOWN : COMMUTE, date, holidays, inbound);
+}
+
+/** As `demand`, from `profiles`. */
+function hourly(
+  profiles: Profiles,
+  date: Date,
+  holidays: ReadonlySet<string> | null,
+  inbound: boolean
 ) {
   const parts = new Intl.DateTimeFormat("en-NZ", {
     timeZone: "Pacific/Auckland",
@@ -109,10 +202,9 @@ export function demand(
   const weekend =
     ["Sat", "Sun"].includes(get("weekday")) || !!holidays?.has(day);
 
-  let profile = inbound ? COMMUTE_IN : COMMUTE_OUT;
+  let profile = inbound ? profiles.inbound : profiles.outbound;
 
-  if (city) profile = weekend ? CITY_WEEKEND : CITY_WEEKDAY;
-  else if (weekend) profile = COMMUTE_WEEKEND;
+  if (weekend) profile = profiles.weekend;
 
   const hour = Number(get("hour")) + Number(get("minute")) / 60 + 23.5;
   const a = profile[Math.floor(hour) % 24];
@@ -150,6 +242,8 @@ const smoothstep = (a: number, b: number, x: number) => {
  */
 export interface Bins {
   count: number;
+  /** How busy it is, if not as SH1 and SH2 are (`ROAD_DEMAND`). */
+  road?: { profiles: Profiles; scale: number; inbound: boolean };
   inbound: Uint8Array;
   city: Uint8Array;
   lanes: Uint8Array;
@@ -174,6 +268,20 @@ export function createBins(road: Carriageway, index: TileIndex): Bins {
   };
 
   const [cx, cz] = nztmToWorld(index.manifest, ...CITY);
+  const own = ROAD_DEMAND.get(road.road);
+  const last = road.count - 1;
+
+  if (own) {
+    // Toward the city if, start to end, it gets there.
+    bins.road = {
+      ...own,
+      inbound:
+        (road.x[last] - road.x[0]) * (cx - road.x[0]) +
+          (road.z[last] - road.z[0]) * (cz - road.z[0]) >
+        0,
+    };
+  }
+
   let hint = 0;
 
   for (let b = 0; b < count; b++) {
@@ -316,11 +424,22 @@ export function fillDensity(
   ];
 
   const city = demand(date, holidays, false, true);
+  const own = bins.road;
+
+  // Roads with their own profile carry it each way, spread over the lanes;
+  // SH1's and SH2's are per lane, as many as the narrowest nearby lets by.
+  const ownBusy = own
+    ? own.scale * hourly(own.profiles, date, holidays, own.inbound)
+    : 0;
 
   for (let b = 0; b < bins.count; b++) {
     const v = speed[b];
     const busy = bins.city[b] ? city : commute[bins.inbound[b]];
-    const q = (busy * bins.narrows[b]) / bins.lanes[b];
+
+    const q = own
+      ? ownBusy / bins.lanes[b]
+      : (busy * bins.narrows[b]) / bins.lanes[b];
+
     const queue = queueDensity(v);
     const free = Math.min(q / Math.max(v, CRAWL), queue);
     const freeSpeed = bins.limit[b] * (bins.town[b] ? TOWN_FREE : 0.95);

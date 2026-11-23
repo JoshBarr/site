@@ -86,6 +86,34 @@
       "NZTA VMS 11 \"SH2 Belmont - Southbound\" (Southbound) at -41.182949, 174.94194: SH2S 21423 m along, -12.7 m right of its line",
       "a mast on the verge, at NZTA's position"
     ],
+    "vms-51": [
+      "NZTA VMS 51 \"SH58 Haywards - Eastbound\" (Eastbound) at -41.148403, 174.978375: SH58E 13756 m along, -7.8 m right of its line",
+      "a mast on the verge, at NZTA's position"
+    ],
+    "vms-393": [
+      "NZTA VMS 393 \"Bradey Rd (W) VMS\" (Westbound) at -41.113626, 174.91913: SH58W 9114 m along, -12.5 m right of its line",
+      "a mast on the verge, at NZTA's position"
+    ],
+    "vms-46": [
+      "NZTA VMS 46 \"SH59 Goat Point T2 - Northbound\" (Northbound) at -41.090197, 174.866834: SH59N 8538 m along, -11.8 m right of its line",
+      "a mast on the verge, at NZTA's position"
+    ],
+    "vms-69": [
+      "NZTA VMS 69 \"SH59 James Street T2 - Southbound\" (Southbound) at -41.083817, 174.868925: SH59S 13907 m along, -10.5 m right of its line",
+      "a mast on the verge, at NZTA's position"
+    ],
+    "vms-1": [
+      "NZTA VMS 1 \"SH59 Acheron T2 - Southbound\" (Southbound) at -41.091524, 174.86814: SH59S 14829 m along, -6.1 m right of its line",
+      "a mast on the verge, at NZTA's position"
+    ],
+    "vms-138": [
+      "NZTA VMS 138 \"SH59 Porirua - Southbound\" (Southbound) at -41.122442, 174.852283: SH59S 18814 m along, -11.6 m right of its line",
+      "a mast on the verge, at NZTA's position"
+    ],
+    "vms-70": [
+      "NZTA VMS 70 \"SH59 Jesus Corner - Southbound\" (Southbound) at -41.146855, 174.844435: SH59S 21765 m along, -14.5 m right of its line",
+      "a mast on the verge, at NZTA's position"
+    ],
     "vms-5": [
       "NZTA VMS 5 \"SH1 Arthur Street - Northbound\" (Northbound) at -41.297177, 174.773682: SH1N 5587 m along, -0.7 m right of its line",
       "NZTA's position is over the lanes and OSM has no gantry there: drawn on an arm from the left kerb (the mounting's a guess)"
@@ -104,6 +132,10 @@
     ],
     "vms-133": [
       "NZTA VMS 133 \"SH2 Petone - Southbound\" (Southbound) at -41.223895, 174.862489: SH2S 29524 m along, 2.1 m right of its line",
+      "NZTA's position is over the lanes and OSM has no gantry there: drawn on an arm from the left kerb (the mounting's a guess)"
+    ],
+    "vms-103": [
+      "NZTA VMS 103 \"SH59 Marina T2 - Northbound\" (Northbound) at -41.102461, 174.869987: SH59N 7127 m along, 6.7 m right of its line",
       "NZTA's position is over the lanes and OSM has no gantry there: drawn on an arm from the left kerb (the mounting's a guess)"
     ],
     "exit-SH1S-14035": [
@@ -292,6 +324,82 @@
     ],
     "exit-SH2N-26433": [
       "OSM way 156916530 (trunk_link) leaves SH2N 26433 m along, to the right: destination=Upper Hutt City Centre, destination:street=Gibbons Street, destination:symbol=info",
+      "stood on the left verge where the road leaves: OSM records what the sign says, not where its board stands"
+    ],
+    "exit-SH58W-9173": [
+      "OSM way 295451788 (motorway_link) leaves SH58W 9173 m along, to the left: destination=Wellington, destination:ref=SH 1",
+      "stood on the left verge where the road leaves: OSM records what the sign says, not where its board stands"
+    ],
+    "exit-SH58W-14847": [
+      "OSM way 16032260 (tertiary) leaves SH58W 14847 m along, to the left: destination=Papakowhai",
+      "stood on the left verge where the road leaves: OSM records what the sign says, not where its board stands"
+    ],
+    "exit-SH58W-14886": [
+      "OSM way 16469645 (primary_link) leaves SH58W 14886 m along, to the left: destination=Porirua;Wellington, destination:ref=SH 59",
+      "stood on the left verge where the road leaves: OSM records what the sign says, not where its board stands"
+    ],
+    "exit-SH58E-5076": [
+      "OSM way 16655656 (secondary) leaves SH58E 5076 m along, to the left: destination=Pāuatahanui",
+      "stood on the left verge where the road leaves: OSM records what the sign says, not where its board stands"
+    ],
+    "exit-SH58E-5572": [
+      "OSM way 295451781 (motorway_link) leaves SH58E 5572 m along, to the left: destination=Palmerston North, destination:ref=SH 1",
+      "stood on the left verge where the road leaves: OSM records what the sign says, not where its board stands"
+    ],
+    "exit-SH59S-16229": [
+      "OSM way 16516443 (primary_link) leaves SH59S 16229 m along, to the left: destination=Whitby;Hutt Valley, destination:ref=SH 58",
+      "stood on the left verge where the road leaves: OSM records what the sign says, not where its board stands"
+    ],
+    "exit-SH59S-16466": [
+      "OSM way 16469571 (primary) leaves SH59S 16466 m along, to the left: destination=Whitby;Hutt Valley, destination:ref=SH 58; stood 4 m back on the approach, the road bending too tightly where it leaves",
+      "stood on the left verge where the road leaves: OSM records what the sign says, not where its board stands"
+    ],
+    "exit-SH59S-18507": [
+      "OSM way 17765752 (primary_link) leaves SH59S 18507 m along, to the left: destination=Waitangirua;Papakowhai",
+      "stood on the left verge where the road leaves: OSM records what the sign says, not where its board stands"
+    ],
+    "exit-SH59S-19631": [
+      "OSM way 17765206 (primary_link) leaves SH59S 19631 m along, to the left: destination=Porirua City Centre;Titahi Bay",
+      "stood on the left verge where the road leaves: OSM records what the sign says, not where its board stands"
+    ],
+    "exit-SH59S-20424": [
+      "OSM way 16485937 (primary_link) leaves SH59S 20424 m along, to the left: destination=Eastern Porirua;Tawa;Elsdon",
+      "stood on the left verge where the road leaves: OSM records what the sign says, not where its board stands"
+    ],
+    "exit-SH59N-1940": [
+      "OSM way 16486204 (primary_link) leaves SH59N 1940 m along, to the left: destination=Porirua City Centre",
+      "stood on the left verge where the road leaves: OSM records what the sign says, not where its board stands"
+    ],
+    "exit-SH59N-4234": [
+      "OSM way 16461005 (primary_link) leaves SH59N 4234 m along, to the right: destination=Waitangirua;Papakowhai",
+      "stood on the left verge where the road leaves: OSM records what the sign says, not where its board stands"
+    ],
+    "exit-SH59N-6696": [
+      "OSM way 978263980 (service) leaves SH59N 6696 m along, to the left: destination=Paremata Railway Station, destination:symbol=train_station",
+      "stood on the left verge where the road leaves: OSM records what the sign says, not where its board stands"
+    ],
+    "exit-SH59N-8838": [
+      "OSM way 642721542 (primary_link) leaves SH59N 8838 m along, to the left: destination=Plimmerton, destination:street=Steyne Avenue",
+      "stood on the left verge where the road leaves: OSM records what the sign says, not where its board stands"
+    ],
+    "exit-SH59N-12128": [
+      "OSM way 991837168 (primary_link) leaves SH59N 12128 m along, to the left: destination=Whenua Tapu Cemetery, destination:street=Airlie Road",
+      "stood on the left verge where the road leaves: OSM records what the sign says, not where its board stands"
+    ],
+    "exit-MUNGAVIN-34": [
+      "OSM way 16485822 (primary_link) leaves MUNGAVIN 34 m along, to the left: destination=Levin, destination:ref=SH 59",
+      "stood on the left verge where the road leaves: OSM records what the sign says, not where its board stands"
+    ],
+    "exit-MUNGAVIN-119": [
+      "OSM way 16522288 (secondary) leaves MUNGAVIN 119 m along, to the left: destination=Eastern Porirua",
+      "stood on the left verge where the road leaves: OSM records what the sign says, not where its board stands"
+    ],
+    "exit-MUNGAVIN-162": [
+      "OSM way 968775615 (primary_link) leaves MUNGAVIN 162 m along, to the left: destination=Wellington, destination:ref=SH 59",
+      "stood on the left verge where the road leaves: OSM records what the sign says, not where its board stands"
+    ],
+    "exit-MUNGAVIN_ON_N-160": [
+      "OSM way 940303083 (service) leaves MUNGAVIN_ON_N 160 m along, to the left: destination=Railway Station",
       "stood on the left verge where the road leaves: OSM records what the sign says, not where its board stands"
     ],
     "gantry-1124896694": [
@@ -506,23 +614,90 @@
       "SH2N: roads.json's limit (OSM maxspeed) goes 80 → 100 km/h 34063 m along",
       "the National Speed Limit Register agrees 80 m on: 100 km/h permanent zone \"TE MARUA TO FEATHERSTON, SH 2\" (6604445f-5993-4fae-a552-aafa2ccbb3ca)",
       "stood on the left verge where the limit changes"
+    ],
+    "speed-SH58W-7962": [
+      "SH58W: roads.json's limit (OSM maxspeed) goes 50 → 80 km/h 7962 m along",
+      "the National Speed Limit Register agrees 80 m on: 80 km/h permanent zone \"JUDGEFORD - PAREMATA HAYWARDS ROAD, SH 58\" (550ea473-8f2d-465c-9e28-896286186641)",
+      "stood on the left verge where the limit changes"
+    ],
+    "speed-SH58W-13219": [
+      "SH58W: roads.json's limit (OSM maxspeed) goes 80 → 50 km/h 13219 m along",
+      "the National Speed Limit Register agrees 80 m on: 50 km/h permanent zone \"PORIRUA URBAN, SH 58, SH 59\" (539155fe-60d3-4cb4-a059-a4db42e676aa)",
+      "stood on the left verge where the limit changes"
+    ],
+    "speed-SH58E-1668": [
+      "SH58E: roads.json's limit (OSM maxspeed) goes 50 → 80 km/h 1668 m along",
+      "the National Speed Limit Register agrees 80 m on: 80 km/h permanent zone \"WHITBY - PAREMATA HAYWARDS ROAD, SH 58\" (ffec3460-6ce0-4f39-859d-1e36397584fb)",
+      "stood on the left verge where the limit changes"
+    ],
+    "speed-SH58E-7734": [
+      "SH58E: roads.json's limit (OSM maxspeed) goes 50 → 80 km/h 7734 m along",
+      "the National Speed Limit Register agrees 80 m on: 80 km/h permanent zone \"JUDGEFORD - PAREMATA HAYWARDS ROAD, SH 58\" (550ea473-8f2d-465c-9e28-896286186641)",
+      "stood on the left verge where the limit changes"
+    ],
+    "speed-SH58E-10555": [
+      "SH58E: roads.json's limit (OSM maxspeed) goes 50 → 80 km/h 10555 m along",
+      "the National Speed Limit Register agrees 80 m on: 80 km/h permanent zone \"JUDGEFORD - PAREMATA HAYWARDS ROAD, SH 58\" (550ea473-8f2d-465c-9e28-896286186641)",
+      "stood on the left verge where the limit changes (the sign across the carriageway from it isn't drawn)"
+    ],
+    "speed-SH59S-513": [
+      "SH59S: roads.json's limit (OSM maxspeed) goes 70 → 80 km/h 513 m along",
+      "the National Speed Limit Register agrees 80 m on: 80 km/h permanent zone \"CENTENNIAL HIGHWAY - PAEKAKARIKI TO PUKERUA BAY, SH 1\" (ce4c5d8c-2db0-426b-8147-b8099deb1714)",
+      "stood on the left verge where the limit changes"
+    ],
+    "speed-SH59S-6732": [
+      "SH59S: roads.json's limit (OSM maxspeed) goes 80 → 50 km/h 6732 m along",
+      "the National Speed Limit Register agrees 80 m on: 50 km/h permanent zone \"PUKERUA BAY URBAN, SH 59\" (b95aa80d-4d57-439f-8ab2-38be6c2d0de0)",
+      "stood on the left verge where the limit changes"
+    ],
+    "speed-SH59S-8757": [
+      "SH59S: roads.json's limit (OSM maxspeed) goes 50 → 100 km/h 8757 m along",
+      "the National Speed Limit Register agrees 80 m on: 100 km/h permanent zone \"PUKERUA BAY TO PLIMMERTON, SH 59\" (40255f94-873f-4659-9bcb-09418ca3d4c5)",
+      "stood on the left verge where the limit changes"
+    ],
+    "speed-SH59S-13645": [
+      "SH59S: roads.json's limit (OSM maxspeed) goes 100 → 50 km/h 13645 m along",
+      "the National Speed Limit Register agrees 80 m on: 50 km/h permanent zone \"PORIRUA URBAN, SH 58, SH 59\" (539155fe-60d3-4cb4-a059-a4db42e676aa)",
+      "stood on the left verge where the limit changes (the sign across the carriageway from it isn't drawn)"
+    ],
+    "speed-SH59S-16597": [
+      "SH59S: roads.json's limit (OSM maxspeed) goes 50 → 100 km/h 16597 m along",
+      "the National Speed Limit Register agrees 80 m on: 100 km/h permanent zone \"PAREMATA TO PORIRUA CITY, SH 59\" (c7b5c8c9-ac49-4a42-a81c-59fdc6afdc32)",
+      "stood on the left verge where the limit changes (the sign across the carriageway from it isn't drawn)"
+    ],
+    "speed-SH59N-6565": [
+      "SH59N: roads.json's limit (OSM maxspeed) goes 100 → 50 km/h 6565 m along",
+      "the National Speed Limit Register agrees 80 m on: 50 km/h permanent zone \"PORIRUA URBAN, SH 58, SH 59\" (539155fe-60d3-4cb4-a059-a4db42e676aa)",
+      "stood on the left verge where the limit changes (the sign across the carriageway from it isn't drawn)"
+    ],
+    "speed-SH59N-9535": [
+      "SH59N: roads.json's limit (OSM maxspeed) goes 50 → 100 km/h 9535 m along",
+      "the National Speed Limit Register agrees 80 m on: 100 km/h permanent zone \"PUKERUA BAY TO PLIMMERTON, SH 59\" (40255f94-873f-4659-9bcb-09418ca3d4c5)",
+      "stood on the left verge where the limit changes (the sign across the carriageway from it isn't drawn)"
+    ],
+    "speed-SH59N-14439": [
+      "SH59N: roads.json's limit (OSM maxspeed) goes 100 → 50 km/h 14439 m along",
+      "the National Speed Limit Register agrees 80 m on: 50 km/h permanent zone \"PUKERUA BAY URBAN, SH 59\" (b95aa80d-4d57-439f-8ab2-38be6c2d0de0)",
+      "stood on the left verge where the limit changes"
+    ],
+    "speed-SH59N-16465": [
+      "SH59N: roads.json's limit (OSM maxspeed) goes 50 → 80 km/h 16465 m along",
+      "the National Speed Limit Register agrees 80 m on: 80 km/h permanent zone \"CENTENNIAL HIGHWAY - PAEKAKARIKI TO PUKERUA BAY, SH 1\" (ce4c5d8c-2db0-426b-8147-b8099deb1714)",
+      "stood on the left verge where the limit changes"
+    ],
+    "speed-SH59N-22684": [
+      "SH59N: roads.json's limit (OSM maxspeed) goes 80 → 70 km/h 22684 m along",
+      "the National Speed Limit Register agrees 80 m on: 70 km/h permanent zone \"CENTENNIAL HIGHWAY - PAEKAKARIKI CENTRAL, SH 59\" (e26d9966-bea6-4d3e-8f84-ef62757d2d8c)",
+      "stood on the left verge where the limit changes"
     ]
   },
   "omitted": [
-    {
-      "what": "NZTA VMS 1 \"SH59 Acheron T2 - Southbound\" (Southbound)",
-      "why": "not on State Highway 1 or 2 as drawn"
-    },
     {
       "what": "NZTA VMS 7 \"SH1 Aotea Quay - Northbound\" (Northbound)",
       "why": "not on State Highway 1 or 2 as drawn"
     },
     {
       "what": "NZTA VMS 13 \"Boulcott Street - Northbound\" (Northbound)",
-      "why": "not on State Highway 1 or 2 as drawn"
-    },
-    {
-      "what": "NZTA VMS 46 \"SH59 Goat Point T2 - Northbound\" (Northbound)",
       "why": "not on State Highway 1 or 2 as drawn"
     },
     {
@@ -534,12 +709,8 @@
       "why": "not on State Highway 1 or 2 as drawn"
     },
     {
-      "what": "NZTA VMS 51 \"SH58 Haywards - Eastbound\" (Eastbound)",
-      "why": "not on State Highway 1 or 2 as drawn"
-    },
-    {
       "what": "NZTA VMS 52 \"SH58 Haywards - Westbound\" (Westbound)",
-      "why": "not on State Highway 1 or 2 as drawn"
+      "why": "16 m left of SH58W's line: on a ramp or street beside it, which isn't drawn"
     },
     {
       "what": "NZTA VMS 61 \"Hutt Road - Northbound\" (Northbound)",
@@ -548,14 +719,6 @@
     {
       "what": "NZTA VMS 64 \"Hutt Road - Southbound\" (Southbound)",
       "why": "31 m right of SH2S's line: on a ramp or street beside it, which isn't drawn"
-    },
-    {
-      "what": "NZTA VMS 69 \"SH59 James Street T2 - Southbound\" (Southbound)",
-      "why": "not on State Highway 1 or 2 as drawn"
-    },
-    {
-      "what": "NZTA VMS 70 \"SH59 Jesus Corner - Southbound\" (Southbound)",
-      "why": "not on State Highway 1 or 2 as drawn"
     },
     {
       "what": "NZTA VMS 71 \"SH1 Johnsonville On Ramp - Southbound\" (Southbound)",
@@ -571,10 +734,6 @@
     },
     {
       "what": "NZTA VMS 80 \"SH2 Kennedy Good Bridge - Northbound\" (Northbound)",
-      "why": "not on State Highway 1 or 2 as drawn"
-    },
-    {
-      "what": "NZTA VMS 103 \"SH59 Marina T2 - Northbound\" (Northbound)",
       "why": "not on State Highway 1 or 2 as drawn"
     },
     {
@@ -598,16 +757,12 @@
       "why": "not on State Highway 1 or 2 as drawn"
     },
     {
-      "what": "NZTA VMS 138 \"SH59 Porirua - Southbound\" (Southbound)",
-      "why": "not on State Highway 1 or 2 as drawn"
-    },
-    {
       "what": "NZTA VMS 139 \"SH59 Paremata Road - North and Southbound\" (Southbound)",
-      "why": "not on State Highway 1 or 2 as drawn"
+      "why": "47 m left of SH59S's line: on a ramp or street beside it, which isn't drawn"
     },
     {
       "what": "NZTA VMS 140 \"SH58 Pauatahanui - Westbound\" (Westbound)",
-      "why": "not on State Highway 1 or 2 as drawn"
+      "why": "10 m right of SH58W's line: on a ramp or street beside it, which isn't drawn"
     },
     {
       "what": "NZTA VMS 166 \"Taranaki Street - Southbound\" (Southbound)",
@@ -635,7 +790,7 @@
     },
     {
       "what": "NZTA VMS 190 \"SH59 Whitford Brown - Northbound\" (Northbound)",
-      "why": "not on State Highway 1 or 2 as drawn"
+      "why": "9 m right of SH59N's line: on a ramp or street beside it, which isn't drawn"
     },
     {
       "what": "NZTA VMS 195 \"Wainuiomata - Northbound\" (Northbound)",
@@ -663,11 +818,7 @@
     },
     {
       "what": "NZTA VMS 392 \"Lanes Flat (E) VMS\" (Eastbound)",
-      "why": "not on State Highway 1 or 2 as drawn"
-    },
-    {
-      "what": "NZTA VMS 393 \"Bradey Rd (W) VMS\" (Westbound)",
-      "why": "not on State Highway 1 or 2 as drawn"
+      "why": "17 m right of SH58W's line: on a ramp or street beside it, which isn't drawn"
     },
     {
       "what": "NZTA VMS 439 \"Waiwhetu (S) VMS\" (Southbound)",
@@ -715,7 +866,7 @@
     },
     {
       "what": "OSM gantry way 1191549030",
-      "why": "over SH1N at 24040 m, but nothing on record says what it carries"
+      "why": "over SH1N at 24040 m and SH59N at 53 m, but nothing on record says what it carries"
     },
     {
       "what": "OSM gantry way 1191549033",
@@ -760,6 +911,18 @@
     {
       "what": "SH1N: roads.json's limit (OSM maxspeed) goes 80 → 100 km/h 15793 m along",
       "why": "the register has a variable limit there (100 km/h variable zone \"JOHNSONVILLE PORIRUA MOTORWAY NORTHBOUND, SH 1 - HELSTON ROAD TO JOHNSONVILLE ROAD ON RAMP\" (66421373-1dd3-4f4c-b76c-0165e903ce67)): its signs are electronic, and no feed says what they show"
+    },
+    {
+      "what": "SH58W: roads.json's limit (OSM maxspeed) goes 80 → 50 km/h 7189 m along",
+      "why": "the register disagrees: 80 km/h permanent zone \"JUDGEFORD - PAREMATA HAYWARDS ROAD, SH 58\" (550ea473-8f2d-465c-9e28-896286186641)"
+    },
+    {
+      "what": "SH58E: roads.json's limit (OSM maxspeed) goes 80 → 50 km/h 6957 m along",
+      "why": "the register disagrees: 80 km/h permanent zone \"JUDGEFORD - PAREMATA HAYWARDS ROAD, SH 58\" (550ea473-8f2d-465c-9e28-896286186641)"
+    },
+    {
+      "what": "SH58E: roads.json's limit (OSM maxspeed) goes 80 → 50 km/h 10164 m along",
+      "why": "the register disagrees: 80 km/h permanent zone \"JUDGEFORD - PAREMATA HAYWARDS ROAD, SH 58\" (550ea473-8f2d-465c-9e28-896286186641)"
     }
   ]
 }

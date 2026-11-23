@@ -55,7 +55,7 @@ export interface CranePose {
 }
 
 /** Legs run this far below the rails so uneven ground can't show a gap. */
-const FOOTING = 2;
+export const FOOTING = 2;
 
 const tmp = new Vector3();
 
@@ -63,7 +63,7 @@ const tmp = new Vector3();
  * A box `width` × `depth` in section from a to b. Depth is in the vertical
  * plane through the member (or along x, for vertical members).
  */
-function member(a: Vector3, b: Vector3, width: number, depth = width) {
+export function member(a: Vector3, b: Vector3, width: number, depth = width) {
   const dir = new Vector3().subVectors(b, a);
   const length = dir.length();
   dir.normalize();
@@ -100,7 +100,7 @@ function member(a: Vector3, b: Vector3, width: number, depth = width) {
 }
 
 /** A solid block (machinery house, trolley), never fattened. */
-function block(centre: Vector3, size: [number, number, number]) {
+export function block(centre: Vector3, size: [number, number, number]) {
   const box = new BoxGeometry(...size);
   box.deleteAttribute("uv");
   const count = box.getAttribute("position").count;
@@ -116,7 +116,7 @@ function block(centre: Vector3, size: [number, number, number]) {
   return box.translate(centre.x, centre.y, centre.z);
 }
 
-const v = (x: number, y: number, z: number) => new Vector3(x, y, z);
+export const v = (x: number, y: number, z: number) => new Vector3(x, y, z);
 
 /** Where the A-frame's top sits, in the crane's frame. */
 function apexX(spec: CraneSpec) {

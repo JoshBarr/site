@@ -122,3 +122,9 @@ export const BARING_HEAD: Site = [1756394.9, 5414250.4, 80.4];
 
 /** Point Halswell light, at the tip of the Miramar peninsula. */
 export const POINT_HALSWELL: Site = [1752922.6, 5428124.8, 0.1];
+
+/** Queens Wharf's level-luffing crane, on its four-legged portal by the shed. */
+export const LUFFING_CRANE: Site = [1749006.3, 5428051.8, 2.0];
+
+/** Queens Wharf's tripod crane, out on the wharf. */
+export const TRIPOD_CRANE: Site = [1749058.3, 5428043.3, 2.1];

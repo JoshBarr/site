@@ -30,9 +30,13 @@ export interface PlacedCrane {
   pose: CranePose;
 }
 
-function createCraneMaterial(spec: CraneSpec) {
+/**
+ * Steelwork: members fattened to stay at least MIN_PIXELS thick far off,
+ * as craneGeometry's `spread` and `thickness` attributes allow.
+ */
+export function createCraneMaterial(colour: string) {
   const material = new MeshStandardNodeMaterial({
-    color: spec.colour,
+    color: colour,
     roughness: 0.6,
     metalness: 0,
   });
@@ -58,7 +62,7 @@ export function ContainerCranes({
   cranes: PlacedCrane[];
 }) {
   const meshes = useMemo(() => {
-    const material = createCraneMaterial(spec);
+    const material = createCraneMaterial(spec.colour);
 
     return cranes.map(({ pose }) => {
       const mesh = new Mesh(createCraneGeometry(spec, pose), material);

@@ -17,7 +17,7 @@ const API =
 const TIMEOUT = 45_000;
 
 /** The highways the scene draws. */
-const ROADS = new Set(["SH1", "SH2"]);
+const ROADS = new Set(["SH1", "SH2", "SH58", "SH59"]);
 
 /** Where there's only one, it comes as an object, not a list. */
 const oneOrMany = <T extends z.ZodType>(item: T) =>
@@ -55,7 +55,7 @@ const journeys = z.object({
 /** As scripts/traffic/build_roads.mjs keys them. */
 const linkKey = (l: z.infer<typeof link>) => `${l.linkName}|${l.linkLength}`;
 
-/** Every SH1 and SH2 leg and link in the Wellington region with a reading. */
+/** Every leg and link of the scene's highways in the Wellington region with a reading. */
 export async function fetchTraffic(): Promise<TrafficSpeeds> {
   const response = await fetch(API, {
     headers: { Accept: "application/json" },

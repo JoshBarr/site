@@ -123,7 +123,7 @@ describe("NZTA's traffic speeds", () => {
 
   it("leaves out other roads, and legs and links without a reading", async () => {
     journeys([
-      { name: "SH58", legs: [leg("I", 1, 70, [link("Haywards", 2, 70)])] },
+      { name: "SH53", legs: [leg("I", 1, 70, [link("Featherston", 2, 70)])] },
       {
         name: "SH1",
         legs: [

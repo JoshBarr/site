@@ -53,6 +53,13 @@ const TAKES_TURN = 0.3;
 const FADE = 1.2;
 const SLIDE = 3;
 
+/**
+ * A road that runs into no other (at the map's edge, or into a junction
+ * the scene doesn't draw) is turned off at the end: over this far, m, and
+ * as far as there is to stop in.
+ */
+const END_FADE = 10;
+
 /** How often joining and leaving is decided, s. */
 const CONTROL = 0.5;
 
@@ -993,6 +1000,15 @@ export class Traffic {
       }
 
       if (car.off) continue;
+
+      if (
+        !flow.into &&
+        !car.leaving &&
+        car.s > road.length - END_FADE - car.v * FADE
+      ) {
+        car.leaving = true;
+        car.exitAt = road.length;
+      }
 
       if (car.s >= road.length) {
         car.off = dropped = true;

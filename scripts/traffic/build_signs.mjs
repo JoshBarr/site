@@ -947,9 +947,52 @@ function reaches(gantry, c) {
   ];
 }
 
-for (const { c, s, i, face, note } of directionPosts) {
-  const id = `exit-${c.name}-${s.toFixed(0)}`;
-  const foot = pointAt(c, s, kerb(c, i) - DIRECTION_OFF);
+/**
+ * Where a post `lateral` across from carriageway `c` can stand by `s`: there,
+ * or, where the road bends too tightly for a foot that far across to be by
+ * it (a roundabout), back along its approach to where it can, up to
+ * POST_BACK. Its place, and the segment there (`i`, where it doesn't move).
+ */
+const POST_BACK = 100;
+
+/** A post's foot is by its place if it projects back within this, m. */
+const POST_BY = 1.5;
+
+function postPlace(c, s, i0, lateral) {
+  const segment = (at) => {
+    let i = 0;
+
+    while (i < c.count - 2 && c.s[i + 1] <= at) i++;
+
+    return i;
+  };
+
+  for (let back = 0; back <= POST_BACK; back += 2) {
+    const at = Math.max(s - back, 0);
+    const i = back ? segment(at) : i0;
+    const foot = pointAt(c, at, lateral(i));
+
+    if (Math.abs(project(c, foot).s - at) < POST_BY) return { s: at, i, foot };
+  }
+
+  return { s, i: i0, foot: pointAt(c, s, lateral(i0)) };
+}
+
+for (const directionPost of directionPosts) {
+  const { c, face } = directionPost;
+  const id = `exit-${c.name}-${directionPost.s.toFixed(0)}`;
+
+  const { s, foot } = postPlace(
+    c,
+    directionPost.s,
+    directionPost.i,
+    (i) => kerb(c, i) - DIRECTION_OFF
+  );
+
+  const note =
+    s < directionPost.s - 0.5
+      ? `${directionPost.note}; stood ${(directionPost.s - s).toFixed(0)} m back on the approach, the road bending too tightly where it leaves`
+      : directionPost.note;
 
   structures.push({
     id,
@@ -1076,6 +1119,22 @@ for (const c of carriageways) {
 
     if (run && run.limit === c.limit[i]) run.to = i + 1;
     else runs.push({ limit: c.limit[i], from: i, to: i + 1 });
+  }
+
+  // A short stretch between two of the same limit is a blip in the
+  // tagging (a few metres of a roundabout's limit): theirs.
+  for (let k = 1; k < runs.length - 1;) {
+    const [before, run, after] = [runs[k - 1], runs[k], runs[k + 1]];
+
+    if (
+      before.limit === after.limit &&
+      c.s[run.to] - c.s[run.from] < LIMIT_RUN / 10
+    ) {
+      before.to = after.to;
+      runs.splice(k, 2);
+    } else {
+      k++;
+    }
   }
 
   const kept = [];

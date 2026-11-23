@@ -1,5 +1,5 @@
 // Builds src/components/scene/landmarks/sites.ts: where the wind turbines,
-// transmitter towers and lighthouses stand, in NZTM, with the ground height
+// transmitter towers, lighthouses and Queens Wharf's heritage cranes stand, in NZTM, with the ground height
 // under each.
 //
 //   node scripts/landmarks/build_sites.mjs [--osm cached.json]
@@ -27,6 +27,7 @@ const QUERY = `[out:json][timeout:60];
   way["man_made"="tower"]["name"="Kaukau TV/FM transmitter"];
   node(296684884);
   node(id:1907945529,1052816306,1052817586,6035642212);
+  node(id:1197577559,1197576346);
 );
 out center body;`;
 
@@ -39,6 +40,16 @@ const LIGHTHOUSE_NODES = new Map([
   [1052816306, "pencarrowLower"],
   [1052817586, "baringHead"],
   [6035642212, "pointHalswell"],
+]);
+
+/**
+ * OSM nodes of Queens Wharf's two heritage cranes (both man_made=crane,
+ * floor-mounted): the level-luffing crane on its four-legged portal by the
+ * shed, and the tripod crane out on the wharf.
+ */
+const CRANE_NODES = new Map([
+  [1197577559, "luffingCrane"],
+  [1197576346, "tripodCrane"],
 ]);
 
 async function loadOsm() {
@@ -88,6 +99,8 @@ const sites = {
   pencarrowLower: [],
   baringHead: [],
   pointHalswell: [],
+  luffingCrane: [],
+  tripodCrane: [],
 };
 
 for (const element of osm.elements) {
@@ -98,6 +111,7 @@ for (const element of osm.elements) {
 
   if (node.id === MT_VICTORIA_NODE) site = "mtVictoria";
   else if (LIGHTHOUSE_NODES.has(node.id)) site = LIGHTHOUSE_NODES.get(node.id);
+  else if (CRANE_NODES.has(node.id)) site = CRANE_NODES.get(node.id);
   else if (tags.name === "Kaukau TV/FM transmitter") site = "kaukau";
   else if (tags["generator:source"] !== "wind") continue;
   else if (tags.name === "Brooklyn Wind Turbine") site = "brooklyn";
@@ -120,6 +134,8 @@ const expected = {
   pencarrowLower: 1,
   baringHead: 1,
   pointHalswell: 1,
+  luffingCrane: 1,
+  tripodCrane: 1,
 };
 
 for (const [name, count] of Object.entries(expected)) {
@@ -183,6 +199,12 @@ export const BARING_HEAD: Site = ${single(sites.baringHead)};
 
 /** Point Halswell light, at the tip of the Miramar peninsula. */
 export const POINT_HALSWELL: Site = ${single(sites.pointHalswell)};
+
+/** Queens Wharf's level-luffing crane, on its four-legged portal by the shed. */
+export const LUFFING_CRANE: Site = ${single(sites.luffingCrane)};
+
+/** Queens Wharf's tripod crane, out on the wharf. */
+export const TRIPOD_CRANE: Site = ${single(sites.tripodCrane)};
 `
 );
 

@@ -7,12 +7,13 @@ the national 1m DEM: a canopy height model at 2m. Over the terrain's
 high-detail core that's its level 7 mosaic and a cached DSM on the same grid;
 elsewhere both are fetched a tile at a time, in parallel, and their
 difference cached. Building footprints from OpenStreetMap (the terrain
-build's cache) are cut out, and the scene's own towers, turbines and
-lighthouses with the blades the lidar caught mid-turn, and Transpower's
-pylons, substations and the conductors between them, and the highways'
-lanes, where the lidar finds only gantries and bridges, and wider over
-their decks (public/roads/roads.json, if the traffic build's written it),
-and the railway's bridges (public/rail/network.json, the same).
+build's cache) are cut out, and the scene's own towers, turbines,
+lighthouses and Queens Wharf's cranes, with the blades the lidar caught
+mid-turn, and Transpower's pylons, substations and the conductors between
+them, and the highways' lanes, where the lidar finds only gantries and
+bridges, and wider over their decks (public/roads/roads.json, if the
+traffic build's written it), and the railway's bridges
+(public/rail/network.json, the same).
 Then each crown is a local maximum of the smoothed canopy, its radius from
 the watershed around it.
 
@@ -188,6 +189,9 @@ LANDMARKS = {
     "PENCARROW_LOWER": (6.0, 0),
     "BARING_HEAD": (6.0, 0),
     "POINT_HALSWELL": (6.0, 0),
+    # Queens Wharf's heritage cranes: their machinery houses and jibs.
+    "LUFFING_CRANE": (10.0, 0),
+    "TRIPOD_CRANE": (12.0, 0),
 }
 # Blades are smoothed into the canopy much lower than they stand (their tips
 # pass 27 m up at the lowest), metres.

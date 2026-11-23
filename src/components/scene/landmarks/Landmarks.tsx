@@ -6,12 +6,19 @@ import {
   PlacedCrane,
 } from "../port/ContainerCranes";
 import { ContainerYard } from "../port/ContainerYard";
+import { HeritageCranes } from "../port/HeritageCranes";
 import {
   CENTREPORT_CRANE,
   CranePose,
   craneHeight,
   CraneSpec,
 } from "../port/craneGeometry";
+import {
+  LUFFING_CRANE_SPEC,
+  luffingCraneHeight,
+  TRIPOD_CRANE_SPEC,
+  tripodCraneHeight,
+} from "../port/heritageCraneGeometry";
 import { CRANES, WHARF_BEARING, YARD } from "../port/terminal";
 import { nztmToWorld, TileIndex } from "../terrain/manifest";
 import { useGridFlow } from "../power/flow";
@@ -43,9 +50,11 @@ import * as sites from "./sites";
 import {
   BROOKLYN,
   KAUKAU,
+  LUFFING_CRANE,
   MILL_CREEK,
   MT_VICTORIA,
   Site,
+  TRIPOD_CRANE,
   WEST_WIND,
 } from "./sites";
 import { turbineLights } from "./turbineLights";
@@ -115,6 +124,15 @@ function craneSubject(spec: CraneSpec, crane: PlacedCrane): FocusSubject {
   };
 }
 
+/** What autofocus sees of a Queens Wharf crane: a post as tall as its jib. */
+function heritageCraneSubject(
+  base: Point,
+  height: number,
+  radius: number
+): FocusSubject {
+  return { kind: "post", base, height, radius: () => radius };
+}
+
 /**
  * The cranes north to south: one working with its boom down, one stowed.
  * They're always posed so, whether or not a ship is in.
@@ -126,7 +144,8 @@ const CRANE_POSES: CranePose[] = [
 
 /**
  * Wellington's wind turbines and transmitter towers, CentrePort's cranes
- * and container stacks, the harbour's lighthouses and Frank Kitts Park's
+ * and container stacks, Queens Wharf's heritage cranes, the harbour's
+ * lighthouses and Frank Kitts Park's
  * playground, standing on the terrain and casting shadows on it. `lights` (0..1) turns on their aviation
  * lights and the lighthouses, for night.
  */
@@ -173,6 +192,9 @@ export function Landmarks({
       position: place(site),
     }));
 
+    const luffing = place(LUFFING_CRANE);
+    const tripod = place(TRIPOD_CRANE);
+
     return {
       siemens: [...westWind, ...millCreek],
       brooklyn,
@@ -180,6 +202,8 @@ export function Landmarks({
       mtVictoria,
       cranes,
       lighthouses,
+      luffing,
+      tripod,
       lights: [
         ...turbineLights(SWT_2_3_82, westWind),
         ...turbineLights(SWT_2_3_82, millCreek),
@@ -196,6 +220,16 @@ export function Landmarks({
         towerSubject(MT_VICTORIA_TOWER, mtVictoria),
         ...cranes.map((crane) => craneSubject(CENTREPORT_CRANE, crane)),
         ...lighthouses.map(lighthouseSubject),
+        heritageCraneSubject(
+          luffing,
+          luffingCraneHeight(LUFFING_CRANE_SPEC),
+          LUFFING_CRANE_SPEC.portalWidth / 2
+        ),
+        heritageCraneSubject(
+          tripod,
+          tripodCraneHeight(TRIPOD_CRANE_SPEC),
+          TRIPOD_CRANE_SPEC.footRadius / 2
+        ),
       ],
     };
   }, [index]);
@@ -229,6 +263,7 @@ export function Landmarks({
       <LatticeTower spec={MT_VICTORIA_TOWER} position={placed.mtVictoria} />
       <ContainerCranes spec={CENTREPORT_CRANE} cranes={placed.cranes} />
       <ContainerYard index={index} yard={YARD} wharfBearing={WHARF_BEARING} />
+      <HeritageCranes luffing={placed.luffing} tripod={placed.tripod} />
       <Lighthouses lighthouses={placed.lighthouses} />
       {playground && <Playground index={index} />}
       <ObstructionLights lights={placed.lights} />
