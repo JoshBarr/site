@@ -161,6 +161,13 @@ const START_ALTITUDE = 900;
 const START_TARGET: [number, number] = [1747500, 5428700];
 const TARGET_ALTITUDE = 150;
 
+/**
+ * The orbit's northernmost, NZTM northing: Plimmerton, the top of Porirua
+ * Harbour, and past the top of Haywards Hill. The 8 m terrain ends 1.5 km
+ * on (scripts/terrain/build_tiles.py).
+ */
+const NORTH_LIMIT = 5450500;
+
 /** The usual start, or under the low cloud if its base is lower. */
 const startAltitude = (deck: number | null) => ceilingFor(deck, START_ALTITUDE);
 
@@ -339,6 +346,13 @@ interface ViewFlight {
   pivot?: boolean;
 }
 
+/** Turning onto a point held on: from where, by which flight (none, cut), since when (ms). */
+interface Turn {
+  from: [Vector3, Vector3];
+  flight: ViewFlight | null;
+  at: number;
+}
+
 const flown: [Vector3, Vector3] = [new Vector3(), new Vector3()];
 
 /** Where the pivot's going, looking around a vehicle, and by how much. */
@@ -510,12 +524,13 @@ function Controls({
   const boundary = useMemo(
     () =>
       new Box3(
-        // North (negative z) is held furthest from the edge: that's where
-        // the land runs off the map.
-        new Vector3(-half * 0.6, 0, -half * 0.45),
+        // North (negative z) is where the land runs off the map: it goes as
+        // far as Porirua Harbour and over Haywards Hill, short of the 8 m
+        // terrain's edge.
+        new Vector3(-half * 0.6, 0, nztmToWorld(manifest, 0, NORTH_LIMIT)[1]),
         new Vector3(half * 0.6, CEILING, half * 0.6)
       ),
-    [half]
+    [half, manifest]
   );
 
   // Vehicles out of bounds can't be picked: the camera couldn't stay there.
@@ -937,10 +952,11 @@ function Controls({
     // camera turns to look at it from where it is (or the map slides over
     // to it), and focuses on it. Not while following: the rig has the
     // camera, and a hold there is only looking around.
-    const orbitAround = (point: Vector3) => {
+    // Returns the turn, to undo if the press turns out to be a drag.
+    const orbitAround = (point: Vector3): Turn | null => {
       const c = controls.current;
 
-      if (!c) return;
+      if (!c) return null;
       touched.current = true;
       land();
       const map = getMapView();
@@ -953,14 +969,20 @@ function Controls({
 
       focusOn(point);
 
+      const turn: Turn = {
+        from: [from, aim],
+        flight: null,
+        at: performance.now(),
+      };
+
       if (getSnapshot().cut) {
         const [p, t] = to;
         c.setLookAt(p.x, p.y, p.z, t.x, t.y, t.z, false);
 
-        return;
+        return turn;
       }
 
-      flight.current = {
+      turn.flight = flight.current = {
         from: [from, aim],
         to,
         time: 0,
@@ -968,6 +990,25 @@ function Controls({
         arc: 0,
         pivot: true,
       };
+
+      return turn;
+    };
+
+    // A drag begun while still turning onto the point (or just after a
+    // cut): the view goes back to where it was, for the drag to turn.
+    const unturn = ({ from: [p, t], flight: f, at }: Turn) => {
+      const c = controls.current;
+
+      if (!c) return;
+
+      const turning = f
+        ? flight.current === f
+        : performance.now() - at < PIVOT_TIME * 1000;
+
+      if (!turning) return;
+
+      if (f) land();
+      c.setLookAt(p.x, p.y, p.z, t.x, t.y, t.z, false);
     };
 
     // What's drawn under a held press, if there's anything to orbit there.
@@ -1006,17 +1047,33 @@ function Controls({
       return point;
     };
 
-    let hold: {
+    // The press being held, until it's let go. A press held still, then
+    // dragged (pausing before turning the view, say), is a drag: moving
+    // off drops the pick if it's still being read, or puts the view back
+    // if it's still turning onto the point.
+    interface Hold {
       x: number;
       y: number;
       timer: ReturnType<typeof setTimeout>;
       ring: PressRing;
-    } | null = null;
+      /** Held long enough: the point's being read, or turned to. */
+      up: boolean;
+      /** Moved off after all. */
+      dragged: boolean;
+      turn: Turn | null;
+    }
 
+    let hold: Hold | null = null;
+
+    // Let go, or a second finger down: whatever's been picked still goes.
     const letGo = () => {
       if (!hold) return;
-      clearTimeout(hold.timer);
-      hold.ring.cancel();
+
+      if (!hold.up) {
+        clearTimeout(hold.timer);
+        hold.ring.cancel();
+      }
+
       hold = null;
     };
 
@@ -1025,32 +1082,51 @@ function Controls({
       const { clientX: x, clientY: y } = e;
       const ring = pressRing(x, y, HOLD_TIME);
 
-      const timer = setTimeout(() => {
-        hold = null;
+      const held: Hold = {
+        x,
+        y,
+        ring,
+        up: false,
+        dragged: false,
+        turn: null,
+        timer: setTimeout(() => {
+          held.up = true;
 
-        pick(x, y).then(
-          (point) => {
-            if (!point || disposed) return ring.miss();
-            ring.lock();
-            orbitAround(point);
-          },
-          (error) => {
-            ring.miss();
-            console.error(error);
-          }
-        );
-      }, HOLD_TIME);
+          pick(x, y).then(
+            (point) => {
+              if (held.dragged || disposed) return;
 
-      hold = { x, y, timer, ring };
+              if (!point) return ring.miss();
+              ring.lock();
+              held.turn = orbitAround(point);
+            },
+            (error) => {
+              ring.miss();
+              console.error(error);
+            }
+          );
+        }, HOLD_TIME),
+      };
+
+      hold = held;
     };
 
     const moved = (e: PointerEvent) => {
+      const held = hold;
+
       if (
-        hold &&
-        Math.hypot(e.clientX - hold.x, e.clientY - hold.y) > CLICK_SLOP
+        !held ||
+        Math.hypot(e.clientX - held.x, e.clientY - held.y) <= CLICK_SLOP
       ) {
-        letGo();
+        return;
       }
+
+      clearTimeout(held.timer);
+      held.ring.cancel();
+      held.dragged = true;
+      hold = null;
+
+      if (held.turn) unturn(held.turn);
     };
 
     const down = (e: PointerEvent) => {
