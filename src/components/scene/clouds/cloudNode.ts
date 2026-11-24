@@ -15,6 +15,7 @@ import {
   mix,
   normalize,
   outputStruct,
+  pow,
   property,
   screenCoordinate,
   screenSize,
@@ -94,6 +95,9 @@ const NEAR_FADE = 600;
 
 /** Step length as a fraction of distance from the camera. */
 const STEP_GROWTH = 0.035;
+
+/** The most a ray's steps grow by, stretched to reach the slab's far side. */
+const MAX_GROWTH = 0.15;
 
 /**
  * A step's samples of the cloud bodies are taken where its column's at
@@ -388,7 +392,25 @@ export function createCloudNode({
     If(tFar.greaterThan(tNear).and(lowCloud.or(midCloud)), () => {
       // Steps grow with distance: fine near the camera, coarse far away
       // where haze hides the difference.
-      const stepFor = (distance) => max(distance.mul(STEP_GROWTH), MIN_STEP);
+      // With the camera inside the layers a ray starts at 0, and the steps
+      // run out short of the far cloud: a third of them go at MIN_STEP to
+      // the first kilometre, and mobile's 64 got ~4 km. Where they'd fall
+      // short the ray's steps grow faster, as much as reaches tFar: past
+      // `flat` (where MIN_STEP stops binding) each multiplies t by
+      // 1 + growth. Worked out at STEP_GROWTH's `flat`, it errs long.
+      const flat = MIN_STEP / STEP_GROWTH;
+      const from = max(tNear, flat);
+      const flatSteps = max(float(flat).sub(tNear), 0).div(MIN_STEP);
+      const left = max(float(quality.steps - 1).sub(flatSteps), 1);
+
+      const growth = switchedOff("cloudreach")
+        ? float(STEP_GROWTH)
+        : pow(tFar.div(from), float(1).div(left))
+            .sub(1)
+            .clamp(STEP_GROWTH, MAX_GROWTH)
+            .toVar();
+
+      const stepFor = (distance) => max(distance.mul(growth), MIN_STEP);
       const t = tNear.toVar();
       const dt = stepFor(tNear).toVar();
       t.addAssign(dt.mul(jitter));
