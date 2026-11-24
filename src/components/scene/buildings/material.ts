@@ -25,6 +25,7 @@ import {
   vec2,
   vec3,
 } from "three/tsl";
+import { createVenueGlow } from "../events/glow";
 import { verticalScale } from "../terrain/Terrain";
 import { createFloodlights } from "./floodlights";
 import type { BuildingsManifest, EncodedRange } from "./manifest";
@@ -106,6 +107,9 @@ const LAMP_BRIGHTNESS = 2;
 const UPLIGHT_SPACING = 6;
 const UPLIGHT_WIDTH = 0.8;
 const UPLIGHT_SPREAD = 0.35;
+
+/** A lit venue's uplights carry this far up its walls, m (exp(-h/reach)). */
+const VENUE_REACH = 12;
 
 /** More windows lit at street level, times. */
 export const STREET_BUSIER = 1.6;
@@ -294,10 +298,13 @@ export function createBuildingMaterial({
   // Landmarks keep theirs on late.
   const floodlights = createFloodlights(origin);
   const hero = floodlights.lookup(p);
+  // And venues while something's on in them (events/glow.ts).
+  const venues = createVenueGlow(origin);
+  const venue = venues.lookup(p);
 
   const share = max(
-    windowShare(seed, street),
-    min(hero.windows.mul(street), 1)
+    max(windowShare(seed, street), min(hero.windows.mul(street), 1)),
+    venue.windows
   );
 
   // The lowest ids switch on first, so the lit ones only ever add to.
@@ -354,8 +361,13 @@ export function createBuildingMaterial({
   const flood = hero.flood
     .mul(pools)
     .mul(exp(max(aboveGround, 0).div(hero.reach).negate()))
+    .add(
+      venue.flood
+        .mul(pools)
+        .mul(exp(max(aboveGround, 0).div(VENUE_REACH).negate()))
+    )
     .mul(upright)
-    .add(hero.crown.mul(roof));
+    .add(hero.crown.add(venue.crown).mul(roof));
 
   // Floodlights come on at dusk, ahead of most windows. By day none of it
   // shows, so it's skipped: about 0.45 ms at 2160x1350 on an M1. The branch
@@ -379,7 +391,10 @@ export function createBuildingMaterial({
     return emitted;
   })();
 
-  material.addEventListener("dispose", () => floodlights.map.dispose());
+  material.addEventListener("dispose", () => {
+    floodlights.map.dispose();
+    venues.map.dispose();
+  });
 
   return material;
 }

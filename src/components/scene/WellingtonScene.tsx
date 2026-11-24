@@ -70,6 +70,7 @@ import { useSeenClouds } from "./clouds/seenClouds";
 import { Wind, WIND_DESKTOP, WIND_MOBILE } from "./wind/Wind";
 import type { TileCache } from "./terrain/TileCache";
 import { CLOUDS_DESKTOP, CLOUDS_MOBILE } from "./clouds/cloudNode";
+import { Events } from "./events/Events";
 import { FarLand } from "./farland/FarLand";
 import { Landmarks } from "./landmarks/Landmarks";
 import { toggleGrid, towersAt } from "./power/energise";
@@ -80,8 +81,8 @@ import {
   BUILDINGS_MOBILE,
 } from "./buildings/Buildings";
 import { windowsLitAt } from "./buildings/material";
-import { Trees, TREES_DESKTOP, TREES_MOBILE } from "./trees/Trees";
 import { Shrubs, SHRUBS_DESKTOP, SHRUBS_MOBILE } from "./trees/Shrubs";
+import { Trees, TREES_DESKTOP, TREES_MOBILE } from "./trees/Trees";
 import { Vessels } from "./vessels/Vessels";
 import { Flights } from "./flights/Flights";
 import { Railway } from "./trains/Railway";
@@ -2019,8 +2020,9 @@ export const LAYERS = [
   "farland",
   "buildings",
   "trees",
-  "landmarks",
   "shrubs",
+  "landmarks",
+  "events",
   "power",
   "airfield",
   "sky",
@@ -2219,6 +2221,7 @@ export function Scene({
         <Landmarks index={index} wind={conditions.wind} lights={lights} />
       )}
       {shown("power") && <Power index={index} />}
+      {shown("events") && <Events index={index} />}
       {shown("buildings") && (
         <Buildings
           terrain={index}
@@ -2234,9 +2237,6 @@ export function Scene({
           wind={conditions.wind}
         />
       )}
-      {shown("airfield") && <AirfieldLights index={index} lights={lights} />}
-      {shown("vessels") && <Vessels index={index} sea={sea} lights={lights} />}
-      {shown("railway") && <Railway index={index} lights={lights} />}
       {shown("shrubs") && cache && (
         <Shrubs
           terrain={index}
@@ -2244,6 +2244,9 @@ export function Scene({
           quality={mobile ? SHRUBS_MOBILE : SHRUBS_DESKTOP}
         />
       )}
+      {shown("airfield") && <AirfieldLights index={index} lights={lights} />}
+      {shown("vessels") && <Vessels index={index} sea={sea} lights={lights} />}
+      {shown("railway") && <Railway index={index} lights={lights} />}
       {shown("cablecar") && <CableCar index={index} lights={lights} />}
       {shown("traffic") && (
         <Traffic index={index} lights={lights} time={time} />

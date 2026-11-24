@@ -2,6 +2,7 @@ import { foldBuses } from "./busStore";
 import type { Bus } from "./buses";
 import type { Timetable } from "./cablecar";
 import type { CloudMap } from "./cloudMap";
+import type { VenueEvent } from "./events";
 import type { Aircraft, RouteEnd } from "./flights";
 import { foldFlights } from "./flightStore";
 import type { GridFlow } from "./gridFlow";
@@ -9,6 +10,7 @@ import {
   buses,
   cableCar,
   clouds,
+  events,
   flights,
   grid,
   metar,
@@ -309,6 +311,21 @@ export async function loadSatellites(
     (at === undefined ? null : await readOldest(satellites));
 
   return stored && { fetched: stored.sk, orbits: stored.data.orbits };
+}
+
+/**
+ * What was on at the big venues as fetched last before `at` (or now): from
+ * a day before then to a week or so after. Replaying from before the first
+ * fetch, nothing.
+ */
+export async function loadEvents(
+  at?: number
+): Promise<{ fetched: number; events: VenueEvent[] } | null> {
+  if (!canRead()) throw new Error("no table to read the events from");
+
+  const stored = await readNewest(events, "", at);
+
+  return stored && { fetched: stored.sk, events: stored.data.events };
 }
 
 /**

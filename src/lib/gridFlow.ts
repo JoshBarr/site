@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { nzTime } from "./nzClock";
 import { readJson } from "./schemas";
 
 // What the national grid's carrying around Wellington, for the scene's
@@ -132,39 +133,6 @@ const summary = z.object({
   /** NZ's wall clock: "2026-11-20 19:50". */
   datetime: z.string().regex(/^\d{4}-\d\d-\d\d \d\d:\d\d$/),
 });
-
-const nzClock = new Intl.DateTimeFormat("en-GB", {
-  timeZone: "Pacific/Auckland",
-  hourCycle: "h23",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-});
-
-/** What NZ's clocks read at `time`, as if that were UTC: epoch ms. */
-function wallClock(time: number) {
-  const part = Object.fromEntries(
-    nzClock.formatToParts(time).map(({ type, value }) => [type, value])
-  );
-
-  return Date.parse(
-    `${part.year}-${part.month}-${part.day}T${part.hour}:${part.minute}:00Z`
-  );
-}
-
-/** When NZ's clocks read `wall` ("2026-11-20 19:50"), epoch ms. */
-export function nzTime(wall: string) {
-  const read = Date.parse(`${wall.replace(" ", "T")}:00Z`);
-  let time = read;
-
-  // Back by NZ's offset then: twice, in case daylight saving's changed
-  // between.
-  for (let i = 0; i < 2; i++) time = read - (wallClock(time) - time);
-
-  return time;
-}
 
 /** The North Island's load now; null if the page's table hasn't got it. */
 export async function fetchIslandLoad(): Promise<Reading | null> {

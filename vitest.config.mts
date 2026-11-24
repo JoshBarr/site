@@ -7,7 +7,7 @@ import { defineConfig } from "vitest/config";
  * there as here, against MSW, and each stubs what it needs.
  */
 const DEPLOYED =
-  /^(NEXT_PUBLIC_|LIVE_|AWS_|METLINK_|METSERVICE_|OPENWATERS_|UPSTASH_|KV_|VERCEL_OIDC)/;
+  /^(NEXT_PUBLIC_|LIVE_|AWS_|METLINK_|METSERVICE_|OPENWATERS_|EVENTFINDA_|SPORTSDB_|UPSTASH_|KV_|VERCEL_OIDC)/;
 
 for (const name of Object.keys(process.env)) {
   if (DEPLOYED.test(name)) delete process.env[name];

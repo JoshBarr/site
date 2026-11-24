@@ -6,7 +6,6 @@ import {
   fetchIslandLoad,
   fetchSites,
   type GridFlow,
-  nzTime,
 } from "../../src/lib/gridFlow";
 import { ago } from "../clock";
 import {
@@ -65,18 +64,6 @@ describe("the HVDC link's transfer", () => {
     await expect(fetchHvdc()).rejects.toThrow(
       "transpower hvdc: unexpected response"
     );
-  });
-});
-
-describe("NZ's wall clock", () => {
-  it("is thirteen hours ahead in summer, twelve in winter", () => {
-    expect(nzTime("2026-11-20 19:50")).toBe(Date.parse("2026-11-20T06:50Z"));
-    expect(nzTime("2026-06-20 19:50")).toBe(Date.parse("2026-06-20T07:50Z"));
-  });
-
-  it("changes over at 2 am, the last Sunday of September", () => {
-    expect(nzTime("2026-09-27 01:55")).toBe(Date.parse("2026-09-26T13:55Z"));
-    expect(nzTime("2026-09-27 03:05")).toBe(Date.parse("2026-09-26T14:05Z"));
   });
 });
 

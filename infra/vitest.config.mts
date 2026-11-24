@@ -16,6 +16,8 @@ export default defineConfig({
       METLINK_API_KEY: "metlink-key",
       METSERVICE_API_KEY: "metservice-key",
       OPENWATERS_TOKEN: "",
+      EVENTFINDA_USERNAME: "josh",
+      EVENTFINDA_PASSWORD: "secret",
     },
   },
 });

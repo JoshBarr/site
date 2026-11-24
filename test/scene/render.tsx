@@ -83,6 +83,30 @@ function serve(aircraft: Aircraft[], trains: Train[]) {
         messages: { 385: "J'VILLE [jl4]12[nl]WGTN CBD [jl4]19" },
       })
     ),
+    // A game at the stadium and a show at the Michael Fowler Centre, on now.
+    http.get(`${ORIGIN}/api/events`, () =>
+      HttpResponse.json({
+        fetched: Date.now(),
+        events: [
+          {
+            venue: "stadium",
+            name: "Wellington Phoenix vs Adelaide United",
+            kind: "football",
+            start: Date.now() - 3_600_000,
+            end: Date.now() + 3_600_000,
+            guessedEnd: true,
+          },
+          {
+            venue: "michaelFowler",
+            name: "NZSO Messiah",
+            kind: "classical",
+            start: Date.now() - 1_800_000,
+            end: Date.now() + 5_400_000,
+            guessedEnd: false,
+          },
+        ],
+      })
+    ),
     http.get(`${ORIGIN}/*`, async ({ request }) => {
       const path = decodeURIComponent(new URL(request.url).pathname);
 

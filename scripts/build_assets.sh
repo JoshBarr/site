@@ -32,6 +32,8 @@
 #              highways' lanes and the railway, so it reads the trains
 #              step's network.json: when that changes, run this again)
 #   heroes     src/components/scene/buildings/heroes.ts: floodlit landmarks (OSM)
+#   venues     src/components/scene/events/venues.ts: venues lit for what's on
+#              in them (OSM, and the DEM)
 #   airport    public/airport + src/components/scene/airport/airfield.ts
 #   landmarks  src/components/scene/landmarks/sites.ts
 #   port       src/components/scene/port/terminal.ts
@@ -61,7 +63,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-ALL=(terrain traffic trees landcover farland wind-stations wind footprints cablecar buildings heroes airport landmarks port playground power signs tunnels buses trains stars)
+ALL=(terrain traffic trees landcover farland wind-stations wind footprints cablecar buildings heroes venues airport landmarks port playground power signs tunnels buses trains stars)
 VENV=.venv-terrain
 PY="$VENV/bin/python"
 
@@ -103,15 +105,16 @@ wants terrain && run terrain "$PY" -I scripts/terrain/build_tiles.py
 wants traffic && run traffic node scripts/traffic/build_roads.mjs
 wants traffic && run decks "$PY" -I scripts/traffic/build_decks.py
 wants trees && run trees "$PY" -I scripts/trees/build_trees.py
+wants trees && run scrub "$PY" -I scripts/trees/build_trees.py scrub
 wants landcover && run landcover "$PY" -I scripts/terrain/build_tiles.py landcover
 wants farland && run farland "$PY" -I scripts/farland/build_farland.py
 wants wind-stations && run wind-stations "$PY" -I scripts/wind/build_stations.py
 wants wind && run wind "$PY" -I scripts/wind/build_wind.py
-wants trees && run scrub "$PY" -I scripts/trees/build_trees.py scrub
 wants footprints && run footprints "$PY" -I scripts/buildings/build_footprints.py
 wants cablecar && run cablecar node scripts/trains/build_cablecar.mjs
 wants buildings && run buildings node scripts/buildings/build_tiles.mjs
 wants heroes && run heroes node scripts/buildings/build_heroes.mjs
+wants venues && run venues node scripts/events/build_venues.mjs
 wants airport && run airport node scripts/airport/build_airfield.mjs
 wants landmarks && run landmarks node scripts/landmarks/build_sites.mjs
 wants port && run port node scripts/port/build_port.mjs

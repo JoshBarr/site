@@ -1,18 +1,22 @@
 import * as AWS from "@alchemy.run/aws";
+import * as Config from "effect/Config";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import { Live } from "../live";
 import { logMemory } from "../poller/memory";
 import { LiveTable } from "../poller/table";
 import { updateCableCar } from "./cablecar";
+import { updateEvents } from "./events";
 import { updateSatellites } from "./satellites";
 
 // Keeps the timetables the scene runs to in the live table, each morning:
 // the cable car's, checking Metlink's GTFS feed for a new one (they're
 // published in the small hours of the day they start, the last at 4:05 am,
 // and until it's read the scene runs the cars to the old one's same day of
-// the week); and the visual satellites' orbits, from CelesTrak. Its own
+// the week); the visual satellites' orbits, from CelesTrak; and what's on at
+// the big venues, from Eventfinda and TheSportsDB. Its own
 // function, not one of the poller's feeds: reading the feed's stop times
 // takes ~15 MB, and the poller runs within a few MB of its 160.
 
@@ -32,6 +36,10 @@ export default class Timetables extends AWS.Lambda.Function<Timetables>()(
     logging: { retention: "1 day" },
   },
   Effect.gen(function* () {
+    // From the env file at deploy, into the function's environment.
+    const eventfindaUser = yield* Config.Redacted("EVENTFINDA_USERNAME");
+    const eventfindaPassword = yield* Config.Redacted("EVENTFINDA_PASSWORD");
+
     const table = yield* Live;
 
     const live = LiveTable.of({
@@ -54,21 +62,39 @@ export default class Timetables extends AWS.Lambda.Function<Timetables>()(
           },
         },
       },
-      // One after the other (the cable car's read nearly fills the
-      // function), each on its own: one failing leaves the other.
+      // The cable car's then the satellites', one after the other (the
+      // cable car's read nearly fills the function), each on its own: one
+      // failing leaves the other. The events alongside: a few small pages,
+      // mostly waiting out TheSportsDB's rate limit.
       () =>
         Effect.all(
           [
-            updateCableCar.pipe(
-              Effect.catchCause((cause) => Effect.logError("[cablecar]", cause))
+            Effect.all(
+              [
+                updateCableCar.pipe(
+                  Effect.catchCause((cause) =>
+                    Effect.logError("[cablecar]", cause)
+                  )
+                ),
+                updateSatellites.pipe(
+                  Effect.catchCause((cause) =>
+                    Effect.logError("[satellites]", cause)
+                  )
+                ),
+              ],
+              { discard: true }
             ),
-            updateSatellites.pipe(
-              Effect.catchCause((cause) =>
-                Effect.logError("[satellites]", cause)
-              )
+            Effect.sync(() => {
+              // src/lib looks for its keys in process.env.
+              process.env.EVENTFINDA_USERNAME = Redacted.value(eventfindaUser);
+              process.env.EVENTFINDA_PASSWORD =
+                Redacted.value(eventfindaPassword);
+            }).pipe(
+              Effect.andThen(updateEvents),
+              Effect.catchCause((cause) => Effect.logError("[events]", cause))
             ),
           ],
-          { discard: true }
+          { discard: true, concurrency: 2 }
         ).pipe(
           Effect.andThen(logMemory),
           Effect.provideService(LiveTable, live)

@@ -74,7 +74,7 @@ function segmentDistance(
 }
 
 /** Within `grow` of the polygon `ring`, or inside it. */
-function covers(ring: number[][], x: number, y: number, grow: number) {
+export function covers(ring: number[][], x: number, y: number, grow: number) {
   let inside = false;
 
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {

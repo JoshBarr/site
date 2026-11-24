@@ -209,6 +209,13 @@ export const LIVE_CREDITS: Credit[] = [
     who: [{ name: "CelesTrak", href: "https://celestrak.org" }],
   },
   {
+    what: "what's on at the venues",
+    who: [
+      { name: "Eventfinda", href: "https://www.eventfinda.co.nz" },
+      { name: "TheSportsDB", href: "https://www.thesportsdb.com" },
+    ],
+  },
+  {
     what: "public holidays",
     who: [{ name: "Nager.Date", href: "https://date.nager.at" }],
   },

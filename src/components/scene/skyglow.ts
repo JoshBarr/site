@@ -3,6 +3,7 @@ import {
   LinearFilter,
   RedFormat,
   UnsignedByteType,
+  Vector3,
 } from "three/webgpu";
 import {
   exp,
@@ -144,15 +145,30 @@ function blur(grid: Float32Array, cells: number, sigma: number) {
   return pass(pass(grid, true), false);
 }
 
+/**
+ * A ground under its floodlights (events/Stadium.tsx): world x and z, and
+ * how bright against the city at its brightest, with every window lit.
+ */
+export const floodlitGround = uniform(new Vector3());
+
+/** Its light lands this far around it (Gaussian sigma), m. */
+const FLOODLIT_SPREAD = 250;
+
 /** The city's light reaching world point p from below, per m², linear. */
 function cityLight(p) {
   const uv = p.xz.div(mapSize).add(0.5);
+  const fromGround = p.xz.sub(floodlitGround.xy);
+
+  const floodlit = floodlitGround.z.mul(
+    exp(fromGround.dot(fromGround).div(-2 * FLOODLIT_SPREAD * FLOODLIT_SPREAD))
+  );
 
   return COLOUR.mul(
     mapNode
       .sample(uv)
-      .r.mul(mapPeak)
-      .mul(windowsLit)
+      .r.mul(windowsLit)
+      .add(floodlit)
+      .mul(mapPeak)
       .mul(windowLights)
       .mul(WINDOW_GLOW * WINDOW_BRIGHTNESS)
       .mul(exp(max(p.y, 0).div(-REACH)))

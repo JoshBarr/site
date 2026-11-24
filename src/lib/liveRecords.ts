@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Bus } from "./buses";
 import type { CableCarTrip, Timetable } from "./cablecar";
 import type { CloudMap } from "./cloudMap";
+import { venueEvent } from "./events";
 import type { Fix, RouteEnd } from "./flights";
 import type { Sighting } from "./flightStore";
 import type { CloudLayer, Observation } from "./metar";
@@ -467,5 +468,15 @@ export const timeline = collection("timeline", 1, {
 export const satellites = collection("satellites", 1, {
   sk: time,
   data: z.object({ orbits: z.array(orbit) }),
+  ttl: 35 * DAY,
+});
+
+/**
+ * What's on at the big venues (./events.ts), as it was fetched each day: a
+ * replay lights them as they were listed then.
+ */
+export const events = collection("events", 1, {
+  sk: time,
+  data: z.object({ events: z.array(venueEvent) }),
   ttl: 35 * DAY,
 });
