@@ -112,6 +112,9 @@ export function loadSeaWind() {
  */
 const whitecapped = (speed) => pow(speed, 3.41).mul(3.84e-6).min(0.15);
 
+/** The share of the open sea that's whitecapped, in the wind that's over it. */
+export const openWhitecaps = () => whitecapped(openWind.length());
+
 /**
  * How built-up the sea is at world `xz` against the open sea's, for the
  * 89 m and 13 m cascades: (local wind / open wind)² for how hard it blows,

@@ -18,7 +18,6 @@ import {
   WebGPURenderer,
 } from "three/webgpu";
 import {
-  abs,
   cameraPosition,
   dot,
   float,
@@ -32,6 +31,7 @@ import {
 import {
   clearAround,
   clearRadius,
+  edgeFade,
   hazeColor,
   hazeDensity,
   hazeDensityForVisibility,
@@ -175,7 +175,8 @@ const startAltitude = (deck: number | null) => ceilingFor(deck, START_ALTITUDE);
 /**
  * Haze over everything (fog on every material, and the sky), plus a fade
  * toward the edges of the terrain root so the map dissolves instead of ending.
- * At night the city lights it from below.
+ * At night the city lights it from below. The sea has its own (./ocean): it
+ * doesn't end there.
  */
 function Atmosphere({
   rootSize,
@@ -191,9 +192,6 @@ function Atmosphere({
   }, [conditions.visibility]);
 
   useEffect(() => {
-    const half = rootSize / 2;
-    const edge = max(abs(positionWorld.x), abs(positionWorld.z));
-    const edgeFade = smoothstep(half * 0.6, half * 0.95, edge);
     const haze = float(1).sub(hazeTransmittance(cameraPosition, positionWorld));
 
     // The sky model's glow is smooth across any triangle: by the vertex.
@@ -203,7 +201,9 @@ function Atmosphere({
 
     scene.fogNode = fog(
       fogColor,
-      max(haze, edgeFade).mul(outsideClearing(positionWorld))
+      max(haze, edgeFade(positionWorld.xz, rootSize)).mul(
+        outsideClearing(positionWorld)
+      )
     );
 
     // The sky (./sky/backdrop.ts), with a small disc toward the sun, and the

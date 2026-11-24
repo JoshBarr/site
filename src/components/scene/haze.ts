@@ -9,6 +9,7 @@ import {
   normalize,
   pow,
   select,
+  smoothstep,
   uniform,
 } from "three/tsl";
 import {
@@ -75,6 +76,17 @@ function hazeDepth(from, to) {
     .mul(length)
     .mul(exp(h0.negate().div(hazeHeight)))
     .mul(ratio);
+}
+
+/**
+ * How far gone the map is at world `xz`, toward the edges of the terrain's
+ * root, `rootSize` m a side: 0 well inside it, 1 by its edge, where the
+ * land's dissolved in the haze instead of ending.
+ */
+export function edgeFade(xz, rootSize: number) {
+  const half = rootSize / 2;
+
+  return smoothstep(half * 0.6, half * 0.95, max(abs(xz.x), abs(xz.y)));
 }
 
 /** Fraction of light from `to` that reaches `from` through the haze. */

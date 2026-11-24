@@ -13,6 +13,7 @@ import {
   WebGPURenderer,
 } from "three/webgpu";
 import {
+  abs,
   cameraFar,
   cameraNear,
   cameraPosition,
@@ -58,8 +59,17 @@ import {
   sunIntensity,
   sunShadow,
 } from "../environment";
+import { COAST_URL, openSea } from "../farland/coast";
+import { clearTo, earthDrop } from "../farland/air";
+import {
+  edgeFade,
+  hazeColor,
+  hazeTransmittance,
+  outsideClearing,
+} from "../haze";
 import { OceanSimulation } from "./OceanSimulation";
 import { quakeGlow } from "../quakes/glow";
+import { hazeGlowAtNight } from "../skyglow";
 import {
   createCascades,
   DEFAULT_CONDITIONS,
@@ -67,7 +77,7 @@ import {
 } from "./spectrum";
 import { useRenderer } from "../renderer";
 import { switchedOff } from "../stats";
-import { loadSeaWind, openWind, seaWindiness } from "./seaWind";
+import { loadSeaWind, openWhitecaps, openWind, seaWindiness } from "./seaWind";
 import { readDepths, seaStanding, setIncoming } from "./shelterMap";
 import { windVector } from "../weather";
 
@@ -99,7 +109,33 @@ export const OCEAN_MOBILE: OceanQuality = {
 };
 
 const CASCADE_SIZES = [503, 89, 13];
+
+/**
+ * The sea's drawn this far from the camera, m: to RADIUS in rings fine
+ * enough for its waves, and on to FAR_RADIUS, past the terrain's root and
+ * out around the South Island (../farland) to the horizon, in rings each
+ * FAR_STEP of its radius wider than the last. Out there it's a flat sheet
+ * (no wave's drawn past a few kilometres), bent over the Earth's curve.
+ * Inside the camera's far plane.
+ */
 const RADIUS = 45000;
+const FAR_RADIUS = 240000;
+const FAR_STEP = 0.08;
+
+/** How much of the mirror the sea shows, and the far sea, past the map. */
+const MIRROR = 0.5;
+const FAR_MIRROR = 0.3;
+
+/** The last of it fades out over this share of FAR_RADIUS, so it has no rim. */
+const RIM = 0.25;
+
+/**
+ * Past the root there's no depth map, nor shelter or wind maps: it's open
+ * sea, this deep, m. Eased to over the last of the root, this share of its
+ * half-width.
+ */
+const DEEP = 300;
+const OPEN_OVER = 0.1;
 
 /** How tight the sun's glint is off smooth water: the exponent of its lobe. */
 const GLINT = 900;
@@ -112,9 +148,14 @@ function createSurfaceGeometry(segments: number) {
   const radii = [0];
   const minStep = 1.5;
 
-  while (radii[radii.length - 1] < RADIUS) {
+  while (radii[radii.length - 1] < FAR_RADIUS) {
     const r = radii[radii.length - 1];
-    radii.push(r + Math.max(minStep, (r * 2 * Math.PI) / segments));
+
+    radii.push(
+      r < RADIUS
+        ? r + Math.max(minStep, (r * 2 * Math.PI) / segments)
+        : Math.min(r * (1 + FAR_STEP), FAR_RADIUS)
+    );
   }
 
   const positions = [0, 0, 0];
@@ -271,6 +312,7 @@ function roughMirror(mirror: ReturnType<typeof reflector>, slope, rough, view) {
 function createMaterial(
   simulation: OceanSimulation | null,
   water: Texture,
+  coast: Texture,
   index: TileIndex,
   quality: OceanQuality
 ) {
@@ -287,10 +329,18 @@ function createMaterial(
   const world = positionGeometry.xz.add(cameraPosition.xz);
   const distance = positionGeometry.xz.length();
 
+  // 0 in the root, 1 past it: the open sea.
+  const openAt = (xz) =>
+    smoothstep(
+      (rootSize / 2) * (1 - OPEN_OVER),
+      rootSize / 2,
+      max(abs(xz.x), abs(xz.y))
+    );
+
   const depthAt = (xz) => {
     const v = texture(water, xz.div(rootSize).add(0.5)).r;
 
-    return (sqrtEncoded ? v.mul(v) : v).mul(maxDepth);
+    return mix((sqrtEncoded ? v.mul(v) : v).mul(maxDepth), DEEP, openAt(xz));
   };
 
   // Waves shoal and die in shallow water.
@@ -305,17 +355,25 @@ function createMaterial(
 
   const windy = gusting ? seaWindiness(world, rootSize) : null;
 
+  const open = openAt(world);
+
   // (open sea, 89 m cascade, 13 m cascade, share whitecapped)
   const local: any = varying(
-    vec4(
-      sheltering ? seaStanding(world, rootSize) : float(1),
-      windy ? windy.built : vec2(1),
-      windy ? windy.whitecaps : float(0)
+    mix(
+      vec4(
+        sheltering ? seaStanding(world, rootSize) : float(1),
+        windy ? windy.built : vec2(1),
+        windy ? windy.whitecaps : float(0)
+      ),
+      vec4(1, 1, 1, windy ? openWhitecaps() : float(0)),
+      open
     )
   );
 
   // The wind here, m/s.
-  const breeze: any = varying(windy ? windy.speed : openWind.length());
+  const breeze: any = varying(
+    windy ? mix(windy.speed, openWind.length(), open) : openWind.length()
+  );
 
   const builtUp = (c: number) =>
     c === 0 ? local.x : c === 1 ? local.y : local.z;
@@ -343,8 +401,27 @@ function createMaterial(
   const heave: any = varying(displacement.y);
 
   const material = new MeshBasicNodeMaterial({ transparent: true });
-  material.positionNode = vec3(world.x, seaLevel, world.y).add(
-    displacement.mul(shoaling)
+
+  // Its own haze, below: the scene's fog fades everything out at the
+  // terrain's edge, which the sea runs on past.
+  material.fog = false;
+
+  // Past the root it's over the Earth's curve, as the far land is.
+  material.positionNode = vec3(
+    world.x,
+    seaLevel.sub(earthDrop(world, rootSize)),
+    world.y
+  ).add(displacement.mul(shoaling));
+
+  // How much of the far sea shows, by the far land's air (where it is on a
+  // flat Earth), and none of it by the mesh's rim. All of what that air
+  // lets through: the land's held to a faint shape, however clear the day,
+  // and seen from high up that's the grey of the sea round it. The sea's
+  // left the darker, as it is by the nearer land.
+  const far: any = varying(
+    clearTo(vec3(world.x, seaLevel, world.y)).mul(
+      smoothstep(FAR_RADIUS, FAR_RADIUS * (1 - RIM), distance)
+    )
   );
 
   // Fragment: positionGeometry is interpolated, so this is the undisplaced
@@ -352,6 +429,9 @@ function createMaterial(
   const surface = positionGeometry.xz.add(cameraPosition.xz);
   const depth = depthAt(surface);
   const shallow = smoothstep(0.3, 10, depth);
+
+  // How far gone the map is here, toward the root's edge and past it.
+  const gone = edgeFade(surface, rootSize);
 
   // Metres of sea a pixel spans, the long way.
   const footprint = max(dFdx(surface).length(), dFdy(surface).length());
@@ -522,22 +602,61 @@ function createMaterial(
     .sub(linearDepth())
     .mul(cameraFar.sub(cameraNear));
 
-  // A continuous band that swells and recedes with the waves.
+  // A continuous band that swells and recedes with the waves. Not past
+  // the map: there's only the far land's coast behind the water there, too
+  // far off for the depth to tell how much water's over it.
   const shoreFoam = float(1)
     .sub(smoothstep(0, 1.2, thickness))
-    .mul(mix(0.45, 1, smoothstep(-0.3, 0.6, heave.add(slope.x.mul(2)))));
+    .mul(mix(0.45, 1, smoothstep(-0.3, 0.6, heave.add(slope.x.mul(2)))))
+    .mul(float(1).sub(gone));
 
   const foam = max(whitecaps, shoreFoam.mul(0.8));
 
   // Held back a little: a full-strength mirror reads as glass, not sea.
+  // And past the map more: seen from a height it's the horizon's haze the
+  // far sea mirrors, which is about the far land's grey, and the land was
+  // lost in it. This keeps the sea the darker of the two, as it is by the
+  // nearer land.
   const reflection = sky.mul(mix(0.85, 1, lit));
-  const color = mix(scatter, reflection, fresnel.mul(0.5)).add(glint);
-  material.colorNode = mix(color, vec3(irradiance.mul(0.5)), foam).add(
+
+  const color = mix(
+    scatter,
+    reflection,
+    fresnel.mul(mix(MIRROR, FAR_MIRROR, gone))
+  ).add(glint);
+
+  const sea = mix(color, vec3(irradiance.mul(0.5)), foam).add(
     quakeGlow(surface)
   );
+
+  // The haze, as the scene's fog has it on everything else (see Atmosphere
+  // in ../WellingtonScene.tsx), but where that fades the map out toward
+  // the root's edge, the sea goes over to the far land's thinner air and
+  // carries on to it: all but toward the land out there that nothing
+  // draws, where it's lost in the haze as before.
+  const seen = mix(
+    hazeTransmittance(cameraPosition, positionWorld),
+    far.mul(openSea(coast, surface)),
+    gone
+  );
+
+  const hazed = hazeColor(positionWorld.sub(cameraPosition), varying).add(
+    hazeGlowAtNight(cameraPosition, positionWorld)
+  );
+
+  material.colorNode = mix(
+    sea,
+    hazed,
+    float(1).sub(seen).mul(outsideClearing(positionWorld))
+  );
+
   // See the sea floor through the shallows.
   // Slightly clear: the floor shows through the first few metres.
-  material.opacityNode = max(float(1).sub(exp(thickness.mul(-0.25))), foam);
+  material.opacityNode = mix(
+    max(float(1).sub(exp(thickness.mul(-0.25))), foam),
+    1,
+    gone
+  );
 
   return { material, mirror };
 }
@@ -562,13 +681,16 @@ export function Ocean({
   const camera = useThree((state) => state.camera);
   const supported = isWebGPU(renderer);
   const water = useLoader(TextureLoader, `${TERRAIN_URL}/water.png`);
+  const coast = useLoader(TextureLoader, COAST_URL);
 
   const { simulation, mesh, mirror } = useMemo(() => {
-    water.colorSpace = NoColorSpace;
-    // Row 0 is the northern edge, matching world -z.
-    water.flipY = false;
-    water.minFilter = water.magFilter = LinearFilter;
-    water.generateMipmaps = false;
+    for (const map of [water, coast]) {
+      map.colorSpace = NoColorSpace;
+      // Row 0 is the northern edge, matching world -z.
+      map.flipY = false;
+      map.minFilter = map.magFilter = LinearFilter;
+      map.generateMipmaps = false;
+    }
 
     // The simulation needs compute shaders writing storage textures, which
     // the WebGL 2 fallback can't do.
@@ -579,6 +701,7 @@ export function Ocean({
     const { material, mirror } = createMaterial(
       simulation,
       water,
+      coast,
       index,
       quality
     );
@@ -590,7 +713,7 @@ export function Ocean({
     mesh.renderOrder = 1;
 
     return { simulation, mesh, mirror };
-  }, [index, quality, water, supported, camera]);
+  }, [index, quality, water, coast, supported, camera]);
 
   useEffect(() => {
     const { maxDepth = 30, encoding } = index.manifest.water ?? {};

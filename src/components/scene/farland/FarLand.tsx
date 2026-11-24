@@ -8,7 +8,6 @@ import {
 import {
   cameraPosition,
   dot,
-  exp,
   max,
   min,
   mix,
@@ -16,7 +15,6 @@ import {
   normalize,
   positionGeometry,
   positionWorld,
-  pow,
   smoothstep,
   step,
   uniform,
@@ -29,42 +27,19 @@ import {
   sunDirection,
   sunIntensity,
 } from "../environment";
-import { hazeTransmittance } from "../haze";
 import { track } from "../loading";
 import { skyAlong } from "../sky/backdrop";
 import type { TileIndex } from "../terrain/manifest";
 import { verticalScale } from "../terrain/Terrain";
+import { clearTo, earthDrop } from "./air";
 import { type FarLandMesh, loadFarLand } from "./mesh";
 
 // The South Island on the horizon: the Marlborough Sounds across Cook
 // Strait, 30 to 60 km off, and behind them the Richmond and Kaikōura ranges,
 // out to 190 km. One coarse mesh (see ./mesh.ts), far past the terrain's
-// edge, where it's always seen through a lot of air: a grey shape a little
-// darker than the sky, its tops clearer than its feet, gone in bad weather.
-
-/** The Earth's radius, m, and how much of its curve refraction undoes. */
-const EARTH_RADIUS = 6371000;
-const REFRACTION = 0.13;
-
-/** What the land sinks by, m, for the square of its distance, m². */
-const CURVE = (1 - REFRACTION) / (2 * EARTH_RADIUS);
-
-/**
- * Of the haze's optical depth between the camera and the land, how much
- * counts. The scene's haze is thick, to give 60 km of ground some depth:
- * through all of it nothing 50 km off would show, on any day. Out over the
- * strait it's taken to be this much thinner.
- */
-const THINNER = 0.25;
-
-/**
- * And the air itself, haze or none, lets 1/e through for each this far, m:
- * about what clean air scatters between here and the ranges' tops, which
- * stand above the haze. Together, on a day you can see 30 km across the
- * harbour, the Sounds show at about a fifth of their contrast and the
- * Kaikōuras' tops likewise, their feet less; at 10 km none of it does.
- */
-const AIR = 150000;
+// edge, where it's always seen through a lot of air (./air.ts): a grey shape
+// a little darker than the sky, its tops clearer than its feet, gone in bad
+// weather. The sea (../ocean) runs on out around it.
 
 /** However clear the air or high the camera, it shows no more than this. */
 const MOST = 0.6;
@@ -105,7 +80,7 @@ export function snowlineAt(time: Date) {
 
 const snowline = uniform(SNOW_HIGH);
 
-function createMaterial() {
+function createMaterial(rootSize: number) {
   const material = new MeshBasicNodeMaterial();
 
   // Its own haze, below: the scene's fog fades everything out at the
@@ -116,26 +91,19 @@ function createMaterial() {
   const height = positionGeometry.y;
 
   // Stood on the scene's flat sea, it sinks with distance as the Earth
-  // curves away from wherever the camera is: the far ranges are hull down,
-  // more so from the shore than from the hills.
-  const away = positionGeometry.xz.sub(cameraPosition.xz);
+  // curves away, and its sea with it.
   const lifted = height.mul(verticalScale);
 
   material.positionNode = vec3(
     positionGeometry.x,
-    lifted.sub(dot(away, away).mul(CURVE)),
+    lifted.sub(earthDrop(positionGeometry.xz, rootSize)),
     positionGeometry.z
   );
 
-  // Through the haze to where it really is, not where it's drawn: the air
-  // curves with the Earth.
-  const at = vec3(positionGeometry.x, lifted, positionGeometry.z);
-
-  const clear = pow(hazeTransmittance(cameraPosition, at), THINNER).mul(
-    exp(at.distance(cameraPosition).div(-AIR))
+  // Through the haze to where it really is, not where it's drawn.
+  const shows = varying(
+    min(clearTo(vec3(positionGeometry.x, lifted, positionGeometry.z)), MOST)
   );
-
-  const shows = varying(min(clear, MOST));
 
   // Lit as the terrain is, near enough: the sun on the slopes facing it,
   // the sky on them all. Less the fill the night's skylight has for the eye
@@ -170,14 +138,14 @@ function createMaterial() {
   return material;
 }
 
-function createMesh({ positions, indices }: FarLandMesh) {
+function createMesh({ positions, indices }: FarLandMesh, rootSize: number) {
   const geometry = new BufferGeometry();
 
   geometry.setAttribute("position", new BufferAttribute(positions, 3));
   geometry.setIndex(new BufferAttribute(indices, 1));
   geometry.computeVertexNormals();
 
-  const mesh = new Mesh(geometry, createMaterial());
+  const mesh = new Mesh(geometry, createMaterial(rootSize));
 
   // The shader moves it: its bounds aren't where it's drawn.
   mesh.frustumCulled = false;
@@ -203,7 +171,10 @@ export function FarLand({ index, time }: { index: TileIndex; time: Date }) {
     };
   }, [index]);
 
-  const mesh = useMemo(() => land && createMesh(land), [land]);
+  const mesh = useMemo(
+    () => land && createMesh(land, index.manifest.rootSize),
+    [land, index]
+  );
 
   useEffect(
     () => () => {

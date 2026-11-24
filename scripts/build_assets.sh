@@ -18,7 +18,9 @@
 #              reads roads.json and the trains step's network.json)
 #   landcover  public/terrain/landcover.png, with the trees' canopy folded in
 #   farland    public/farland/land.bin: the South Island on the horizon, a
-#              coarse mesh of NIWA's grid
+#              coarse mesh of NIWA's grid, and coast.png: how far to the
+#              land past the root that nothing draws, which the far sea
+#              fades out short of
 #   wind-stations public/wind/stations.json: GWRC's wind stations against
 #              the wind at sea (Hilltop, Open-Meteo); tune_wind.py fits the
 #              field to it

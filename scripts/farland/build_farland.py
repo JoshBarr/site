@@ -5,6 +5,13 @@ mesh, for the scene's horizon. From Wellington the Marlborough Sounds are
 well past the terrain's root: this is what stands there, seen through the
 haze.
 
+And public/farland/coast.png: how far it is to the land past the terrain's
+root that nothing draws (the North Island north and east of it, the South
+Island past the mesh), for the sea, which runs on out around the South
+Island, to fade into the haze short of. COAST_SIZE pixels a side,
+COAST_CELL each, centred on the scene's origin, row 0 the northernmost: 0
+on such land, 255 at COAST_REACH from it or further.
+
 Source: NIWA's NZ 250m bathymetry grid (nzbathy_2016.tif, CC BY 3.0 NZ),
 whose land is at the same 250 m. BATHYMETRY must point at it, as for the
 terrain build.
@@ -34,18 +41,23 @@ from pathlib import Path
 
 import numpy as np
 import rasterio
+from PIL import Image
 from rasterio.crs import CRS
 from rasterio.enums import Resampling
 from rasterio.transform import from_origin
 from rasterio.warp import reproject
+from scipy import ndimage
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 OUT = ROOT_DIR / "public" / "farland" / "land.bin"
+COAST = ROOT_DIR / "public" / "farland" / "coast.png"
 
 BATHYMETRY = os.environ.get("BATHYMETRY")
 
-# The scene's origin (see scripts/terrain/build_tiles.py).
+# The scene's origin, and its root's side, m (see
+# scripts/terrain/build_tiles.py).
 ORIGIN = (1748000.0, 5428000.0)
+ROOT = 65536.0
 
 # The grid: SIZE samples a side (2^k + 1, for the triangulation), CELL apart,
 # its north-east corner at (EAST, NORTH). East of EAST is the North Island.
@@ -64,6 +76,14 @@ TAPER = 20000.0
 # Height given to the sea, m: the coast is where a triangle crosses 0.
 SEA = -60.0
 
+# The undrawn land's map (mirrored in src/components/scene/farland/coast.ts):
+# out past where the scene's sea ends, and the distance to that land its
+# white is, m. Worked out at COAST_FINER times the resolution.
+COAST_SIZE = 256
+COAST_CELL = 2000.0
+COAST_FINER = 4
+COAST_REACH = 20000.0
+
 # The mesh is within this angle of the grid, rad, seen from as near as the
 # camera gets: the scene's edge is REACH from its origin, and nothing counts
 # as nearer than NEAREST.
@@ -72,17 +92,20 @@ REACH = 20000.0
 NEAREST = 15000.0
 
 
-def read_heights():
-    """The grid's heights, m, row 0 the northernmost, sea and all."""
+def read_heights(west=WEST, north=NORTH, size=SIZE, cell=CELL):
+    """
+    NIWA's heights, m, sea and all: `size` samples a side, `cell` apart,
+    from (west, north), row 0 the northernmost.
+    """
     if not BATHYMETRY:
         sys.exit("set BATHYMETRY to NIWA's NZ bathymetry grid (nzbathy_2016.tif)")
-    out = np.full((SIZE, SIZE), np.nan, dtype=np.float32)
+    out = np.full((size, size), np.nan, dtype=np.float32)
     with rasterio.open(os.path.expanduser(BATHYMETRY)) as src:
         reproject(
             source=rasterio.band(src, 1),
             destination=out,
             # Samples are pixel centres: the pixels reach half a cell past.
-            dst_transform=from_origin(WEST - CELL / 2, NORTH + CELL / 2, CELL, CELL),
+            dst_transform=from_origin(west - cell / 2, north + cell / 2, cell, cell),
             dst_crs=CRS.from_epsg(2193),
             src_nodata=src.nodata,
             dst_nodata=np.nan,
@@ -168,6 +191,47 @@ def triangulate(needed):
     return np.concatenate(found)
 
 
+def write_coast():
+    """coast.png: how far to the land that neither the root nor the mesh draws."""
+    size = COAST_SIZE * COAST_FINER
+    cell = COAST_CELL / COAST_FINER
+    half = COAST_SIZE * COAST_CELL / 2
+
+    # Samples at the middles of the finer cells.
+    west = ORIGIN[0] - half + cell / 2
+    north = ORIGIN[1] + half - cell / 2
+    land = read_heights(west, north, size, cell) > 0
+
+    east = (west + np.arange(size) * cell)[None, :]
+    north = (north - np.arange(size) * cell)[:, None]
+    away = (east - ORIGIN[0], north - ORIGIN[1])
+
+    # The root draws its own, and the mesh the South Island's: all of it in
+    # its grid, out to where it's tapered away.
+    root = (np.abs(away[0]) < ROOT / 2) & (np.abs(away[1]) < ROOT / 2)
+    mesh = (
+        (east >= WEST)
+        & (east <= EAST)
+        & (north <= NORTH)
+        & (north >= NORTH - (SIZE - 1) * CELL)
+        & (np.hypot(*away) < RADIUS)
+    )
+    undrawn = land & ~root & ~mesh
+
+    away = ndimage.distance_transform_edt(~undrawn) * cell
+    near = np.clip(away / COAST_REACH, 0, 1)
+    near = near.reshape(COAST_SIZE, COAST_FINER, COAST_SIZE, COAST_FINER).mean(
+        axis=(1, 3)
+    )
+    Image.fromarray(np.round(near * 255).astype(np.uint8), "L").save(
+        COAST, optimize=True
+    )
+    print(
+        f"  coast.png {undrawn.mean():.0%} undrawn land, "
+        f"{COAST.stat().st_size / 1024:.0f} KB"
+    )
+
+
 def main():
     heights = read_heights()
     distance = distances()
@@ -214,6 +278,8 @@ def main():
         f"  {len(vertices)} vertices, {len(triangles)} triangles, "
         f"highest {height[used].max():.0f} m, {OUT.stat().st_size / 1024:.0f} KB"
     )
+
+    write_coast()
 
 
 if __name__ == "__main__":
