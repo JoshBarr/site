@@ -170,11 +170,8 @@ function createMap(): Texture {
   return map;
 }
 
-/**
- * The surface's material: its paint in greys, as the rest of the scene is,
- * or in its real colours when `colour`.
- */
-export function createSurfaceMaterial(colour: boolean) {
+/** The surface's material: its paint in greys, as the rest of the scene is. */
+export function createSurfaceMaterial() {
   const map = createMap();
 
   const material = new MeshStandardNodeMaterial({
@@ -186,7 +183,7 @@ export function createSurfaceMaterial(colour: boolean) {
   });
 
   const paint = texture(map);
-  material.colorNode = colour ? paint.rgb : vec3(luminance(paint.rgb));
+  material.colorNode = vec3(luminance(paint.rgb));
   material.opacityNode = paint.a;
   material.alphaTest = 0.5;
 

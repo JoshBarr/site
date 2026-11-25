@@ -10,15 +10,8 @@ import { EQUIPMENT, groundAt } from "./layout";
 import { ANCHOR } from "./site";
 import { createSurfaceGeometry, createSurfaceMaterial } from "./surface";
 
-/**
- * `?playground=colour` shows it in its real colours; otherwise it's in greys
- * like the rest of the scene.
- */
-function inColour() {
-  return new URLSearchParams(location.search).get("playground") === "colour";
-}
-
-function createEquipmentMaterial(colour: boolean) {
+/** The equipment's material: each part's colour as its grey, like the scene. */
+function createEquipmentMaterial() {
   const material = new MeshStandardNodeMaterial({
     roughness: 0.75,
     metalness: 0,
@@ -26,8 +19,7 @@ function createEquipmentMaterial(colour: boolean) {
     side: DoubleSide,
   });
 
-  const tint = attribute<"vec3">("tint", "vec3");
-  material.colorNode = colour ? tint : vec3(luminance(tint));
+  material.colorNode = vec3(luminance(attribute<"vec3">("tint", "vec3")));
 
   return material;
 }
@@ -38,11 +30,10 @@ function createEquipmentMaterial(colour: boolean) {
  */
 export function Playground({ index }: { index: TileIndex }) {
   const { meshes, dispose } = useMemo(() => {
-    const colour = inColour();
     const scale = verticalScale.value;
     const [x, z] = nztmToWorld(index.manifest, ...ANCHOR);
 
-    const surface = createSurfaceMaterial(colour);
+    const surface = createSurfaceMaterial();
     const ground = new Mesh(createSurfaceGeometry(scale), surface.material);
     castsNearShadow(ground);
     // A sheet on the ground: it takes shadows but has none worth casting.
@@ -50,7 +41,7 @@ export function Playground({ index }: { index: TileIndex }) {
 
     const equipment = new Mesh(
       createEquipmentGeometry(scale),
-      createEquipmentMaterial(colour)
+      createEquipmentMaterial()
     );
 
     castsNearShadow(equipment);
