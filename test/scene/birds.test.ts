@@ -148,6 +148,7 @@ describe("the flocks the summary makes", () => {
   it("are otherwise named in the plural", () => {
     expect(plural("Kelp Gull")).toBe("Kelp Gulls");
     expect(plural("Common Chaffinch")).toBe("Common Chaffinches");
+    expect(plural("Canada Goose")).toBe("Canada Geese");
     expect(plural("Grey Gerygone")).toBe("Grey Gerygones");
     expect(plural("New Zealand Kaka")).toBe("New Zealand Kakas");
     expect(plural("Australasian Darter")).toBe("Australasian Darters");

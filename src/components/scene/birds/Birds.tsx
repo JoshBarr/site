@@ -27,9 +27,8 @@ import {
   planAt,
   restingAt,
 } from "./habits";
-import { isKaka, KAKA_MOST, kakaForm } from "./kaka";
-import { isKereru, KERERU_MOST, kereruForm } from "./kereru";
 import { createBirdTrails, createFlight } from "./model";
+import { OWN, ownOf } from "./species";
 import { type PerchGrid, Perches } from "./perches";
 import { type Roofs, roofAbove, roofsOf } from "./roofs";
 import { useBirds } from "./useBirds";
@@ -153,11 +152,14 @@ export function Birds({
     [mobile]
   );
 
-  // Kererū, in a shape of their own.
-  const kereru = useMemo(() => createFlight(KERERU_MOST, kereruForm()), []);
+  // Those with shapes of their own (./species.ts), a mesh each.
+  const shaped = useMemo(
+    () => OWN.map((own) => createFlight(own.most, own.form())),
+    []
+  );
 
-  // And kākā, in theirs.
-  const kaka = useMemo(() => createFlight(KAKA_MOST, kakaForm()), []);
+  /** How many of each are drawn so far, this frame. */
+  const shapedCount = useRef(new Int32Array(OWN.length));
 
   // A segment behind each bird to each of the points of its trail.
   const trails = useMemo(
@@ -177,18 +179,12 @@ export function Birds({
 
   useEffect(
     () => () => {
-      kereru.mesh.geometry.dispose();
-      kereru.mesh.material.dispose();
+      for (const { mesh } of shaped) {
+        mesh.geometry.dispose();
+        mesh.material.dispose();
+      }
     },
-    [kereru]
-  );
-
-  useEffect(
-    () => () => {
-      kaka.mesh.geometry.dispose();
-      kaka.mesh.material.dispose();
-    },
-    [kaka]
+    [shaped]
   );
 
   /** The flocks being flown, by id. */
@@ -294,8 +290,7 @@ export function Birds({
     let room = flight.capacity;
     let effort = EFFORT;
     let drawn = 0;
-    let chonky = 0;
-    let kakas = 0;
+    const counts = shapedCount.current.fill(0);
     let laid = 0;
     const lines = trails.segments.array;
     const ages = trails.ages.array;
@@ -495,18 +490,18 @@ export function Birds({
 
       const span = habit.span * (watching && habit.hops ? LICENCE : 1);
 
-      // Kererū in their own shape, while there's room among them.
-      const own =
-        isKereru(flock.name) && chonky + sim.n <= kereru.capacity
-          ? kereru
-          : isKaka(flock.name) && kakas + sim.n <= kaka.capacity
-            ? kaka
-            : flight;
+      // In its own shape, if it has one, while there's room among them.
+      const which = ownOf(flock.name);
+
+      const fits =
+        which >= 0 && counts[which] + sim.n <= shaped[which].capacity;
+
+      const own = fits ? shaped[which] : flight;
 
       const place = own.place.array;
       const shape = own.shape.array;
       const hand = own.hand.array;
-      let filled = own === kereru ? chonky : own === kaka ? kakas : drawn;
+      let filled = fits ? counts[which] : drawn;
 
       for (let i = 0; i < sim.n; i++) {
         if (sim.settled[i] && !perched) continue;
@@ -566,8 +561,7 @@ export function Birds({
         }
       }
 
-      if (own === kereru) chonky = filled;
-      else if (own === kaka) kakas = filled;
+      if (fits) counts[which] = filled;
       else drawn = filled;
     }
 
@@ -576,11 +570,9 @@ export function Birds({
       if (!flown.has(id)) sims.current.delete(id);
     }
 
-    for (const [birds, count] of [
-      [flight, drawn],
-      [kereru, chonky],
-      [kaka, kakas],
-    ] as const) {
+    for (let k = -1; k < shaped.length; k++) {
+      const birds = k < 0 ? flight : shaped[k];
+      const count = k < 0 ? drawn : counts[k];
       birds.mesh.count = count;
       birds.mesh.visible = count > 0;
 
@@ -604,8 +596,9 @@ export function Birds({
   return (
     <>
       <primitive object={flight.mesh} name="birds" />
-      <primitive object={kereru.mesh} name="kererū" />
-      <primitive object={kaka.mesh} name="kākā" />
+      {shaped.map(({ mesh }, k) => (
+        <primitive key={OWN[k].name} object={mesh} name={OWN[k].name} />
+      ))}
       <primitive object={trails.lines} name="bird trails" />
     </>
   );

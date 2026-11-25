@@ -74,6 +74,9 @@ const MAORI = new Map(
 
 /** "Fluttering Shearwaters", "Common Chaffinches": a flock of them. */
 export function plural(name: string) {
+  // A flock of Canada Geese, not Gooses.
+  if (name.endsWith("Goose")) return `${name.slice(0, -5)}Geese`;
+
   if (/(s|x|ch|sh)$/i.test(name)) return `${name}es`;
 
   return name.endsWith("y") && !/[aeiou]y$/i.test(name)

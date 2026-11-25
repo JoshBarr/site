@@ -75,6 +75,24 @@ const WRIST = 0.25;
  */
 const SWEEP = 0.55;
 
+/**
+ * Shut, a wing's laid back along the body: an arm lower than a beat ever
+ * takes it (./stroke.ts) means that, folding from the first of these
+ * angles to the second, radians below the flat.
+ */
+const FOLDING: [number, number] = [0.95, 1.3];
+
+/**
+ * A wing shut: its length along the body from where its leading edge
+ * leaves the shoulder (z), this much of what it was; and its breadth
+ * round the flank from the top of it, this much across and down for each
+ * unit the feather's forward of its trailing edge (about z -0.08), the
+ * leading edge lowest.
+ */
+const SHUT = { front: 0.1, long: 0.62, in: 0.02, across: 0.2, top: 0.04 };
+const SHUT_DOWN = 0.35;
+const SHUT_BACK = -0.08;
+
 const BODY = 0;
 const WING = 1;
 
@@ -200,7 +218,18 @@ export function createFlight(capacity: number, form = plainForm()) {
     local.z.sub(past.mul(sin(sweep)))
   );
 
-  const swung = select(isWing, hinged, local);
+  // Shut, it lies along the flank instead: what was its length now back
+  // from the shoulder, what was its breadth wrapped down the side.
+  const breadth = local.z.sub(SHUT_BACK);
+
+  const shut = vec3(
+    side.mul(breadth.mul(SHUT.across).add(form.shoulder - SHUT.in)),
+    breadth.mul(-SHUT_DOWN).add(SHUT.top),
+    max(out.sub(form.shoulder), 0).mul(-SHUT.long).add(SHUT.front)
+  );
+
+  const folded = smoothstep(FOLDING[0], FOLDING[1], raised.negate());
+  const swung = select(isWing, mix(hinged, shut, folded), local);
 
   // Banked about its length: the left wing (+x) down for a left turn.
   const b = bank.negate();

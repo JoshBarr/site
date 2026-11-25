@@ -1,4 +1,4 @@
-import { BufferGeometry, Float32BufferAttribute } from "three/webgpu";
+import { loft, type Ring, type Vec } from "./loft";
 import type { Form } from "./model";
 
 // A kererū, the New Zealand pigeon, a wingspan of 1 across x, facing +z:
@@ -8,22 +8,14 @@ import type { Form } from "./model";
 // and toned by eye from photos, and from the field guides' sizes (51 cm
 // long, 75 cm across the wings).
 
-type Vec = [number, number, number];
-
 /** eBird's name for it. */
 const SPECIES = "New Zealand Pigeon";
 
 /** Kererū drawn at once at most: beyond these, they're drawn as other birds. */
 export const KERERU_MOST = 256;
 
-const BODY = 0;
-const WING = 1;
-
 /** Out from the middle to where the wings hinge, of the span. */
 const SHOULDER = 0.085;
-
-/** Round the body. */
-const SIDES = 12;
 
 // Its greys, 0 black to 1 white: each as bright as the feathers there are
 // in the photos.
@@ -51,14 +43,7 @@ const TAIL_TIP = 0.27;
  * greys on from it to the next: over the top, at the shoulders either
  * side of it, and from there down and under.
  */
-const RINGS: {
-  z: number;
-  y: number;
-  wide: number;
-  up: number;
-  down: number;
-  coat?: [top: number, shoulder: number, below: number];
-}[] = [
+const RINGS: Ring[] = [
   { z: 0.335, y: 0.012, wide: 0, up: 0, down: 0, coat: all(BILL_TIP) },
   { z: 0.318, y: 0.015, wide: 0.006, up: 0.006, down: 0.005, coat: all(BILL) },
   { z: 0.302, y: 0.018, wide: 0.011, up: 0.011, down: 0.01, coat: all(HEAD) },
@@ -187,148 +172,34 @@ const TAIL_END: Vec[] = [
 /** Under the tail, pale from this far along it. */
 const TAIL_BAND = 0.72;
 
-function createKereruGeometry() {
-  const positions: number[] = [];
-  const parts: number[] = [];
-  const paints: number[] = [];
-
-  /** A triangle of `part`, painted `tone`, wound to face the way `out` does. */
-  const triangle = (
-    part: number,
-    tone: number,
-    out: Vec,
-    a: Vec,
-    b: Vec,
-    c: Vec
-  ) => {
-    const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
-    const v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
-
-    const facing =
-      (u[1] * v[2] - u[2] * v[1]) * out[0] +
-      (u[2] * v[0] - u[0] * v[2]) * out[1] +
-      (u[0] * v[1] - u[1] * v[0]) * out[2];
-
-    for (const p of facing < 0 ? [a, c, b] : [a, b, c]) {
-      positions.push(p[0], p[1], p[2]);
-      parts.push(part);
-      paints.push(tone);
-    }
-  };
-
-  // The body, ring to ring: each ring's points from the top, down the
-  // right side, under, and back up the left.
-  const round = RINGS.map((ring) =>
-    Array.from({ length: SIDES }, (_, k): Vec => {
-      const angle = (k / SIDES) * Math.PI * 2;
-      const rise = Math.cos(angle);
-
-      return [
-        ring.wide * Math.sin(angle),
-        ring.y + rise * (rise > 0 ? ring.up : ring.down),
-        ring.z,
-      ];
-    })
-  );
-
-  for (let i = 0; i < RINGS.length - 1; i++) {
-    const { coat } = RINGS[i];
-
-    const middle: Vec = [
-      0,
-      (RINGS[i].y + RINGS[i + 1].y) / 2,
-      (RINGS[i].z + RINGS[i + 1].z) / 2,
-    ];
-
-    for (let k = 0; k < SIDES; k++) {
-      // The same on the left as the right: the top two faces, the next
-      // two down, and the rest.
-      const band = Math.min(k, SIDES - 1 - k, 2);
-      const tone = coat?.[band] ?? TAIL;
-      const a = round[i][k];
-      const b = round[i][(k + 1) % SIDES];
-      const c = round[i + 1][(k + 1) % SIDES];
-      const d = round[i + 1][k];
-
-      const out: Vec = [
-        (a[0] + b[0] + c[0] + d[0]) / 4 - middle[0],
-        (a[1] + b[1] + c[1] + d[1]) / 4 - middle[1],
-        (a[2] + b[2] + c[2] + d[2]) / 4 - middle[2],
-      ];
-
-      // A ring of no width is a point: one triangle to it, not two.
-      if (RINGS[i].wide > 0) triangle(BODY, tone, out, a, b, c);
-
-      if (RINGS[i + 1].wide > 0) triangle(BODY, tone, out, a, c, d);
-    }
-  }
-
-  // The wings, each a sheet seen from above and another from below.
-  const up: Vec = [0, 1, 0];
-  const down: Vec = [0, -1, 0];
-
-  for (const side of [1, -1]) {
-    const on = (p: Vec): Vec => [p[0] * side, p[1], p[2]];
-    const lead = LEADING.map(on);
-    const line = COVERT_LINE.map(on);
-    const trail = TRAILING.map(on);
-    const tip = on(WING_TIP);
-    const last = lead.length - 1;
-
-    for (const [out, coverts, flight, hand, primaries] of [
-      [up, COVERTS, SECONDARIES, HAND, PRIMARIES],
-      [down, LINING, UNDER_FLIGHT, LINING, UNDER_FLIGHT],
-    ] as const) {
-      for (let i = 0; i < last; i++) {
-        const front = i < WRIST ? coverts : hand;
-        const back = i < WRIST ? flight : primaries;
-
-        triangle(WING, front, out, lead[i], lead[i + 1], line[i + 1]);
-        triangle(WING, front, out, lead[i], line[i + 1], line[i]);
-        triangle(WING, back, out, line[i], line[i + 1], trail[i + 1]);
-        triangle(WING, back, out, line[i], trail[i + 1], trail[i]);
-      }
-
-      triangle(WING, hand, out, lead[last], tip, line[last]);
-      triangle(WING, primaries, out, line[last], tip, trail[last]);
-    }
-  }
-
-  // The tail, fanned: dark above; below, dark to a pale band at its end.
-  const along = (p: Vec): Vec => [
-    TAIL_ROOT[0] + (p[0] - TAIL_ROOT[0]) * TAIL_BAND,
-    TAIL_ROOT[1] + (p[1] - TAIL_ROOT[1]) * TAIL_BAND,
-    TAIL_ROOT[2] + (p[2] - TAIL_ROOT[2]) * TAIL_BAND,
-  ];
-
-  for (let i = 0; i < TAIL_END.length - 1; i++) {
-    const a = TAIL_END[i];
-    const b = TAIL_END[i + 1];
-
-    triangle(BODY, TAIL, up, TAIL_ROOT, a, b);
-    triangle(BODY, UNDER_TAIL, down, TAIL_ROOT, along(a), along(b));
-    triangle(BODY, TAIL_TIP, down, along(a), a, b);
-    triangle(BODY, TAIL_TIP, down, along(a), b, along(b));
-  }
-
-  const geometry = new BufferGeometry();
-  geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
-  geometry.setAttribute("part", new Float32BufferAttribute(parts, 1));
-  geometry.setAttribute("paint", new Float32BufferAttribute(paints, 1));
-  geometry.computeVertexNormals();
-
-  return geometry;
-}
-
 /** Whether a flock of `species` (eBird's English name) is kererū. */
 export const isKereru = (species: string) => species === SPECIES;
 
 /** The kererū's shape, for createFlight. */
 export function kereruForm(): Form {
-  return {
-    geometry: createKereruGeometry(),
+  return loft({
     shoulder: SHOULDER,
-    wrist: LEADING[WRIST][0],
-    painted: true,
-  };
+    rings: RINGS,
+    wing: {
+      lines: [LEADING, COVERT_LINE, TRAILING],
+      tip: WING_TIP,
+      wrist: WRIST,
+      above: [
+        { arm: COVERTS, hand: HAND },
+        { arm: SECONDARIES, hand: PRIMARIES },
+      ],
+      below: [
+        { arm: LINING, hand: LINING },
+        { arm: UNDER_FLIGHT, hand: UNDER_FLIGHT },
+      ],
+    },
+    tail: {
+      root: TAIL_ROOT,
+      end: TAIL_END,
+      band: TAIL_BAND,
+      above: TAIL,
+      under: UNDER_TAIL,
+      tip: TAIL_TIP,
+    },
+  });
 }
