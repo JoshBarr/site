@@ -1,6 +1,7 @@
 import type { Surface } from "./boids";
 import { type Flock, hashed, type Hops, type Patch, patchAt } from "./habits";
 import type { PerchGrid } from "./perches";
+import { armAt, handAt, HELD, HELD_HAND } from "./stroke";
 
 // The birds that work the trees (small songbirds, finches: habit.hops), as
 // they're seen to: a while with a few trees near each other, sitting, then
@@ -122,6 +123,7 @@ interface Birds {
   readonly velocity: Float32Array;
   readonly settled: Uint8Array;
   readonly wing: Float32Array;
+  readonly hand: Float32Array;
   readonly bank: Float32Array;
   readonly heading: Float32Array;
   readonly phase: Float32Array;
@@ -230,7 +232,9 @@ export class TreeBirds {
    * of the trees it's staying with.
    */
   perchAll(seconds: number) {
-    const { position, velocity, heading, settled, wing, bank } = this.birds;
+    const { position, velocity, heading, settled, wing, hand, bank } =
+      this.birds;
+
     const { seed } = this.flock;
 
     for (let i = 0; i < this.birds.n; i++) {
@@ -243,6 +247,7 @@ export class TreeBirds {
       heading[i] = hashed(seed, 100 + i) * Math.PI * 2;
       settled[i] = 1;
       wing[i] = FOLDED;
+      hand[i] = 0;
       bank[i] = 0;
       this.wake[i] = Number.NaN;
       this.leaving[i] = Number.NaN;
@@ -324,11 +329,12 @@ export class TreeBirds {
    * others, in a flock), or to another perch once it's rested.
    */
   private sit(i: number, about: boolean, time: number) {
-    const { velocity, wing, bank, heading, phase } = this.birds;
+    const { velocity, wing, hand, bank, heading, phase } = this.birds;
     const { seed } = this.flock;
     const { hops } = this;
     velocity.fill(0, i * 3, i * 3 + 3);
     wing[i] = FOLDED;
+    hand[i] = 0;
     bank[i] = 0;
 
     if (!about) return;
@@ -466,12 +472,13 @@ export class TreeBirds {
 
   /** Bird `i` down on the perch it was flying to. */
   private land(i: number, time: number) {
-    const { position, velocity, settled, wing, bank } = this.birds;
+    const { position, velocity, settled, wing, hand, bank } = this.birds;
     const i3 = i * 3;
     position.set(this.to.subarray(i3, i3 + 3), i3);
     velocity.fill(0, i3, i3 + 3);
     settled[i] = 1;
     wing[i] = FOLDED;
+    hand[i] = 0;
     bank[i] = 0;
     this.rest(i, time);
   }
@@ -637,7 +644,7 @@ export class TreeBirds {
     hold: number,
     bare: Surface
   ) {
-    const { position: p, heading, wing, phase } = this.birds;
+    const { position: p, heading, wing, hand, phase } = this.birds;
     const { habit } = this.flock;
     const i3 = i * 3;
     const dx = this.to[i3] - p[i3];
@@ -751,10 +758,14 @@ export class TreeBirds {
 
     // Wings beating; shut, or held out, between bursts.
     if (shut) {
-      const held = this.hops.glides ? 0.12 : FOLDED;
-      wing[i] += (held - wing[i]) * Math.min(h * 30, 1);
+      const quick = Math.min(h * 30, 1);
+      const glides = this.hops.glides;
+      wing[i] += ((glides ? HELD : FOLDED) - wing[i]) * quick;
+      hand[i] += ((glides ? HELD_HAND : 0) - hand[i]) * quick;
     } else {
-      wing[i] = Math.sin(t * habit.beat * Math.PI * 2 + phase[i]) * 0.85 + 0.1;
+      const beat = t * habit.beat * Math.PI * 2 + phase[i];
+      wing[i] = armAt(beat);
+      hand[i] = handAt(beat);
     }
 
     return false;

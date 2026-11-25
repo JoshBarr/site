@@ -287,18 +287,24 @@ describe("a flock's birds", () => {
     );
 
     expect(resting.wing[0]).toBeLessThan(-1);
+    expect(resting.hand[0]).toBe(0);
 
     const up = findFlying(SHEARWATERS);
     const plan = planAt(SHEARWATERS, up, HIGH_SUN, fresh());
     const flying = new FlockSim(SHEARWATERS, plan, SEA);
     const angles = new Set<number>();
+    const bends = new Set<number>();
 
     for (let f = 0; f < 40; f++) {
       flying.step(0.02, plan, SEA, f * 0.02);
       angles.add(Math.round(flying.wing[0] * 10));
+      bends.add(Math.round(flying.hand[0] * 10));
     }
 
     expect(angles.size).toBeGreaterThan(3);
+    // The hand bent from the arm as it goes, not held straight out.
+    expect(bends.size).toBeGreaterThan(3);
+    expect(Math.min(...bends)).toBeLessThan(-3);
   });
 
   it("each fly their own way in the air, in with the flock but keeping no place in it", () => {

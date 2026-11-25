@@ -5,6 +5,7 @@ import {
   Color,
   DoubleSide,
   Float32BufferAttribute,
+  FrontSide,
   InstancedBufferAttribute,
   InstancedInterleavedBuffer,
   InterleavedBufferAttribute,
@@ -38,10 +39,41 @@ import { TrailMaterial } from "../trailMaterial";
 // A bird, a wingspan of 1 across x, facing +z: a body, a fanned tail, and
 // two wings hinged at the shoulder, each bent back at the wrist. Drawn from
 // per-bird attributes: where it is and which way it faces; how big, how
-// pale, how far its wings are raised and how far it's banked.
+// pale, how far it's banked, and how its wings are held: the arm raised
+// from the shoulder, and the hand bent from the arm at the wrist
+// (./stroke.ts). A kind with a shape of its own (./kereru.ts, ./kaka.ts)
+// is drawn the same way, from its own Form.
+
+/** A bird's shape: a wingspan of 1 across x, facing +z. */
+export interface Form {
+  /** Its `part` says which vertices are the wings' (1) and which aren't (0). */
+  geometry: BufferGeometry;
+  /** Out from the middle to where the wings hinge, of the span. */
+  shoulder: number;
+  /**
+   * Out from the middle to where the wing bends, of the span: the arm this
+   * side of it, the hand beyond.
+   */
+  wrist: number;
+  /**
+   * In its own greys, each vertex's `paint` (0 black to 1 white), rather
+   * than the bird's two tones; and closed, its sheets doubled, so seen from
+   * outside only.
+   */
+  painted?: boolean;
+}
 
 /** Out from the middle to the shoulder, of the span. */
 const SHOULDER = 0.05;
+
+/** Out from the middle to the wrist, of the span. */
+const WRIST = 0.25;
+
+/**
+ * The hand's swept back as it droops, radians a radian: on the way up the
+ * wing's drawn in, not just bent.
+ */
+const SWEEP = 0.55;
 
 const BODY = 0;
 const WING = 1;
@@ -98,9 +130,9 @@ function createBirdGeometry() {
   // The wings: shoulder to wrist, then out to the tip, swept back.
   for (const side of [1, -1]) {
     const a = [side * SHOULDER, 0.01, 0.09];
-    const b = [side * 0.25, 0.01, 0.075];
+    const b = [side * WRIST, 0.01, 0.075];
     const c = [side * 0.5, 0.01, -0.1];
-    const d = [side * 0.25, 0.01, -0.1];
+    const d = [side * WRIST, 0.01, -0.1];
     const e = [side * SHOULDER, 0.01, -0.08];
     triangle(WING, a, b, d);
     triangle(WING, a, d, e);
@@ -115,15 +147,23 @@ function createBirdGeometry() {
   return geometry;
 }
 
+/** The shape most birds are drawn as. */
+const plainForm = (): Form => ({
+  geometry: createBirdGeometry(),
+  shoulder: SHOULDER,
+  wrist: WRIST,
+});
+
 /**
- * Up to `capacity` birds in one mesh, each from its slot in `place` (x, y,
- * z, heading: radians from +z toward +x) and `shape` (wingspan, m; tones,
- * 100 × body + wing; wing angle, radians up; bank, radians, left wing
- * down).
+ * Up to `capacity` birds of one `form` in one mesh, each from its slot in
+ * `place` (x, y, z, heading: radians from +z toward +x), `shape` (wingspan,
+ * m; tones, 100 × body + wing; the arm's angle, radians up; bank, radians,
+ * left wing down) and `hand` (its bend from the arm, radians up).
  */
-export function createFlight(capacity: number) {
+export function createFlight(capacity: number, form = plainForm()) {
   const place = new InstancedBufferAttribute(new Float32Array(capacity * 4), 4);
   const shape = new InstancedBufferAttribute(new Float32Array(capacity * 4), 4);
+  const hand = new InstancedBufferAttribute(new Float32Array(capacity), 1);
   const at = instancedBufferAttribute<"vec4">(place, "vec4");
   const look = instancedBufferAttribute<"vec4">(shape, "vec4");
   const centre = at.xyz;
@@ -132,19 +172,32 @@ export function createFlight(capacity: number) {
   const bodyTone = floor(look.y).div(100);
   const wingTone = look.y.sub(floor(look.y));
   const raised = look.z;
+  const bent = instancedBufferAttribute<"float">(hand, "float");
   const bank = look.w;
   const part = attribute<"float">("part", "float");
   const isWing = part.greaterThan(0.5);
   const local = positionGeometry;
 
-  // The wings swung up or down about the shoulder.
+  // The wings, each in two pieces. The arm's swung up or down about the
+  // shoulder; the hand, what's out past the wrist, is bent from the arm
+  // there, and swept back as it droops: every point of it back by as much
+  // as it's out from the wrist, so the wrist's line stays where it is.
   const side = sign(local.x);
-  const reach = max(abs(local.x).sub(SHOULDER), 0);
+  const out = abs(local.x);
+  const arm = clamp(out.sub(form.shoulder), 0, form.wrist - form.shoulder);
+  const past = max(out.sub(form.wrist), 0);
+  const sweep = max(bent.negate(), 0).mul(SWEEP);
+  const beyond = past.mul(cos(sweep));
+  const tip = raised.add(bent);
 
   const hinged = vec3(
-    side.mul(float(SHOULDER).add(reach.mul(cos(raised)))),
-    local.y.add(reach.mul(sin(raised))),
-    local.z
+    side.mul(
+      float(form.shoulder)
+        .add(arm.mul(cos(raised)))
+        .add(beyond.mul(cos(tip)))
+    ),
+    local.y.add(arm.mul(sin(raised))).add(beyond.mul(sin(tip))),
+    local.z.sub(past.mul(sin(sweep)))
   );
 
   const swung = select(isWing, hinged, local);
@@ -171,7 +224,7 @@ export function createFlight(capacity: number) {
   const material = new MeshStandardNodeMaterial({
     roughness: 0.85,
     flatShading: true,
-    side: DoubleSide,
+    side: form.painted ? FrontSide : DoubleSide,
   });
 
   material.positionNode = vec3(
@@ -187,13 +240,17 @@ export function createFlight(capacity: number) {
     smoothstep(TIP, 0.5, abs(positionGeometry.x))
   );
 
-  material.colorNode = vec3(select(isWing, tipped, bodyTone));
+  material.colorNode = vec3(
+    form.painted
+      ? attribute<"float">("paint", "float")
+      : select(isWing, tipped, bodyTone)
+  );
 
-  const mesh = new Mesh(createBirdGeometry(), material);
+  const mesh = new Mesh(form.geometry, material);
   mesh.count = 0;
   mesh.frustumCulled = false;
 
-  return { mesh, place, shape, capacity };
+  return { mesh, place, shape, hand, capacity };
 }
 
 /**

@@ -1,5 +1,6 @@
 import type { FlockSite } from "../../../lib/flocks";
 import type { BirdsResponse } from "../../../pages/api/birds";
+import { isKaka, KAKA_BEAT, KAKA_SPAN } from "./kaka";
 import { flockName } from "./names";
 
 // How each kind of bird the summary names (lib/flocks.ts) lives, as the
@@ -377,14 +378,19 @@ export function flocksOf(
   toWorld: (easting: number, northing: number) => [number, number]
 ): Flock[] {
   return summary.sites.flatMap((site) => {
-    const habit = HABITS[site.kind];
+    const kind = HABITS[site.kind];
 
-    if (!habit) return [];
+    if (!kind) return [];
 
     const id = `${site.kind}:${site.position.join(",")}`;
     const [x, z] = toWorld(site.position[0], site.position[1]);
     const first = summary.species[site.species[0]];
     const name = first ? first.name.replace(/\s*\(.*\)$/, "") : site.kind;
+
+    // Kākā are much the biggest of their kind, and beat their wings slower.
+    const habit = isKaka(name)
+      ? { ...kind, span: KAKA_SPAN, beat: KAKA_BEAT }
+      : kind;
 
     return [
       {

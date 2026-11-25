@@ -27,6 +27,8 @@ import {
   planAt,
   restingAt,
 } from "./habits";
+import { isKaka, KAKA_MOST, kakaForm } from "./kaka";
+import { isKereru, KERERU_MOST, kereruForm } from "./kereru";
 import { createBirdTrails, createFlight } from "./model";
 import { type PerchGrid, Perches } from "./perches";
 import { type Roofs, roofAbove, roofsOf } from "./roofs";
@@ -151,6 +153,12 @@ export function Birds({
     [mobile]
   );
 
+  // Kererū, in a shape of their own.
+  const kereru = useMemo(() => createFlight(KERERU_MOST, kereruForm()), []);
+
+  // And kākā, in theirs.
+  const kaka = useMemo(() => createFlight(KAKA_MOST, kakaForm()), []);
+
   // A segment behind each bird to each of the points of its trail.
   const trails = useMemo(
     () => createBirdTrails(flight.capacity * TRAIL_POINTS),
@@ -165,6 +173,22 @@ export function Birds({
       trails.material.dispose();
     },
     [flight, trails]
+  );
+
+  useEffect(
+    () => () => {
+      kereru.mesh.geometry.dispose();
+      kereru.mesh.material.dispose();
+    },
+    [kereru]
+  );
+
+  useEffect(
+    () => () => {
+      kaka.mesh.geometry.dispose();
+      kaka.mesh.material.dispose();
+    },
+    [kaka]
   );
 
   /** The flocks being flown, by id. */
@@ -270,9 +294,9 @@ export function Birds({
     let room = flight.capacity;
     let effort = EFFORT;
     let drawn = 0;
+    let chonky = 0;
+    let kakas = 0;
     let laid = 0;
-    const place = flight.place.array;
-    const shape = flight.shape.array;
     const lines = trails.segments.array;
     const ages = trails.ages.array;
     const trailLength = TRAIL_POINTS * TRAIL_EVERY;
@@ -471,10 +495,23 @@ export function Birds({
 
       const span = habit.span * (watching && habit.hops ? LICENCE : 1);
 
+      // Kererū in their own shape, while there's room among them.
+      const own =
+        isKereru(flock.name) && chonky + sim.n <= kereru.capacity
+          ? kereru
+          : isKaka(flock.name) && kakas + sim.n <= kaka.capacity
+            ? kaka
+            : flight;
+
+      const place = own.place.array;
+      const shape = own.shape.array;
+      const hand = own.hand.array;
+      let filled = own === kereru ? chonky : own === kaka ? kakas : drawn;
+
       for (let i = 0; i < sim.n; i++) {
         if (sim.settled[i] && !perched) continue;
 
-        const o = drawn * 4;
+        const o = filled * 4;
         place[o] = sim.position[i * 3];
         place[o + 1] = sim.position[i * 3 + 1];
         place[o + 2] = sim.position[i * 3 + 2];
@@ -496,7 +533,8 @@ export function Birds({
         shape[o + 1] = tones;
         shape[o + 2] = sim.wing[i];
         shape[o + 3] = sim.bank[i];
-        drawn++;
+        hand[filled] = sim.hand[i];
+        filled++;
 
         // Trails behind the followed flock only: from where each bird is
         // back through where it's been.
@@ -527,6 +565,10 @@ export function Birds({
           laid++;
         }
       }
+
+      if (own === kereru) chonky = filled;
+      else if (own === kaka) kakas = filled;
+      else drawn = filled;
     }
 
     // Those gone out of range, or out of the day, forgotten.
@@ -534,13 +576,19 @@ export function Birds({
       if (!flown.has(id)) sims.current.delete(id);
     }
 
-    flight.mesh.count = drawn;
-    flight.mesh.visible = drawn > 0;
+    for (const [birds, count] of [
+      [flight, drawn],
+      [kereru, chonky],
+      [kaka, kakas],
+    ] as const) {
+      birds.mesh.count = count;
+      birds.mesh.visible = count > 0;
 
-    for (const attribute of [flight.place, flight.shape]) {
-      attribute.clearUpdateRanges();
-      attribute.addUpdateRange(0, drawn * 4);
-      attribute.needsUpdate = true;
+      for (const attribute of [birds.place, birds.shape, birds.hand]) {
+        attribute.clearUpdateRanges();
+        attribute.addUpdateRange(0, count * attribute.itemSize);
+        attribute.needsUpdate = true;
+      }
     }
 
     trails.segments.clearUpdateRanges();
@@ -556,6 +604,8 @@ export function Birds({
   return (
     <>
       <primitive object={flight.mesh} name="birds" />
+      <primitive object={kereru.mesh} name="kererū" />
+      <primitive object={kaka.mesh} name="kākā" />
       <primitive object={trails.lines} name="bird trails" />
     </>
   );

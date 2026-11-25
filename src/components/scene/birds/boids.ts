@@ -1,4 +1,5 @@
 import { FOLDED, TreeBirds } from "./flits";
+import { armAt, handAt, HELD, HELD_HAND } from "./stroke";
 import {
   type Flock,
   hashed,
@@ -151,8 +152,14 @@ export class FlockSim {
   /** Per bird: down where it rests, and the height it sits at. */
   readonly settled: Uint8Array;
   private readonly seat: Float32Array;
-  /** Per bird: wing angle (radians up), bank, heading, flap phase. */
+  /**
+   * Per bird: its wings' arms' angle (radians up) and the hands' bend from
+   * them (./stroke.ts), bank, heading, flap phase.
+   */
   readonly wing: Float32Array;
+  readonly hand: Float32Array;
+  /** Per bird: how much it's beating, 0 in a glide to 1, eased between. */
+  private readonly effort: Float32Array;
   readonly bank: Float32Array;
   readonly heading: Float32Array;
   readonly phase: Float32Array;
@@ -204,6 +211,8 @@ export class FlockSim {
     this.settled = new Uint8Array(n);
     this.seat = new Float32Array(n);
     this.wing = new Float32Array(n);
+    this.hand = new Float32Array(n);
+    this.effort = new Float32Array(n);
     this.bank = new Float32Array(n);
     this.heading = new Float32Array(n);
     this.phase = new Float32Array(n);
@@ -357,6 +366,7 @@ export class FlockSim {
         this.velocity.fill(0, i * 3, i * 3 + 3);
         this.settled[i] = 1;
         this.wing[i] = FOLDED;
+        this.hand[i] = 0;
       }
     }
   }
@@ -416,6 +426,7 @@ export class FlockSim {
               ? Math.sin(time * 1.3 + this.phase[i]) * 0.08
               : 0);
           this.wing[i] = FOLDED;
+          this.hand[i] = 0;
           this.bank[i] = 0;
           continue;
         }
@@ -544,7 +555,18 @@ export class FlockSim {
         v[i3 + 1] = Math.max(v[i3 + 1], 0);
       }
 
-      this.wing[i] = wingAt(habit, seed, i, time, this.phase[i], v[i3 + 1]);
+      // Beating, or held out in a glide: from one to the other in a
+      // moment, not at once.
+      const beating = glidingAt(habit, seed, i, time, this.phase[i], v[i3 + 1])
+        ? 0
+        : 1;
+
+      const effort = (this.effort[i] +=
+        (beating - this.effort[i]) * Math.min(dt * EASE, 1));
+
+      const phase = time * habit.beat * Math.PI * 2 + this.phase[i];
+      this.wing[i] = HELD + (armAt(phase) - HELD) * effort;
+      this.hand[i] = HELD_HAND + (handAt(phase) - HELD_HAND) * effort;
     }
 
     this.measure();
@@ -797,11 +819,14 @@ function restingHeight(habit: Habit, surface: number) {
   return habit.rests === "perch" ? surface + PERCH : surface;
 }
 
+/** Into a glide and out of it, this fast: a tenth of a second or so. */
+const EASE = 12;
+
 /**
- * A bird's wing angle at `time`, s: beating, or held out in a glide for a
- * spell; beating harder climbing, gliding more going down.
+ * Whether a bird's wings are held out in a glide at `time`, s, not
+ * beating: for a spell at a time, less climbing, more going down.
  */
-function wingAt(
+function glidingAt(
   habit: Habit,
   seed: number,
   i: number,
@@ -813,7 +838,5 @@ function wingAt(
   const spell = Math.floor(time / 1.2 + phase);
   const glide = habit.glide + (climb < -0.5 ? 0.3 : climb > 0.5 ? -0.3 : 0);
 
-  if (hashed(seed + spell, i) < glide) return 0.12;
-
-  return Math.sin(time * habit.beat * Math.PI * 2 + phase) * 0.85 + 0.1;
+  return hashed(seed + spell, i) < glide;
 }
