@@ -749,6 +749,10 @@
   --tint: #ffcc1a;
 }
 
+.Theme [data-tint="bird"] {
+  --tint: #ffcc1a;
+}
+
 .Theme [data-tint="satellite"] {
   --tint: #66f2e6;
 }

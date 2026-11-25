@@ -123,6 +123,31 @@ function octahedron() {
 type Shape = { points: number[][]; faces: number[][] };
 
 /**
+ * The top of a lobe as it's drawn close up: the faces round its highest
+ * point, that point first in each, and the lobe's points, which a tree's
+ * first lobe has under the same numbers.
+ */
+export function topOfLobe() {
+  const { points, faces } = icosphere(LOBE_SUBDIVISIONS.near);
+
+  const top = points.reduce(
+    (best, p, i) => (p[1] > points[best][1] ? i : best),
+    0
+  );
+
+  return {
+    points,
+    faces: faces
+      .filter((face) => face.includes(top))
+      .map((face) => {
+        const at = face.indexOf(top);
+
+        return [face[at], face[(at + 1) % 3], face[(at + 2) % 3]];
+      }),
+  };
+}
+
+/**
  * One tree's vertices and faces, appended: `lobes` copies of `shape`, then
  * a trunk of `sides`. Returns its range in the index.
  */

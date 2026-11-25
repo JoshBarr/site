@@ -64,6 +64,7 @@ const VEHICLES: Record<
   ship: { name: "Ships", icon: "ship", still: "stopped" },
   plane: { name: "Aircraft", icon: "plane", still: "on the ground" },
   satellite: { name: "Satellites", icon: "satellite", still: "in shadow" },
+  bird: { name: "Birds", icon: "bird", still: "settled" },
 };
 
 /** How often the lists of what can be followed are looked at again, ms. */

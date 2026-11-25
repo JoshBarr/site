@@ -220,4 +220,112 @@ describe("the follow rig", () => {
     // A turn every two minutes.
     expect(Math.abs(turned)).toBeCloseTo((10 / 120) * 2 * Math.PI, 1);
   });
+
+  it("looks at a big flock from behind, wide; at a bird or two, close, through a long lens", () => {
+    setCut(true);
+
+    /** Flying north at 9 m/s, 30 m up. */
+    const flying =
+      (length: number) =>
+      (t: number): Pose => ({
+        x: 0,
+        y: 30,
+        z: -9 * t,
+        heading: 0,
+        length,
+        speed: 9,
+        ground: false,
+      });
+
+    followVehicle({ category: "bird", id: "gulls", label: "Karoro" });
+    const wide = run(10, flying(80)).at(-1)!;
+    const gulls = at(flying(80)(10 - DT));
+
+    expect(wide.fov).toBeCloseTo(40, 0);
+    expect(wide.position.z).toBeGreaterThan(gulls.z);
+    expect(wide.position.distanceTo(gulls)).toBeGreaterThan(100);
+
+    followVehicle({ category: "bird", id: "kereru", label: "Kererū" });
+    const close = run(10, flying(4)).at(-1)!;
+    const one = at(flying(4)(10 - DT));
+
+    // A quarter of a metre of bird, twenty-odd pixels of an 800 px frame.
+    expect(close.fov).toBeCloseTo(22, 0);
+    expect(close.position.distanceTo(one)).toBeLessThan(35);
+
+    const pixels =
+      0.25 /
+      close.position.distanceTo(one) /
+      ((2 * Math.tan((close.fov * Math.PI) / 360)) / 800);
+
+    expect(pixels).toBeGreaterThan(15);
+  });
+
+  it("keeps where it is about a bird darting through the trees, flying or sitting", () => {
+    setCut(true);
+    followVehicle({ category: "bird", id: "tui", label: "Tūī" });
+
+    // Sitting; then off east at 8 m/s for five seconds; then sitting.
+    const tui = (t: number): Pose => {
+      const flown = Math.min(Math.max(t - 10, 0), 5);
+
+      return {
+        x: flown * 8,
+        y: 20,
+        z: 0,
+        heading: Math.PI / 2,
+        length: 4,
+        speed: flown > 0 && flown < 5 ? 8 : 0,
+        ground: flown === 0 || flown === 5,
+        steady: true,
+      };
+    };
+
+    const shots = run(20, tui);
+
+    const bearing = (k: number) => {
+      const bird = at(tui(k * DT));
+
+      return Math.atan2(
+        shots[k].position.x - bird.x,
+        shots[k].position.z - bird.z
+      );
+    };
+
+    // Down among the trees, flying too: the shot lifts over what hides it.
+    expect(rig.low).toBe(true);
+    expect(rig.ground).toBe(true);
+
+    // Round it a little, as slowly as ever: no swing in behind as it goes.
+    for (const t of [11, 13, 16, 19]) {
+      const k = Math.round(t / DT);
+      const turned = bearing(k) - bearing(Math.round(9 / DT));
+
+      expect(Math.abs(turned)).toBeLessThan(
+        ((t - 9) / 120) * 2 * Math.PI + 0.3
+      );
+      // And never far from it: carried along as it flies.
+      expect(shots[k].position.distanceTo(at(tui(t)))).toBeLessThan(40);
+      expect(shots[k].target.distanceTo(at(tui(t)))).toBeLessThan(4);
+    }
+
+    // Hidden as it flies (a crown in the way): up over it, further off.
+    const flying = (t: number): Pose => ({ ...tui(12), x: 16 + (t - 12) * 8 });
+    const level = run(3, flying, 12).at(-1)!;
+
+    for (let k = 0; k < 4; k++) rig.hidden(true, 0.25);
+
+    const lifted = run(3, flying, 15).at(-1)!;
+
+    const steep = ({ position }: Shot, t: number) => {
+      const bird = at(flying(t));
+
+      return Math.atan2(
+        position.y - bird.y,
+        Math.hypot(position.x - bird.x, position.z - bird.z)
+      );
+    };
+
+    expect(steep(lifted, 18 - DT)).toBeGreaterThan(steep(level, 15 - DT) + 0.4);
+  });
 });

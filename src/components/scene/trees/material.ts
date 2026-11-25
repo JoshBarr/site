@@ -31,6 +31,7 @@ import {
   vertexIndex,
 } from "three/tsl";
 import { verticalScale } from "../terrain/Terrain";
+import { LOBE_FLAT, LOBE_LUMPS } from "./crown";
 import { LOBES } from "./geometry";
 import type { TreesManifest } from "./manifest";
 
@@ -47,9 +48,6 @@ import type { TreesManifest } from "./manifest";
 /** Foliage albedo, from dark pines to paler broadleaf. */
 const FOLIAGE = [0.035, 0.085];
 const BARK = 0.05;
-
-/** Lobe radius jitter per vertex, ±. */
-const LOBE_LUMPS = 0.14;
 
 /** Trunks start this far underground, to stand on coarse terrain too. */
 const SINK = 1.5;
@@ -124,8 +122,11 @@ function decodeTree(
   let height: any = high.mul(encoding.heightStep);
   let radius: any = packed.sub(high.mul(256)).mul(encoding.radiusStep);
 
-  const xq = tree.x.mul(65535);
-  const zq = tree.y.mul(65535);
+  // To the whole numbers they're stored as: the hash cuts a seed down to
+  // one, and a little under would be the number before. crown.ts works the
+  // same tree out from these, for what sits on it.
+  const xq = tree.x.mul(65535).add(0.5).floor();
+  const zq = tree.y.mul(65535).add(0.5).floor();
   const seed = hash(xq.add(hash(zq).mul(1e6)));
   const random = (k: number) => hash(seed.mul(1e6).add(k));
 
@@ -315,7 +316,10 @@ export function createTreeMaterial(
   );
 
   // Lobes are a little flattened, as foliage clumps are.
-  const reach3 = vec3(lobe.x, lobe.y.mul(0.82), lobe.z).mul(size.mul(lump));
+  const reach3 = vec3(lobe.x, lobe.y.mul(LOBE_FLAT), lobe.z).mul(
+    size.mul(lump)
+  );
+
   const lobeAcross = centreAcross.add(vec2(reach3.x, reach3.z));
   const lobeUp = centreUp.add(reach3.y);
 
@@ -347,7 +351,7 @@ export function createTreeMaterial(
     )
   );
 
-  const lobeNormal = vec3(lobe.x, lobe.y.div(0.82), lobe.z);
+  const lobeNormal = vec3(lobe.x, lobe.y.div(LOBE_FLAT), lobe.z);
   const foliageNormal = normalize(mix(normalize(lobeNormal), crownNormal, 0.4));
 
   // Lobe faces turned in toward the crown's middle, and the crown's

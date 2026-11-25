@@ -11,7 +11,8 @@ export type Category =
   | "cablecar"
   | "ship"
   | "plane"
-  | "satellite";
+  | "satellite"
+  | "bird";
 
 export const CATEGORIES: Category[] = [
   "bus",
@@ -20,6 +21,7 @@ export const CATEGORIES: Category[] = [
   "ship",
   "plane",
   "satellite",
+  "bird",
 ];
 
 export interface Candidate {
@@ -72,6 +74,12 @@ export interface Subject {
   ground: boolean;
   /** Above the ground, m, when it isn't on it. */
   height: number;
+  /**
+   * Darts about, stopping and starting (a bird in the trees): the shot
+   * stays where it is about it, rather than swinging in behind each time
+   * it's off.
+   */
+  steady: boolean;
 }
 
 export const subject: Subject & {
@@ -89,6 +97,7 @@ export const subject: Subject & {
   grade: 0,
   ground: true,
   height: 0,
+  steady: false,
   fresh: false,
 };
 
@@ -194,6 +203,7 @@ const countsOf = (): Record<Category, number> => {
     ship: count("ship"),
     plane: count("plane"),
     satellite: count("satellite"),
+    bird: count("bird"),
   };
 };
 
@@ -237,6 +247,7 @@ export function publish(at: Partial<Subject> & Pick<Subject, "x" | "y" | "z">) {
     grade: 0,
     ground: true,
     height: 0,
+    steady: false,
     ...at,
     fresh: true,
   });

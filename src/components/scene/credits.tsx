@@ -216,6 +216,10 @@ export const LIVE_CREDITS: Credit[] = [
     ],
   },
   {
+    what: "where the flocks gather, from birders' checklists",
+    who: [{ name: "eBird", href: "https://ebird.org" }],
+  },
+  {
     what: "public holidays",
     who: [{ name: "Nager.Date", href: "https://date.nager.at" }],
   },

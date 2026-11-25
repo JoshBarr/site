@@ -86,6 +86,7 @@ import { Trees, TREES_DESKTOP, TREES_MOBILE } from "./trees/Trees";
 import { Vessels } from "./vessels/Vessels";
 import { Flights } from "./flights/Flights";
 import { Railway } from "./trains/Railway";
+import { Birds } from "./birds/Birds";
 import { CableCar } from "./cablecar/CableCar";
 import { Buses } from "./buses/Buses";
 import { Traffic } from "./traffic/Traffic";
@@ -1591,7 +1592,7 @@ function Controls({
       const p = probing.current;
       p.wait -= delta;
 
-      if (p.busy || p.wait > 0 || byHand || !rig.ground) return;
+      if (p.busy || p.wait > 0 || byHand || !rig.low) return;
       p.wait = PROBE;
 
       if (inTunnel) {
@@ -2035,6 +2036,7 @@ export const LAYERS = [
   "tunnels",
   "buses",
   "flights",
+  "birds",
 ] as const;
 
 type Layer = (typeof LAYERS)[number];
@@ -2263,6 +2265,9 @@ export function Scene({
           lights={lights}
           windFrom={conditions.wind.direction}
         />
+      )}
+      {shown("birds") && (
+        <Birds index={index} heightAt={heightAt} sunAltitude={sun.altitude} />
       )}
       {(wind || windShown) && cache && (
         <Wind

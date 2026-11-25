@@ -18,6 +18,7 @@ export default defineConfig({
       OPENWATERS_TOKEN: "",
       EVENTFINDA_USERNAME: "josh",
       EVENTFINDA_PASSWORD: "secret",
+      EBIRD_API_KEY: "ebird-key",
     },
   },
 });

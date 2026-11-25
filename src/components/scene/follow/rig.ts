@@ -49,6 +49,9 @@ const TURN: Record<Category, number> = {
   cablecar: 2.5,
   ship: 4,
   plane: 1.5,
+  // A flock wheels about quickly; the shot follows its middle, which
+  // turns slower than any one bird.
+  bird: 2,
   // Not followed by the rig: the trip to orbit has the camera.
   satellite: 1,
 };
@@ -77,6 +80,19 @@ const UNDER_WAY = 0.5;
 
 /** Seconds to circle a stopped ship. */
 const ORBIT = 120;
+
+/**
+ * A flock's lens, degrees: wide for a big one; long for a few birds, or
+ * one, to see them at all. Between flocks this far across, m.
+ */
+const FLOCK_FOV = [22, 40];
+const FLOCK_ACROSS = [6, 40];
+
+/**
+ * A bird in the trees is looked down on from this high, of how far back
+ * the shot stands: over the crowns round it, more often than not.
+ */
+const OVER_CROWNS = 0.7;
 
 /** On the ground slower than this, m/s, an aircraft is taxiing. */
 const TAXI_SPEED = 20;
@@ -217,6 +233,12 @@ export class FollowRig {
   grade = 0;
   course = 0;
   ground = true;
+
+  /**
+   * Down among what can hide it: on the ground, or a bird in the trees.
+   * The shot lifts over whatever does.
+   */
+  low = true;
   private mode: PlaneMode | null = null;
   /** How far up to lift the shot (0..1), what it's at, and seconds clear. */
   private lift = 0;
@@ -332,6 +354,7 @@ export class FollowRig {
     this.grade = subject.grade;
     this.course = subject.heading;
     this.ground = subject.ground;
+    this.low = subject.ground || subject.steady;
 
     if (!this.ready) {
       this.ready = true;
@@ -406,7 +429,7 @@ export class FollowRig {
   private aim() {
     this.frame();
 
-    if (!subject.ground || this.lifted < 1e-3) return;
+    if (!(subject.ground || subject.steady) || this.lifted < 1e-3) return;
 
     // Swung up about it, toward overhead, and further off.
     const { position } = this.wanted;
@@ -444,6 +467,8 @@ export class FollowRig {
         return this.overhead(h);
       case "ship":
         return this.astern(h);
+      case "bird":
+        return this.flock(h);
       case "plane": {
         this.mode = this.planeMode(this.mode);
 
@@ -503,6 +528,47 @@ export class FollowRig {
       subject.z - Math.cos(h) * ahead
     );
     this.wanted.fov = 45;
+  }
+
+  /**
+   * Behind a flock and above, nearer than a ship's, to see the birds in
+   * it; settled, circling it slowly. Its length is the flock's spread: a
+   * small one's seen through a long lens. One bird darting about the trees
+   * (`steady`) is circled all the while, flying or sitting.
+   */
+  private flock(h: number) {
+    const size = Math.max(subject.length, 6);
+    const underWay = subject.speed > UNDER_WAY && !subject.steady;
+
+    const bearing = underWay
+      ? h + Math.PI + radians(20) * this.side
+      : h + Math.PI + (this.time * 2 * Math.PI) / ORBIT;
+
+    const back = clamp(1.4 * size + 15, 20, 400);
+
+    const up = subject.steady
+      ? back * OVER_CROWNS
+      : clamp(0.45 * size + 6, 6, 120);
+
+    const ahead = underWay ? size * 0.3 : 0;
+    this.wanted.position.set(
+      subject.x + Math.sin(bearing) * back,
+      subject.y + up,
+      subject.z - Math.cos(bearing) * back
+    );
+    this.wanted.target.set(
+      subject.x + Math.sin(h) * ahead,
+      subject.y,
+      subject.z - Math.cos(h) * ahead
+    );
+
+    const wide = clamp(
+      (size - FLOCK_ACROSS[0]) / (FLOCK_ACROSS[1] - FLOCK_ACROSS[0]),
+      0,
+      1
+    );
+
+    this.wanted.fov = FLOCK_FOV[0] + (FLOCK_FOV[1] - FLOCK_FOV[0]) * wide;
   }
 
   /**

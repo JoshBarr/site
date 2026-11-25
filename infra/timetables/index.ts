@@ -7,6 +7,7 @@ import * as Redacted from "effect/Redacted";
 import { Live } from "../live";
 import { logMemory } from "../poller/memory";
 import { LiveTable } from "../poller/table";
+import { updateBirds } from "./birds";
 import { updateCableCar } from "./cablecar";
 import { updateEvents } from "./events";
 import { updateSatellites } from "./satellites";
@@ -16,7 +17,8 @@ import { updateSatellites } from "./satellites";
 // published in the small hours of the day they start, the last at 4:05 am,
 // and until it's read the scene runs the cars to the old one's same day of
 // the week); the visual satellites' orbits, from CelesTrak; and what's on at
-// the big venues, from Eventfinda and TheSportsDB. Its own
+// the big venues, from Eventfinda and TheSportsDB. And every three hours,
+// birders' checklists from eBird, which come in through the day. Its own
 // function, not one of the poller's feeds: reading the feed's stop times
 // takes ~15 MB, and the poller runs within a few MB of its 160.
 
@@ -39,6 +41,7 @@ export default class Timetables extends AWS.Lambda.Function<Timetables>()(
     // From the env file at deploy, into the function's environment.
     const eventfindaUser = yield* Config.Redacted("EVENTFINDA_USERNAME");
     const eventfindaPassword = yield* Config.Redacted("EVENTFINDA_PASSWORD");
+    const ebirdKey = yield* Config.Redacted("EBIRD_API_KEY");
 
     const table = yield* Live;
 
@@ -96,6 +99,31 @@ export default class Timetables extends AWS.Lambda.Function<Timetables>()(
           ],
           { discard: true, concurrency: 2 }
         ).pipe(
+          Effect.andThen(logMemory),
+          Effect.provideService(LiveTable, live)
+        )
+    );
+
+    // Birders mostly send theirs in the evening; eBird lists the newest
+    // ~200, about a week's. ~25 requests a run, of its 500 an hour.
+    yield* schedule(
+      {
+        id: "Birds",
+        expression: "cron(40 */3 * * ? *)",
+        props: {
+          timezone: "Pacific/Auckland",
+          retryPolicy: {
+            MaximumRetryAttempts: 0,
+            MaximumEventAgeInSeconds: 3600,
+          },
+        },
+      },
+      () =>
+        Effect.sync(() => {
+          process.env.EBIRD_API_KEY = Redacted.value(ebirdKey);
+        }).pipe(
+          Effect.andThen(updateBirds),
+          Effect.catchCause((cause) => Effect.logError("[birds]", cause)),
           Effect.andThen(logMemory),
           Effect.provideService(LiveTable, live)
         )

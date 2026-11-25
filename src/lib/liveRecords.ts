@@ -1,10 +1,12 @@
 import { gunzipSync, gzipSync } from "node:zlib";
 import { z } from "zod";
+import { birdSightings } from "./birds";
 import type { Bus } from "./buses";
 import type { CableCarTrip, Timetable } from "./cablecar";
 import type { CloudMap } from "./cloudMap";
 import { venueEvent } from "./events";
 import type { Fix, RouteEnd } from "./flights";
+import { flockSummary } from "./flocks";
 import type { Sighting } from "./flightStore";
 import type { CloudLayer, Observation } from "./metar";
 import { type GridFlow, SITES } from "./gridFlow";
@@ -478,5 +480,26 @@ export const satellites = collection("satellites", 1, {
 export const events = collection("events", 1, {
   sk: time,
   data: z.object({ events: z.array(venueEvent) }),
+  ttl: 35 * DAY,
+});
+
+/**
+ * Birders' checklists from eBird (./birds.ts), each fetch's new ones in an
+ * item of its own: a replay places the flocks from those sent in by then.
+ * Kept a little longer than replays go back.
+ */
+export const birds = collection("birds", 1, {
+  sk: time,
+  data: birdSightings,
+  ttl: 35 * DAY,
+});
+
+/**
+ * Where the flocks gather (./flocks.ts), summed up from the month's birds
+ * each time they're fetched: what /api/birds serves, one item a request.
+ */
+export const flocks = collection("flocks", 1, {
+  sk: time,
+  data: flockSummary,
   ttl: 35 * DAY,
 });

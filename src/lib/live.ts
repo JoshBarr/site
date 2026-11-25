@@ -3,6 +3,7 @@ import type { Bus } from "./buses";
 import type { Timetable } from "./cablecar";
 import type { CloudMap } from "./cloudMap";
 import type { VenueEvent } from "./events";
+import type { FlockSummary } from "./flocks";
 import type { Aircraft, RouteEnd } from "./flights";
 import { foldFlights } from "./flightStore";
 import type { GridFlow } from "./gridFlow";
@@ -12,6 +13,7 @@ import {
   clouds,
   events,
   flights,
+  flocks,
   grid,
   metar,
   quakes,
@@ -326,6 +328,20 @@ export async function loadEvents(
   const stored = await readNewest(events, "", at);
 
   return stored && { fetched: stored.sk, events: stored.data.events };
+}
+
+/**
+ * Where the flocks gather, as last summed up at `at` (or now): null before
+ * the first.
+ */
+export async function loadFlocks(
+  at?: number
+): Promise<({ summarised: number } & FlockSummary) | null> {
+  if (!canRead()) throw new Error("no table to read the flocks from");
+
+  const stored = await readNewest(flocks, "", at);
+
+  return stored && { summarised: stored.sk, ...stored.data };
 }
 
 /**
