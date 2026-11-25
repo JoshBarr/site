@@ -18,7 +18,7 @@ import { verticalScale } from "../terrain/Terrain";
 import { loadTreeIndex } from "../trees/manifest";
 import { nztmToWorld, type TileIndex } from "../terrain/manifest";
 import type { HeightQuery } from "../terrain/Terrain";
-import { FlockSim, TRAIL_EVERY, TRAIL_POINTS } from "./boids";
+import { FlockSim, TRAIL_EVERY, TRAIL_POINTS, WARM } from "./boids";
 import {
   type Flock,
   flocksOf,
@@ -57,6 +57,22 @@ const LICENCE = 2;
  * flock's put back where it'd be, rather than flown on.
  */
 const STALE = 0.25;
+
+/**
+ * A flock coming into sight is flown this long unseen first, s, so its
+ * birds are each on their own way by then: the followed one for longer
+ * (boids.ts' WARM).
+ */
+const GLANCE = 4;
+
+/**
+ * That flying's spread over frames: this many birds' steps a frame at
+ * most, over all the flocks coming in, about a millisecond's (measured:
+ * 1000 a frame added 1.2 ms; the biggest flock's ten seconds in one
+ * frame, 14 ms). The biggest flock, followed, is some fourteen frames
+ * coming; most are there in one or two.
+ */
+const EFFORT = 600;
 
 /** The list to follow is made again this often, ms: who's up, who's down. */
 const RELIST = 20_000;
@@ -252,6 +268,7 @@ export function Birds({
 
     const flown = new Set<string>();
     let room = flight.capacity;
+    let effort = EFFORT;
     let drawn = 0;
     let laid = 0;
     const place = flight.place.array;
@@ -301,8 +318,9 @@ export function Birds({
         trees = grid;
       }
 
-      // On screen? Where it is, or one not flown yet, where it'd be.
-      if (sim) {
+      // On screen? Where it is, or one not flown yet (or still being flown
+      // up to now), where it'd be.
+      if (sim && !sim.arriving) {
         sphere.center.set(sim.middle.x, sim.middle.y, sim.middle.z);
         sphere.radius = sim.extent / 2 + habit.span * 12 + 20;
       } else if (habit.hops) {
@@ -328,21 +346,56 @@ export function Birds({
         continue;
       }
 
-      if (!sim) {
-        // Just up: off the ground, as it's seen. Hoppers start in trees.
-        const start =
-          plan.since < TAKING_OFF && !habit.hops
-            ? restingAt(flock, rest)
-            : plan;
+      // One being flown up to now is behind by design; left half done (it
+      // went out of sight), it's begun again.
+      const begun = sim?.arriving === true && gap <= WARM + 1;
 
-        sim = new FlockSim(flock, start, surface, trees, time);
+      // Its plan at any moment: written over `plan`, as the one for now is.
+      const planOf = (t: number) => planAt(flock, t * 1000, sunAltitude, plan);
+
+      if (!sim || (stale && !begun)) {
+        // Just up, and not seen before: off the ground, as it's seen.
+        // Hoppers start in trees.
+        const justUp = !sim && plan.since < TAKING_OFF && !habit.hops;
+
+        sim ??= new FlockSim(
+          flock,
+          justUp ? restingAt(flock, rest) : plan,
+          surface,
+          trees,
+          time
+        );
+
         sims.current.set(flock.id, sim);
-        sim.step(Math.min(Math.max(dt, 0), 0.1), plan, surface, time, bare);
-      } else if (stale) {
-        sim.place(plan, surface, time);
-        sim.stepped = time;
-      } else {
+
+        if (justUp) {
+          sim.step(Math.min(Math.max(dt, 0), 0.1), plan, surface, time, bare);
+        } else {
+          // As it would be had it been flown all along: the one followed,
+          // seen close, for longer.
+          sim.arrive(planOf, surface, time, watching ? WARM : GLANCE);
+        }
+      } else if (!sim.arriving) {
         sim.step(gap, plan, surface, time, bare);
+      }
+
+      // Flown up to now a few steps a frame, as many as the frame can
+      // spare, and not shown till it's there: a big flock's a few frames
+      // late, and no frame's held up.
+      if (sim.arriving) {
+        if (effort > 0) {
+          const steps = Math.max(Math.floor(effort / sim.n), 1);
+
+          effort -= steps * sim.n;
+          sim.catchUp(planOf, surface, time, steps, bare);
+        }
+
+        if (sim.arriving) {
+          room -= flock.birds;
+          flown.add(flock.id);
+
+          continue;
+        }
       }
 
       // All down and staying down: gone, and following it, on to another.

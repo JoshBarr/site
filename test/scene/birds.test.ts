@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { FlockSim, TRAIL_POINTS } from "../../src/components/scene/birds/boids";
+import {
+  FlockSim,
+  TRAIL_POINTS,
+  WARM,
+} from "../../src/components/scene/birds/boids";
 import {
   daylight,
   type Flock,
@@ -295,6 +299,194 @@ describe("a flock's birds", () => {
     }
 
     expect(angles.size).toBeGreaterThan(3);
+  });
+
+  it("each fly their own way in the air, in with the flock but keeping no place in it", () => {
+    const up = findFlying(SHEARWATERS);
+    const plan = planAt(SHEARWATERS, up, HIGH_SUN, fresh());
+    const sim = new FlockSim(SHEARWATERS, plan, SEA);
+    const habit = HABITS.shearwater!;
+
+    const fly = (from: number, seconds: number) => {
+      for (let f = 1; f <= seconds * 20; f++) {
+        const t = up + from * 1000 + f * 50;
+        planAt(SHEARWATERS, t, HIGH_SUN, plan);
+        sim.step(0.05, plan, SEA, t / 1000);
+      }
+    };
+
+    fly(0, 30);
+
+    // Headings a few degrees either side of the flock's, speeds a little
+    // either side of the kind's: not all the same, not all over the place.
+    const mean = sim.mean();
+    const way = Math.atan2(mean.x, mean.z);
+    const off: number[] = [];
+    const speeds: number[] = [];
+
+    for (let i = 0; i < sim.n; i++) {
+      const [x, , z] = sim.velocity.subarray(i * 3, i * 3 + 3);
+      let turn = Math.atan2(x, z) - way;
+      turn -= Math.round(turn / (Math.PI * 2)) * Math.PI * 2;
+      off.push((turn * 180) / Math.PI);
+      speeds.push(Math.hypot(x, z));
+    }
+
+    const spread = (of: number[]) => {
+      const middle = of.reduce((a, b) => a + b, 0) / of.length;
+
+      return Math.sqrt(
+        of.reduce((a, b) => a + (b - middle) ** 2, 0) / of.length
+      );
+    };
+
+    expect(spread(off)).toBeGreaterThan(2);
+    expect(spread(off)).toBeLessThan(25);
+    expect(spread(speeds)).toBeGreaterThan(0.2);
+    expect(Math.min(...speeds)).toBeGreaterThan(habit.speed * 0.6);
+    expect(Math.max(...speeds)).toBeLessThan(habit.speed * 1.5);
+
+    // Together: as wide as so many take up at their spacing, not strung
+    // out, nor all on top of each other.
+    const room = habit.spacing * Math.sqrt(sim.n);
+
+    expect(sim.extent).toBeGreaterThan(room * 0.4);
+    expect(sim.extent).toBeLessThan(room * 3);
+
+    // And no bird stays where it was in the flock: ten seconds on, each
+    // has moved about its middle.
+    const places = (): number[][] =>
+      Array.from({ length: sim.n }, (_, i) => [
+        sim.position[i * 3] - sim.middle.x,
+        sim.position[i * 3 + 2] - sim.middle.z,
+      ]);
+
+    const before = places();
+    fly(30, 10);
+
+    const moved = places().map((at, i) =>
+      Math.hypot(at[0] - before[i][0], at[1] - before[i][1])
+    );
+
+    expect(moved.filter((m) => m > habit.spacing).length).toBeGreaterThan(
+      sim.n * 0.7
+    );
+  });
+
+  it("turn no harder than their kind can: gulls wheel, they don't spin", () => {
+    const up = findFlying(GULLS);
+    const plan = planAt(GULLS, up, HIGH_SUN, fresh());
+    const sim = new FlockSim(GULLS, plan, SEA);
+    const habit = HABITS.gull!;
+    let tightest = Infinity;
+
+    for (let f = 1; f <= 1200; f++) {
+      const t = up + f * 50;
+      const before = Float32Array.from(sim.heading);
+      planAt(GULLS, t, HIGH_SUN, plan);
+      sim.step(0.05, plan, SEA, t / 1000);
+
+      for (let i = 0; i < sim.n; i++) {
+        let turn = sim.heading[i] - before[i];
+        turn -= Math.round(turn / (Math.PI * 2)) * Math.PI * 2;
+
+        const speed = Math.hypot(sim.velocity[i * 3], sim.velocity[i * 3 + 2]);
+        const rate = Math.abs(turn) / 0.05;
+
+        if (rate > 1e-6) tightest = Math.min(tightest, speed / rate);
+      }
+    }
+
+    // A circle some metres across at least, at a gull's slowest.
+    expect(tightest).toBeGreaterThan(habit.span * 4);
+    expect(tightest).toBeLessThan(60);
+  });
+
+  it("are, first seen, as they'd be had they been flying all along", () => {
+    let up = findFlying(SHEARWATERS) + 60_000;
+    const plan = fresh();
+    const planOf = (t: number) => planAt(SHEARWATERS, t * 1000, HIGH_SUN, plan);
+    const sim = new FlockSim(SHEARWATERS, planOf(up / 1000), SEA);
+
+    expect(planOf(up / 1000).since).toBeGreaterThan(WARM);
+
+    sim.arrive(planOf, SEA, up / 1000);
+
+    // Not there yet, nor to be shown: flown up to now a few steps at a
+    // time, however long that takes, and time going on meanwhile.
+    expect(sim.arriving).toBe(true);
+    expect(sim.catchUp(planOf, SEA, up / 1000, 5)).toBe(false);
+    expect(sim.stepped).toBeCloseTo(up / 1000 - WARM + 1, 5);
+
+    up += 100;
+
+    expect(sim.catchUp(planOf, SEA, up / 1000, 1000)).toBe(true);
+    expect(sim.arriving).toBe(false);
+    expect(sim.stepped).toBe(up / 1000);
+    expect(sim.down()).toBe(0);
+
+    // Each on its own way, and its trail already behind it: three seconds
+    // of flying, tens of metres, and not the same line as the next bird's.
+    const ways = new Set<number>();
+
+    for (let i = 0; i < sim.n; i++) {
+      ways.add(Math.round((sim.heading[i] * 180) / Math.PI));
+
+      const oldest = (i * TRAIL_POINTS + ((sim.newest + 1) % TRAIL_POINTS)) * 3;
+
+      expect(
+        Math.hypot(
+          sim.position[i * 3] - sim.trail[oldest],
+          sim.position[i * 3 + 2] - sim.trail[oldest + 2]
+        )
+      ).toBeGreaterThan(15);
+    }
+
+    expect(ways.size).toBeGreaterThan(8);
+
+    // Near where the flock's headed, as if it had followed it there.
+    planOf(up / 1000);
+
+    expect(
+      Math.hypot(sim.middle.x - plan.x, sim.middle.z - plan.z)
+    ).toBeLessThan(150);
+  });
+
+  it("are put straight where they are, a flock that's down", () => {
+    const down = restingAt(GULLS, fresh());
+    const sim = new FlockSim(GULLS, { ...down, x: down.x + 500 }, SEA);
+
+    sim.arrive(() => down, SEA, 1000);
+
+    expect(sim.arriving).toBe(false);
+    expect(sim.stepped).toBe(1000);
+    expect(sim.down()).toBe(sim.n);
+    expect(
+      Math.hypot(sim.middle.x - down.x, sim.middle.z - down.z)
+    ).toBeLessThan(100);
+  });
+
+  it("are still taking off, first seen moments after the flock's up", () => {
+    // Up four seconds: at 0.08 s apart, fifty of them, the first well away.
+    const up = { ...restingAt(GULLS, fresh()), flying: true, since: 4 };
+    const sim = new FlockSim(GULLS, up, SEA);
+
+    const planOf = (t: number) => ({ ...up, since: 4 - (1000 - t) });
+
+    sim.arrive(planOf, SEA, 1000);
+
+    expect(sim.down()).toBe(sim.n);
+    expect(sim.catchUp(planOf, SEA, 1000, 1000)).toBe(true);
+
+    expect(sim.down()).toBeGreaterThan(sim.n * 0.4);
+    expect(sim.down()).toBeLessThan(sim.n * 0.7);
+
+    const heights = Array.from(
+      { length: sim.n },
+      (_, i) => sim.position[i * 3 + 1]
+    );
+
+    expect(Math.max(...heights)).toBeGreaterThan(3);
   });
 
   it("leave trails where they've been, started afresh after a jump", () => {
