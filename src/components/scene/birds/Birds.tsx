@@ -63,7 +63,7 @@ const STALE = 0.25;
  * birds are each on their own way by then: the followed one for longer
  * (boids.ts' WARM).
  */
-const GLANCE = 4;
+const GLANCE = 2;
 
 /**
  * That flying's spread over frames: this many birds' steps a frame at

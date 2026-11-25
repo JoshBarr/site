@@ -71,11 +71,26 @@ const SWELL = 0.22;
 
 /**
  * A flock first seen is flown this long unseen before, s, in steps this
- * long: so it's as it would be had it been flying all along. About as
- * long as its birds take to draw in from where they're put.
+ * long: so it's as it would be had it been flying all along. As long as
+ * a trail is, and as its birds take to be each on their own way; they're
+ * put as close as they'll draw in to (SETTLED), which takes them longer.
  */
-export const WARM = 10;
+export const WARM = 3;
 const WARM_STEP = 0.2;
+
+/**
+ * In the air a flock's as wide as this, of the width its birds come down
+ * over: measured, once it's settled (shearwaters 0.56, starlings 0.55,
+ * gulls 0.6 to 0.75).
+ */
+const SETTLED = 0.6;
+
+/**
+ * What's under a bird, and ahead of it, is looked up every so many steps,
+ * the birds taking turns: it's looking two seconds ahead, and flies a
+ * fraction of that between.
+ */
+const GROUND_EVERY = 4;
 
 /** A bird is down this near its spot, m. */
 const LANDED = 1.5;
@@ -126,6 +141,13 @@ export class FlockSim {
   private readonly agility: number;
   /** For picking flockmates to look at: the same each run. */
   private dice: number;
+  /**
+   * Per bird: the ground, sea or roofs under it and ahead, as last looked
+   * up; NaN, not yet since it was put where it is.
+   */
+  private readonly under: Float32Array;
+  /** Steps so far: whose turn it is to look. */
+  private steps = 0;
   /** Per bird: down where it rests, and the height it sits at. */
   readonly settled: Uint8Array;
   private readonly seat: Float32Array;
@@ -176,6 +198,7 @@ export class FlockSim {
     this.offset = new Float32Array(n * 3);
     this.own = new Float32Array(n * 4);
     this.near = new Int16Array(n * NEIGHBOURS).fill(-1);
+    this.under = new Float32Array(n).fill(Number.NaN);
     this.agility = AGILITY / Math.sqrt(habit.span);
     this.dice = seed | 1;
     this.settled = new Uint8Array(n);
@@ -231,6 +254,7 @@ export class FlockSim {
     }
 
     this.taken.fill(Number.NaN);
+    this.under.fill(Number.NaN);
     this.measure();
   }
 
@@ -261,12 +285,13 @@ export class FlockSim {
       return;
     }
 
-    const back = Math.min(since, seconds);
+    // Not long up, its birds are still leaving the water one after
+    // another: flown from there, however long that's been.
+    const leaving = since <= Math.max(seconds, this.n * STAGGER + 2);
+    const back = leaving ? since : seconds;
 
     this.place(
-      since <= seconds
-        ? restingAt(this.flock, { ...now })
-        : planOf(time - back),
+      leaving ? restingAt(this.flock, { ...now }) : planOf(time - back),
       surface
     );
 
@@ -305,8 +330,10 @@ export class FlockSim {
     const { habit, seed } = this.flock;
 
     for (let i = 0; i < this.n; i++) {
-      const x = plan.x + this.offset[i * 3];
-      const z = plan.z + this.offset[i * 3 + 2];
+      // Up, drawn in as they are in the air; down, each in its own spot.
+      const wide = plan.flying ? SETTLED : 1;
+      const x = plan.x + this.offset[i * 3] * wide;
+      const z = plan.z + this.offset[i * 3 + 2] * wide;
       const below = restingHeight(habit, surface(x, z));
 
       this.position[i * 3] = x;
@@ -360,6 +387,7 @@ export class FlockSim {
     const { n, position: p, velocity: v } = this;
     const speed = habit.speed;
     const [low, high] = habit.height;
+    const tick = this.steps++;
 
     // Where the flock's making for: some way on along its path, so its
     // birds are all coming up behind it, not milling about it.
@@ -394,11 +422,18 @@ export class FlockSim {
       }
 
       // What's under it, and what it's coming to: it climbs before a hill,
-      // or a tower, rather than into it.
-      const under = Math.max(
-        surface(p[i3], p[i3 + 2]),
-        surface(p[i3] + v[i3] * LOOK_AHEAD, p[i3 + 2] + v[i3 + 2] * LOOK_AHEAD)
-      );
+      // or a tower, rather than into it. Looked up in turns.
+      if ((tick + i) % GROUND_EVERY === 0 || Number.isNaN(this.under[i])) {
+        this.under[i] = Math.max(
+          surface(p[i3], p[i3 + 2]),
+          surface(
+            p[i3] + v[i3] * LOOK_AHEAD,
+            p[i3 + 2] + v[i3 + 2] * LOOK_AHEAD
+          )
+        );
+      }
+
+      const under = this.under[i];
 
       this.look(i);
 
