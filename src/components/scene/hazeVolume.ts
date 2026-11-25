@@ -9,6 +9,7 @@ import {
 } from "three/webgpu";
 import {
   Fn,
+  If,
   Loop,
   dot,
   float,
@@ -36,7 +37,9 @@ import {
   SHADOW_MAP_SIZE,
   sunLight,
 } from "./environment";
+import { windowLights } from "./buildings/material";
 import { hazeTransmittance, outsideClearing } from "./haze";
+import { cityLightAt } from "./skyglow";
 import { track } from "./loading";
 import { switchedOff } from "./stats";
 
@@ -176,6 +179,7 @@ export function createHazeVolume(eye: Eye) {
 
       const lost = float(0).toVar();
       const lit = float(0).toVar();
+      const glow = float(0).toVar();
       const through = float(1).toVar();
       const hill = float(1).toVar();
 
@@ -215,12 +219,17 @@ export function createHazeVolume(eye: Eye) {
         lit.addAssign(share.mul(seen));
         through.assign(beyond);
 
+        // And at night, the city's light on this stretch (see skyglow).
+        If(windowLights.greaterThan(0), () => {
+          glow.addAssign(share.mul(cityLightAt(p)));
+        });
+
         // SAFETY: a storage texture's written by cell (ivec3); the types
         // only know of reading one by where (vec3).
         storageTexture3D(
           volume,
           ivec3(int(x), int(y), i) as any,
-          vec4(lost, lit, 0, 1)
+          vec4(lost, lit, glow, 1)
         ).toStack();
       });
     })().compute(WIDTH * HEIGHT);
@@ -236,6 +245,7 @@ export function createHazeVolume(eye: Eye) {
     /**
      * Of a pixel's haze, the share (of the whole frame's light, 0..1) in
      * shadow, and the share lit: `depth` is the scene's depth texture node.
+     * And `glow`, the city's light summed over it by night, for airGlow.
      */
     sample(depth) {
       const sceneDepth = depth.sample(screenUV).r;
@@ -258,12 +268,23 @@ export function createHazeVolume(eye: Eye) {
         .sub(overcast)
         .mul(sky.select(float(1), outsideClearing(world)));
 
-      return { lost: read.r.mul(shown), lit: read.g.mul(shown) };
+      return {
+        lost: read.r.mul(shown),
+        lit: read.g.mul(shown),
+        // The sky's own is the backdrop's under ?off=airsky.
+        glow: read.b.mul(
+          sky.select(
+            float(switchedOff("airsky") ? 0 : 1),
+            outsideClearing(world)
+          )
+        ),
+      };
     },
 
     /**
      * Fills the volume for this frame's camera. `sceneDepth` is the scene
-     * pass's depth texture, `width` and `height` its size.
+     * pass's depth texture, `width` and `height` its size. False until it's
+     * being filled.
      */
     update(
       renderer: WebGPURenderer,
@@ -276,7 +297,7 @@ export function createHazeVolume(eye: Eye) {
         // the volume's empty, and the haze unshaded.
         const sunDepth = sunLight.shadow.map?.depthTexture ?? null;
 
-        if (hills && !sunDepth) return;
+        if (hills && !sunDepth) return false;
 
         pass = build(hills ? sunDepth : null, hills ? sceneDepth : null);
       }
@@ -290,10 +311,12 @@ export function createHazeVolume(eye: Eye) {
           ready = true;
         });
 
-        return;
+        return false;
       }
 
       renderer.compute(pass);
+
+      return true;
     },
 
     dispose() {

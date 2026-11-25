@@ -20,10 +20,12 @@ import {
   smoothstep,
   step,
   uv,
+  varying,
   vec3,
 } from "three/tsl";
 import { hazeTransmittance } from "../haze";
 import { devicePixelAngle, pixelAngle } from "../landmarks/common";
+import { switchedOff } from "../stats";
 import { verticalScale } from "../terrain/Terrain";
 import {
   BAY,
@@ -180,12 +182,19 @@ export function createLightsMaterial() {
     float(1).sub(smoothstep(0.9, 1, r))
   );
 
-  material.colorNode = colour
-    .mul(glow.div(size.mul(size).mul(PROFILE_AREA)))
+  // All but the profile is the same across a light: worked out at its
+  // corners, not at each of its pixels (?off=lightvaryings).
+  const perLight = (node) =>
+    switchedOff("lightvaryings") ? node : varying(node);
+
+  material.colorNode = perLight(
+    colour
+      .mul(glow.div(size.mul(size).mul(PROFILE_AREA)))
+      .mul(hazeTransmittance(cameraPosition, position))
+  )
     .mul(profile)
     .mul(windowLights)
-    .mul(WINDOW_BRIGHTNESS)
-    .mul(hazeTransmittance(cameraPosition, position));
+    .mul(WINDOW_BRIGHTNESS);
 
   return material;
 }

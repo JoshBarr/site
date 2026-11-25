@@ -641,7 +641,7 @@ function createMaterial(
   );
 
   const hazed = hazeColor(positionWorld.sub(cameraPosition), varying).add(
-    hazeGlowAtNight(cameraPosition, positionWorld)
+    hazeGlowAtNight(cameraPosition, positionWorld, "surface")
   );
 
   material.colorNode = mix(

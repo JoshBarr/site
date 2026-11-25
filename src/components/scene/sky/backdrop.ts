@@ -83,7 +83,7 @@ export function skyAlong(direction) {
       );
 
   return air.add(
-    hazeGlowAtNight(cameraPosition, far).mul(
+    hazeGlowAtNight(cameraPosition, far, "sky").mul(
       float(1).sub(hazeTransmittance(cameraPosition, far))
     )
   );

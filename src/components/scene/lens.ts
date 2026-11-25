@@ -11,6 +11,8 @@ import {
   clamp,
   float,
   Fn,
+  If,
+  int,
   Loop,
   max,
   min,
@@ -18,9 +20,11 @@ import {
   perspectiveDepthToViewZ,
   rtt,
   smoothstep,
+  sqrt,
   uniform,
   uniformArray,
   uv,
+  vec2,
   vec3,
   vec4,
 } from "three/tsl";
@@ -57,18 +61,35 @@ const far = uniform(80000);
 
 /**
  * Lens blur taps, as three's dof node lays them out (Vogel's spiral, which
- * fills the disc evenly): every fifth of 80 for the bokeh, the rest for the
- * blur.
+ * fills the disc evenly): at most this many for the blur, and a quarter as
+ * many again for the bokeh.
  */
+const BLUR_TAPS = 64;
+const GOLDEN_ANGLE = 2.39996323;
+
 const SPIRAL = Array.from({ length: 80 }, (_, i) => {
   const r = Math.sqrt(i / 80);
-  const angle = i * 2.39996323;
+  const angle = i * GOLDEN_ANGLE;
 
   return new Vector2(r * Math.cos(angle), r * Math.sin(angle));
 });
 
-const blurTaps = uniformArray(SPIRAL.filter((_, i) => i % 5 !== 0));
 const bokehTaps = uniformArray(SPIRAL.filter((_, i) => i % 5 === 0));
+
+/**
+ * The blur's taps go by the disc's area: all of them only at the largest
+ * blur, and never fewer than this. Most of a frame is nearly sharp, its
+ * disc a pixel or two across, where 64 taps read the same few texels: at the
+ * overview this is most of what the depth of field cost (?off=doftaps for
+ * all 64 everywhere).
+ */
+const FEWEST_TAPS = 5;
+
+/**
+ * Blurs under this, 0..1 of the largest, spread no highlights: the disc is
+ * within a texel of the half-size blur, and it's mixed in at under a fifth.
+ */
+const NO_BOKEH = 0.09;
 
 /**
  * Focus this far toward the camera from the orbit target. Blur levels off behind
@@ -279,9 +300,9 @@ export const lensBlur = (distance) =>
  * Blurs `color` by the scene's `depth` texture, as three's dof node does but
  * in three passes at half size rather than seven, two of them full size:
  * near and far share one blur, and how blurred each pixel is comes from the
- * depth as it's needed. A 64-tap average makes the blur, then the brightest
- * of 16 taps around spreads highlights (sun on the water, lamps) into
- * discs, the bokeh.
+ * depth as it's needed. An average of up to 64 taps makes the blur, then the
+ * brightest of 16 taps around spreads highlights (sun on the water, lamps)
+ * into discs, the bokeh.
  */
 export function depthOfField(color, depth) {
   if (switchedOff("dof")) return color;
@@ -297,6 +318,8 @@ export function depthOfField(color, depth) {
   const halfSize = { type: HalfFloatType, resolutionScale: 0.5 };
   const half = rtt(color, null, null, halfSize);
 
+  const everyTap = switchedOff("doftaps");
+
   const blurred = rtt(
     Fn(() => {
       const at = uv();
@@ -304,12 +327,33 @@ export function depthOfField(color, depth) {
       const step = texel.mul(maxRadius).mul(amount);
       const sum = vec3(0).toVar();
 
-      Loop(blurTaps.array.length, ({ i }) => {
-        const tap: any = blurTaps.element(i);
-        sum.addAssign(half.sample(at.add(step.mul(tap))).rgb);
-      });
+      const count = int(
+        everyTap
+          ? float(BLUR_TAPS)
+          : min(amount.mul(amount).mul(BLUR_TAPS).add(FEWEST_TAPS), BLUR_TAPS)
+      ).toVar();
 
-      return vec4(sum.div(blurTaps.array.length), amount);
+      // Vogel's spiral for however many taps: each a golden angle on from
+      // the last, turned by hand rather than by sin and cos.
+      const turn = vec2(Math.cos(GOLDEN_ANGLE), Math.sin(GOLDEN_ANGLE));
+      const toward = vec2(1, 0).toVar();
+
+      Loop(
+        { start: int(0), end: count, type: "int", condition: "<" },
+        ({ i }) => {
+          const r = sqrt(float(i).add(0.5).div(float(count)));
+
+          sum.addAssign(half.sample(at.add(step.mul(toward).mul(r))).rgb);
+          toward.assign(
+            vec2(
+              toward.x.mul(turn.x).sub(toward.y.mul(turn.y)),
+              toward.x.mul(turn.y).add(toward.y.mul(turn.x))
+            )
+          );
+        }
+      );
+
+      return vec4(sum.div(float(count)), amount);
     })(),
     null,
     null,
@@ -323,11 +367,13 @@ export function depthOfField(color, depth) {
       const step = texel.mul(maxRadius).mul(centre.a);
       const brightest = centre.rgb.toVar();
 
-      Loop(bokehTaps.array.length, ({ i }) => {
-        const tap: any = bokehTaps.element(i);
-        brightest.assign(
-          max(brightest, blurred.sample(at.add(step.mul(tap))).rgb)
-        );
+      If(centre.a.greaterThan(everyTap ? -1 : NO_BOKEH), () => {
+        Loop(bokehTaps.array.length, ({ i }) => {
+          const tap: any = bokehTaps.element(i);
+          brightest.assign(
+            max(brightest, blurred.sample(at.add(step.mul(tap))).rgb)
+          );
+        });
       });
 
       return vec4(brightest, centre.a);

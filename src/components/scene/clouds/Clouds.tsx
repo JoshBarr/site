@@ -54,6 +54,7 @@ import { useRenderer } from "../renderer";
 import { setSceneDepth } from "../sceneDepth";
 import { createGovernor } from "../governor";
 import { hazeShadow, shadedHaze } from "../hazeShadow";
+import { airGlow, glowInAir } from "../skyglow";
 import { createHazeVolume } from "../hazeVolume";
 import { meterSky, skyStage, stopDown } from "../sky/skyModel";
 import { hasFirstViewLoaded } from "../loading";
@@ -294,6 +295,9 @@ export function Clouds({
     setNightGlow(night);
   }, [night]);
 
+  // The city's glow in the haze, from the haze's volume (see skyglow).
+  const inAir = useMemo(() => !switchedOff("airglow"), []);
+
   const { scenePass, pipeline, glow, history, drops, tv, volume } =
     useMemo(() => {
       const pipeline = new RenderPipeline(renderer);
@@ -384,12 +388,14 @@ export function Clouds({
           ? createHazeVolume(eye)
           : null;
 
-      const lit: typeof color.rgb = switchedOff("hazeshadow")
+      const air = volume?.sample(depth);
+
+      const shaded: typeof color.rgb = switchedOff("hazeshadow")
         ? color.rgb
         : shadedHaze(
             color.rgb,
-            volume
-              ? { ...volume.sample(depth), rays: volume.rays }
+            air && volume
+              ? { ...air, rays: volume.rays }
               : {
                   lost: hazeShadow({
                     depth,
@@ -400,6 +406,10 @@ export function Clouds({
                 },
             eye
           );
+
+      // And lit by the city at night, where the volume sums that up too.
+      const lit: typeof color.rgb =
+        air && inAir ? shaded.add(airGlow(air.glow)) : shaded;
 
       // Just enough blur to dissolve the march's jitter grain.
       const settled = history?.getTextureNode() ?? clouds;
@@ -466,7 +476,17 @@ export function Clouds({
       pipeline.outputNode = shown(tv.node);
 
       return { scenePass, pipeline, glow, history, drops, tv, volume };
-    }, [renderer, scene, camera, noiseReady, rain, quality, dark, raining]);
+    }, [
+      renderer,
+      scene,
+      camera,
+      noiseReady,
+      rain,
+      quality,
+      dark,
+      raining,
+      inAir,
+    ]);
 
   // For reading back what's in front of what.
   useEffect(() => {
@@ -477,6 +497,7 @@ export function Clouds({
 
   useEffect(
     () => () => {
+      glowInAir.value = 0;
       pipeline.dispose();
       tv.dispose();
       glow?.dispose();
@@ -561,12 +582,16 @@ export function Clouds({
     if (volume) {
       camera.updateMatrixWorld();
 
-      volume.update(
+      const filled = volume.update(
         renderer,
         scenePass.getTexture("depth"),
         scenePass.renderTarget.width,
         scenePass.renderTarget.height
       );
+
+      glowInAir.value = filled && inAir ? 1 : 0;
+    } else {
+      glowInAir.value = 0;
     }
 
     pipeline.render();

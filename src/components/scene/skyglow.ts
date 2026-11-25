@@ -15,8 +15,10 @@ import {
   normalize,
   texture,
   uniform,
+  varying,
   vec3,
 } from "three/tsl";
+import { switchedOff } from "./stats";
 import { hazeDensity, hazeHeight, hazeTransmittance } from "./haze";
 import {
   WINDOW_BRIGHTNESS,
@@ -154,8 +156,8 @@ export const floodlitGround = uniform(new Vector3());
 /** Its light lands this far around it (Gaussian sigma), m. */
 const FLOODLIT_SPREAD = 250;
 
-/** The city's light reaching world point p from below, per m², linear. */
-function cityLight(p) {
+/** The city's light reaching world point p from below, per m², as a grey. */
+export function cityLightAt(p) {
   const uv = p.xz.div(mapSize).add(0.5);
   const fromGround = p.xz.sub(floodlitGround.xy);
 
@@ -163,17 +165,32 @@ function cityLight(p) {
     exp(fromGround.dot(fromGround).div(-2 * FLOODLIT_SPREAD * FLOODLIT_SPREAD))
   );
 
-  return COLOUR.mul(
-    mapNode
-      .sample(uv)
-      .r.mul(windowsLit)
-      .add(floodlit)
-      .mul(mapPeak)
-      .mul(windowLights)
-      .mul(WINDOW_GLOW * WINDOW_BRIGHTNESS)
-      .mul(exp(max(p.y, 0).div(-REACH)))
-  );
+  return mapNode
+    .sample(uv)
+    .r.mul(windowsLit)
+    .add(floodlit)
+    .mul(mapPeak)
+    .mul(windowLights)
+    .mul(WINDOW_GLOW * WINDOW_BRIGHTNESS)
+    .mul(exp(max(p.y, 0).div(-REACH)));
 }
+
+/** The same, in its colour. */
+const cityLight = (p) => COLOUR.mul(cityLightAt(p));
+
+/**
+ * 1 while the haze's glow comes from the haze volume (hazeVolume.ts), which
+ * sums the city's light along each of its rays and hands it to the frame as
+ * it's put together: surfaces then leave it out of their fog.
+ */
+export const glowInAir = uniform(0);
+
+/**
+ * The haze's glow from the volume's sum along a pixel's ray: the city's
+ * light at each stretch of haze, by the share of the frame's light that
+ * stretch scatters in.
+ */
+export const airGlow = (sum) => COLOUR.mul(sum).mul(HAZE_GLOW);
 
 /** What the city's light adds to a cloud at p, lit from below. */
 function cloudGlow(p) {
@@ -223,8 +240,40 @@ function whileLit(glow: () => any) {
   })();
 }
 
-/** hazeGlow, skipped while the lights are off. */
-export const hazeGlowAtNight = (from, to) => whileLit(() => hazeGlow(from, to));
+/**
+ * hazeGlow, skipped while the lights are off. For what's on screen, `seen`
+ * says what: a mesh's own surface (in its fog), or the sky behind them all,
+ * which three draws over the whole frame first. Five steps through the haze
+ * at every pixel of both was the night's largest cost, some 3 ms of the
+ * overview's frame on an M1. So where there's a haze volume it's left to
+ * that (glowInAir), and otherwise a surface's is worked out at each vertex
+ * and spread across the triangle, the glow being a few hundred metres soft.
+ * The sea's mirror is drawn from under the sea, where the volume doesn't
+ * look: there it's as without one. (?off=airglow for no volume,
+ * ?off=vertexglow for surfaces by the pixel.)
+ */
+export function hazeGlowAtNight(from, to, seen?: "surface" | "sky") {
+  const glow = () => hazeGlow(from, to);
+
+  if (!seen || (seen === "sky" && switchedOff("airsky"))) return whileLit(glow);
+
+  const lit = Fn(() => {
+    const lit = vec3(0).toVar();
+
+    If(
+      windowLights
+        .greaterThan(0)
+        .and(glowInAir.lessThan(0.5).or(from.y.lessThan(0))),
+      () => {
+        lit.assign(glow());
+      }
+    );
+
+    return lit;
+  })();
+
+  return seen === "sky" || switchedOff("vertexglow") ? lit : varying(lit);
+}
 
 /** cloudGlow, skipped while the lights are off. */
 export const cloudGlowAtNight = (p) => whileLit(() => cloudGlow(p));

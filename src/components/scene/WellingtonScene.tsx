@@ -196,7 +196,7 @@ function Atmosphere({
 
     // The sky model's glow is smooth across any triangle: by the vertex.
     const fogColor = hazeColor(positionWorld.sub(cameraPosition), varying).add(
-      hazeGlowAtNight(cameraPosition, positionWorld)
+      hazeGlowAtNight(cameraPosition, positionWorld, "surface")
     );
 
     scene.fogNode = fog(

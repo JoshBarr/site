@@ -4,6 +4,7 @@ import { REFLECTION_LAYER } from "../environment";
 import { addLoadingSource, hasFirstViewLoaded, track } from "../loading";
 import { castsNearShadow } from "../landmarks/nearShadow";
 import { setCityLights } from "../skyglow";
+import { switchedOff } from "../stats";
 import { TileIndex } from "../terrain/manifest";
 import { verticalScale } from "../terrain/Terrain";
 import { createLightsMaterial } from "./lights";
@@ -110,6 +111,18 @@ export function Buildings({
   return index && <BuildingTiles index={index} quality={quality} />;
 }
 
+/**
+ * The buildings are drawn in the sea's mirror until lighting-up is this far
+ * through: all the way, when the sky's as dark as it gets. What shows of
+ * them in the mirror is their mass against the sky (at dusk the harbour off
+ * the city goes pale without it); against a night sky there's none to see,
+ * and their lights are in the mirror as points regardless. Drawing them in
+ * it costs over a millisecond of the overview's frame on an M1, which at
+ * night is what took it past a 60 Hz screen's budget (?off=mirrornight to
+ * draw them always).
+ */
+const MIRRORED_UNTIL = 1;
+
 function BuildingTiles({
   index,
   quality,
@@ -128,10 +141,9 @@ function BuildingTiles({
       setup: ({ mesh, lights }) => {
         if (mesh) castsNearShadow(mesh);
 
-        if (quality.reflections) {
-          mesh?.layers.enable(REFLECTION_LAYER);
-          lights?.layers.enable(REFLECTION_LAYER);
-        }
+        // The lights are in the sea's mirror always; the buildings by the
+        // frame (see MIRRORED_UNTIL).
+        if (quality.reflections) lights?.layers.enable(REFLECTION_LAYER);
       },
     });
 
@@ -170,6 +182,7 @@ function BuildingTiles({
     return tiles;
   }, [index, quality]);
 
+  const alwaysMirrored = useMemo(() => switchedOff("mirrornight"), []);
   const selected = useRef<BuildingTile[]>([]);
   const visible = useRef(new Set<TileObjects>());
 
@@ -201,8 +214,15 @@ function BuildingTiles({
 
     const lit = windowLights.value > 0;
 
-    for (const { object, lights } of next) {
+    const mirrored =
+      quality.reflections &&
+      (alwaysMirrored || windowLights.value < MIRRORED_UNTIL);
+
+    for (const { object, mesh, lights } of next) {
       object.visible = true;
+
+      if (mirrored) mesh?.layers.enable(REFLECTION_LAYER);
+      else mesh?.layers.disable(REFLECTION_LAYER);
 
       if (lights) lights.visible = lit;
     }

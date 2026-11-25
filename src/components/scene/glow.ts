@@ -1,4 +1,5 @@
 import { luminance, max, uniform, vec4 } from "three/tsl";
+import { switchedOff } from "./stats";
 import { bloom } from "three/addons/tsl/display/BloomNode.js";
 
 // Lights glow at night: a bloom on what's brighter than any lit surface gets
@@ -10,10 +11,19 @@ import { bloom } from "three/addons/tsl/display/BloomNode.js";
 const THRESHOLD = 1;
 
 /**
- * The bloom's five blur levels add up to about three times this of what
- * goes in, whatever the radius.
+ * The bloom's blur levels add up to about 2.2 times this of what goes in
+ * (three with all five), whatever the radius.
  */
 const STRENGTH = 0.12;
+
+/**
+ * Of three's five blur levels, each half the size of the last, the ones
+ * drawn. A level is two passes, and a pass costs about a tenth of a
+ * millisecond on an M1 however small it is: the two widest, a quarter of the
+ * glow spread over hundreds of pixels, made no difference to see at this
+ * strength (?off=bloomlevels for all five, ?off=bloom for no glow).
+ */
+const LEVELS = 3;
 
 /** 0..1: how far the glow spreads. */
 const RADIUS = 0.15;
@@ -31,9 +41,19 @@ export function setNightGlow(night: number) {
  * at the strength setNightGlow gives. Null by day: no pass at all.
  */
 export function nightGlow(color, night: boolean) {
-  if (!night) return null;
+  if (!night || switchedOff("bloom")) return null;
 
   const node = bloom(color, strength, RADIUS, THRESHOLD);
+
+  if (!switchedOff("bloomlevels")) {
+    // SAFETY: BloomNode blurs and sizes its levels up to _nMips
+    // (BloomNode.js, updateBefore), which its types leave out. A three
+    // that's dropped it ignores this and draws all five.
+    (node as typeof node & { _nMips: number })._nMips = LEVELS;
+
+    // The rest are never drawn: nothing of them in the sum.
+    for (const tint of node.bloomTintColors.slice(LEVELS)) tint.setScalar(0);
+  }
 
   // Three's high pass lets a light through whole once it's over the
   // threshold, so every lit window bloomed at full brightness. Only the
