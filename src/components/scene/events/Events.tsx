@@ -5,7 +5,6 @@ import { sceneNow } from "../clock";
 import { usePixelAngle } from "../landmarks/common";
 import { floodlitGround } from "../skyglow";
 import { nztmToWorld, type TileIndex } from "../terrain/manifest";
-import { EventIcons } from "./EventIcons";
 import { lightVenue, type VenueLighting } from "./glow";
 import { type VenueState, venueStates } from "./schedule";
 import { Stadium, stadiumLit } from "./Stadium";
@@ -14,8 +13,7 @@ import { VENUE_SITES } from "./venues";
 
 // Wellington's venues lit while something's on in them (lib/events.ts):
 // the stadium's floodlights for a game or a concert, a theatre or concert
-// hall glowing through a show, an icon over each saying what. Lighting
-// only shows at night; the icons show by day too.
+// hall glowing through a show. It only shows at night.
 
 /** A hall with a show on: walls washed, every window lit. Eyeballed. */
 const HALL: VenueLighting = { flood: 1.2, windows: 0.85, crown: 0.15 };
@@ -93,10 +91,5 @@ export function Events({ index }: { index: TileIndex }) {
     []
   );
 
-  return (
-    <>
-      <Stadium index={index} />
-      <EventIcons index={index} states={states} />
-    </>
-  );
+  return <Stadium index={index} />;
 }

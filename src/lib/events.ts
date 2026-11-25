@@ -102,7 +102,7 @@ const TEAMS = {
 } satisfies Record<number, Kind>;
 
 /** What sort of thing's on: the icon over the venue. */
-export const kinds = [
+const kinds = [
   "rugby",
   "football",
   "cricket",
