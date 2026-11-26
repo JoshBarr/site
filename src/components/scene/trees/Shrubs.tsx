@@ -187,6 +187,37 @@ interface Chunk {
 
 const surface = { building: 0, kerb: 0 };
 
+/** Ground kept clear of shrubs (a pool, say): world x, z and radius, m. */
+const clearings = new Set<readonly [number, number, number]>();
+
+/** Set when a clearing's made or let go, for the chunks there to rebuild. */
+let clearingsChanged = false;
+
+/**
+ * Keeps shrubs off a circle of ground, world x and z, `radius` m: the
+ * scrub cover's too coarse to know a pool from a planter. Returns a
+ * function that lets them back.
+ */
+export function keepShrubsOff(x: number, z: number, radius: number) {
+  const clearing = [x, z, radius] as const;
+  clearings.add(clearing);
+  clearingsChanged = true;
+
+  return () => {
+    clearings.delete(clearing);
+    clearingsChanged = true;
+  };
+}
+
+/** Whether a shrub of `radius` at (x, z) would stand in a clearing. */
+function inClearing(x: number, z: number, radius: number) {
+  for (const [cx, cz, r] of clearings) {
+    if (Math.hypot(x - cx, z - cz) < r + radius) return true;
+  }
+
+  return false;
+}
+
 /**
  * Scatter one chunk's shrubs: a candidate in each cell, kept by the scrub
  * cover there, off streets, buildings and the sea; in a random order, so a
@@ -215,6 +246,8 @@ function scatter(cover: Cover, cache: TileCache, cx: number, cz: number) {
 
       if (ground === undefined || ground < 0.5) continue;
       const radius = (0.7 + hash2(gx, gz, 4) * 1.1) * (0.75 + 0.5 * scrub);
+
+      if (clearings.size && inClearing(x, z, radius)) continue;
 
       if (cache.surfaceAt(x, z, surface)) {
         const kerb = (surface.kerb * 255 - ROAD_ZERO) / ROAD_UNIT;
@@ -337,6 +370,19 @@ function ShrubChunks({
   const recheck = useMemo(() => ({ next: 0 }), []);
 
   useFrame(() => {
+    // A clearing made: the chunks under it scatter again. (One let go
+    // fills back in as its chunks are next built.)
+    if (clearingsChanged) {
+      clearingsChanged = false;
+
+      for (const chunk of chunks.values()) {
+        const x = (chunk.cx + 0.5) * CHUNK;
+        const z = (chunk.cz + 0.5) * CHUNK;
+
+        if (inClearing(x, z, CHUNK)) build(chunk.cx, chunk.cz);
+      }
+    }
+
     camera.getWorldPosition(cameraPosition);
     projScreen.multiplyMatrices(
       camera.projectionMatrix,

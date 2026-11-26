@@ -150,6 +150,13 @@ export const shadowCasters = { version: 0 };
 export const NEAR_SHADOW_LAYER = 3;
 
 /**
+ * What only the Bucket Fountain's pool mirrors (its cage, buckets and
+ * water), on top of REFLECTION_LAYER: kept out of the sea's mirror, which
+ * would show it fifteen metres under the harbour.
+ */
+export const POOL_LAYER = 4;
+
+/**
  * Both shadow maps' resolution, half on touch screens. Set here, before three
  * first builds the maps, and never changed: three resizes a map by destroying
  * its depth texture mid-frame, and a draw still bound to the old one fails

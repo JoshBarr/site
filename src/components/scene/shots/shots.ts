@@ -54,6 +54,12 @@ export const SHOTS: Shot[] = [
     view: [1750330, 5427620, 10, 1750250, 5427518, 8],
   },
   {
+    id: "bucket-fountain",
+    name: "Bucket Fountain, Cuba Mall",
+    group: "City and harbour",
+    view: [1748737.5, 5427297.4, 14.5, 1748733, 5427280, 11],
+  },
+  {
     id: "waterfront",
     name: "Waterfront and Te Papa",
     group: "City and harbour",

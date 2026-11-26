@@ -22,6 +22,7 @@ import {
 import { CRANES, WHARF_BEARING, YARD } from "../port/terminal";
 import { nztmToWorld, TileIndex } from "../terrain/manifest";
 import { useGridFlow } from "../power/flow";
+import { BucketFountain } from "../bucket/BucketFountain";
 import { Fountain } from "../fountain/Fountain";
 import { Playground } from "../playground/Playground";
 import { switchedOff } from "../stats";
@@ -146,9 +147,10 @@ const CRANE_POSES: CranePose[] = [
 /**
  * Wellington's wind turbines and transmitter towers, CentrePort's cranes
  * and container stacks, Queens Wharf's heritage cranes, the harbour's
- * lighthouses, Frank Kitts Park's playground and Oriental Bay's fountain,
- * standing on the terrain and casting shadows on it. `lights` (0..1) turns on their aviation
- * lights and the lighthouses, for night.
+ * lighthouses, Frank Kitts Park's playground, Oriental Bay's fountain and
+ * Cuba Mall's Bucket Fountain, standing on the terrain and casting shadows
+ * on it. `lights` (0..1) turns on their aviation lights and the
+ * lighthouses, for night.
  */
 export function Landmarks({
   index,
@@ -239,6 +241,7 @@ export function Landmarks({
 
   const playground = useMemo(() => !switchedOff("playground"), []);
   const fountain = useMemo(() => !switchedOff("fountain"), []);
+  const bucket = useMemo(() => !switchedOff("bucket"), []);
 
   // What the two farms are sending out, where the grid says: West Wind's
   // turbines, then Mill Creek's, as they're placed.
@@ -269,6 +272,7 @@ export function Landmarks({
       <Lighthouses lighthouses={placed.lighthouses} />
       {playground && <Playground index={index} />}
       {fountain && <Fountain index={index} wind={wind} lights={lights} />}
+      {bucket && <BucketFountain index={index} wind={wind} lights={lights} />}
       <ObstructionLights lights={placed.lights} />
     </>
   );
