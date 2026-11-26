@@ -2,13 +2,21 @@ import { RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import {
   Color,
+  InstancedBufferAttribute,
   InstancedMesh,
   Matrix4,
   MeshStandardNodeMaterial,
   Quaternion,
   Vector3,
 } from "three/webgpu";
-import { attribute, select, uniform, vec3 } from "three/tsl";
+import {
+  attribute,
+  instancedBufferAttribute,
+  select,
+  uniform,
+  vec2,
+  vec3,
+} from "three/tsl";
 import { TileIndex } from "../terrain/manifest";
 import type { HeightQuery } from "../terrain/Terrain";
 import { castsNearShadow } from "../landmarks/nearShadow";
@@ -25,11 +33,13 @@ import {
 } from "../follow/store";
 import { createModelMaterial, isNear, NearModels } from "../models/lod";
 import { highways } from "../traffic/shared";
+import { createLampMap, lampLight } from "../traffic/signs/matrix";
 import { seenUnderground } from "../tunnels/reveal";
 import type { RoadUser } from "../traffic/sim";
 import { createBusGeometry } from "./model";
 import { BusRoutes, loadBusRoutes } from "./routes";
 import { follow, keepToKerb, Run } from "./run";
+import { BAND_WIDE, BusSigns, SIGN_ROWS } from "./sign";
 import { createSpacing } from "./spacing";
 import { useBuses } from "./useBuses";
 import { sceneNow, useSeek } from "../clock";
@@ -64,6 +74,12 @@ const BUS_TINT = new Color(BUS.tint);
 
 /** Drawn in detail at once, at most. */
 const MAX_DETAILED = 48;
+
+/**
+ * Different signs kept lit at once: more than are ever drawn, so there's
+ * always one out of sight to give up for a new one.
+ */
+const SIGNS = 64;
 
 /** Kept between a bus and the one ahead of it in its lane, m. */
 const GAP = 2;
@@ -142,6 +158,27 @@ function createBuses() {
   castsNearShadow(mesh);
   const near = createModelMaterial({ roughness: 0.55 });
 
+  // The detailed buses' signs: lamps, lit day and night, each bus's own
+  // band of the map.
+  const signs = new BusSigns(SIGNS);
+  const lampMap = createLampMap(signs.lamps, BAND_WIDE);
+  const bands = new InstancedBufferAttribute(new Float32Array(MAX_DETAILED), 1);
+  const lamp = attribute<"vec3">("lamp", "vec3");
+
+  const band = instancedBufferAttribute<"float">(bands, "float")
+    .add(0.5)
+    .floor();
+
+  near.material.emissiveNode = attribute<"vec3">("glow", "vec3")
+    .mul(near.lit)
+    .add(
+      select(
+        lamp.z.greaterThan(0.5),
+        lampLight(lampMap, lamp.xy.add(vec2(0, band.mul(SIGN_ROWS))), near.lit),
+        vec3(0)
+      )
+    );
+
   const detailed = new NearModels(
     createBusGeometry(BUS),
     near.material,
@@ -156,6 +193,9 @@ function createBuses() {
     detailed,
     detailedMaterial: near.material,
     detailedLit: near.lit,
+    signs,
+    lampMap,
+    bands,
   };
 }
 
@@ -309,6 +349,7 @@ function Fleet({
       fleet.mesh.dispose();
       fleet.detailedMaterial.dispose();
       fleet.detailed.dispose();
+      fleet.lampMap.dispose();
       trails.lines.geometry.dispose();
       trails.material.dispose();
       sprites.sprite.material.dispose();
@@ -373,6 +414,7 @@ function Fleet({
     let count = 0;
     const watched = followed("bus");
     fleet.detailed.begin();
+    fleet.signs.begin();
     spots.begin();
     runs.forEach((run, i) => {
       const { bus } = run;
@@ -414,6 +456,19 @@ function Fleet({
           count++,
           matrix.compose(centre, rotation, scale)
         );
+      } else {
+        // Its signs: its route's number, and where it's going.
+        const slot = fleet.detailed.size - 1;
+
+        const band = fleet.signs.bandFor(
+          routes.nameOf(bus.route),
+          run.destination
+        );
+
+        if (fleet.bands.array[slot] !== band) {
+          fleet.bands.array[slot] = band;
+          fleet.bands.needsUpdate = true;
+        }
       }
 
       if (bus.id === watched) {
@@ -436,6 +491,12 @@ function Fleet({
     });
 
     fleet.detailed.end();
+
+    if (fleet.signs.changed) {
+      fleet.signs.changed = false;
+      fleet.lampMap.needsUpdate = true;
+    }
+
     fleet.mesh.count = count;
     fleet.mesh.instanceMatrix.needsUpdate = true;
     sprites.sprite.count = lit;

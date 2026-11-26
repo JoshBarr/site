@@ -36,6 +36,11 @@ export class ModelBuilder {
   /** Sides of tubes and cylinders. */
   sides = 8;
 
+  /** Corners built so far: three to a triangle, in the order they're built. */
+  get size() {
+    return this.position.length / 3;
+  }
+
   /** Paints what's built next `hex`, glowing `glow` (times the lights). */
   use(hex: number, glow = 0) {
     this.paint.setHex(hex);

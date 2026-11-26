@@ -57,6 +57,8 @@ const TO_KERB = 1 / 15;
  */
 export interface Run {
   bus: Bus;
+  /** Where its sign says it's going; empty when the timetable doesn't say. */
+  destination: string;
   points: Point[];
   s: number[];
   arrived: number[];
@@ -280,15 +282,23 @@ export function follow(
   let cost = OFF_ROUTE;
   let start = 0;
 
-  for (const shape of routes.shapesFor(bus.route, bus.direction)) {
+  /** Which of the route's shapes it's on, if any. */
+  let taken: number | undefined;
+
+  for (const [k, shape] of routes
+    .shapesFor(bus.route, bus.direction)
+    .entries()) {
     const m = match(shape, fixes, bearing);
 
     if (m && m.cost < cost) {
       cost = m.cost;
       found = { shape, s: m.s };
       start = m.from;
+      taken = k;
     }
   }
+
+  const destination = routes.destinationOf(bus.route, bus.direction, taken);
 
   // Fixes from before a fresh start are left behind.
   fixes = fixes.slice(start);
@@ -349,6 +359,7 @@ export function follow(
 
   return {
     bus,
+    destination,
     points: keepLeft(
       s.map((d) => pointOn(shape, d)),
       KEEP_LEFT

@@ -12,7 +12,19 @@ const BUSES_URL = process.env.NEXT_PUBLIC_BUSES_URL ?? "/buses";
 interface RoutesFile {
   chains: number[][];
   shapes: number[][];
-  routes: Record<string, { name: string; directions: number[][] }>;
+  /** What the fronts of buses say, each once. */
+  headsigns?: string[];
+  routes: Record<
+    string,
+    {
+      name: string;
+      directions: number[][];
+      /** Each way, each shape's headsign: places in `headsigns`, -1 for none. */
+      headsigns?: number[][];
+      /** Each way, the headsign most of its trips show. */
+      usual?: number[];
+    }
+  >;
 }
 
 /** Grid cell for finding a shape's segments near a point, m. */
@@ -140,6 +152,7 @@ export class BusRoutes {
   private encoded: number[][];
   private shapes = new Map<number, IndexedShape>();
   private routes: RoutesFile["routes"];
+  private headsigns: string[];
 
   constructor(file: RoutesFile, index: TileIndex) {
     const { manifest } = index;
@@ -166,6 +179,7 @@ export class BusRoutes {
     });
     this.encoded = file.shapes;
     this.routes = file.routes;
+    this.headsigns = file.headsigns ?? [];
   }
 
   /** A shape, put together from its chains the first time it's wanted. */
@@ -193,6 +207,22 @@ export class BusRoutes {
   /** What a route's called on the front of the bus. */
   nameOf(route: string) {
     return this.routes[route]?.name ?? route;
+  }
+
+  /**
+   * Where a bus on a route says it's going: what most trips show that take
+   * the `shape`th of `shapesFor` that way, or without one, most that go
+   * that way at all. Empty when the timetable doesn't say.
+   */
+  destinationOf(route: string, direction: number, shape?: number) {
+    const found = this.routes[route];
+    const way = direction ? 1 : 0;
+
+    const sign =
+      (shape === undefined ? undefined : found?.headsigns?.[way]?.[shape]) ??
+      -1;
+
+    return this.headsigns[sign >= 0 ? sign : (found?.usual?.[way] ?? -1)] ?? "";
   }
 
   /** The ways a route's trips go in a direction, or none if it's unknown. */

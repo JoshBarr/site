@@ -707,25 +707,63 @@ const encodedShapes = shapes.map((refs) =>
   refs.map(renumber).map((ref, k, all) => (k ? ref - all[k - 1] : ref))
 );
 
-// --- Routes: which shapes each one's trips take, each way. ---
+// --- Routes: which shapes each one's trips take, each way, and what the
+// front of the bus says on each. ---
 
 const out = {};
+const headsigns = [];
+const headsignOf = new Map();
+
+/** A headsign's place in `headsigns`, or -1 for none. */
+const signed = (text) => {
+  if (!text) return -1;
+
+  if (!headsignOf.has(text)) {
+    headsignOf.set(text, headsigns.length);
+    headsigns.push(text);
+  }
+
+  return headsignOf.get(text);
+};
+
+/** The one counted most often in `counts`, a Map; undefined if it's empty. */
+const commonest = (counts) => [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
+
+const count = (counts, key) => counts.set(key, (counts.get(key) ?? 0) + 1);
 
 for (const route of routes) {
-  const directions = [new Set(), new Set()];
+  // Each way: its shapes, with how many trips show each headsign on each,
+  // and over them all.
+  const directions = [new Map(), new Map()];
+  const overall = [new Map(), new Map()];
 
   for (const trip of trips) {
     if (trip.route_id !== route.route_id) continue;
     const shape = shapeOf.get(trip.shape_id);
     const direction = Number(trip.direction_id) ? 1 : 0;
 
-    if (shape !== undefined) directions[direction].add(shape);
+    if (shape === undefined) continue;
+
+    if (!directions[direction].has(shape)) {
+      directions[direction].set(shape, new Map());
+    }
+
+    const headsign = trip.trip_headsign?.trim();
+
+    if (headsign) {
+      count(directions[direction].get(shape), headsign);
+      count(overall[direction], headsign);
+    }
   }
 
   if (directions.some((d) => d.size)) {
     out[route.route_id] = {
       name: route.route_short_name,
-      directions: directions.map((d) => [...d]),
+      directions: directions.map((d) => [...d.keys()]),
+      headsigns: directions.map((d) =>
+        [...d.values()].map((counts) => signed(commonest(counts)))
+      ),
+      usual: overall.map((counts) => signed(commonest(counts))),
     };
   }
 }
@@ -742,7 +780,13 @@ const file = {
    * after the first as the change from the one before.
    */
   shapes: encodedShapes,
-  /** By GTFS route_id: its name, and its shapes each way (direction_id). */
+  /** What the fronts of buses say: trip_headsign, each once. */
+  headsigns,
+  /**
+   * By GTFS route_id: its name, and its shapes each way (direction_id);
+   * the headsign most trips show on each of those shapes, and on the route
+   * that way whichever shape, as places in `headsigns` (-1 for none).
+   */
   routes: out,
 };
 
@@ -763,6 +807,7 @@ console.log(
   `${chains.length} chains (${(km / 1000).toFixed(0)} km, ${pointCount} points; ` +
     `${tunnelled} through ${tunnels.length} tunnels), ` +
     `${shapes.length} shapes (${raw.size} in the timetable, ${dropped} off ` +
-    `the map), ${Object.keys(out).length} routes; ` +
+    `the map), ${Object.keys(out).length} routes, ` +
+    `${headsigns.length} headsigns; ` +
     `${(json.length / 1024).toFixed(0)} KB`
 );

@@ -1,4 +1,6 @@
+import { BufferAttribute } from "three/webgpu";
 import { ModelBuilder, Vec, WINDOW_GLOW } from "../models/builder";
+import { FRONT_WIDE, REAR_FROM, REAR_WIDE, SIGN_ROWS } from "./sign";
 
 // A detailed bus, for the few close enough to see: a low-floor single-decker
 // in metres, x across (+x the kerb side, where the doors are, driving on the
@@ -16,12 +18,24 @@ const DARK = 0x2e2e2e;
 const TYRE = 0x1e1e1e;
 const ROOF_KIT = 0xa8a8a8;
 
-/** Destination signs: amber, lit with the windows. */
-const SIGN_GLOW = 0xffa531;
+/** A sign's face, behind its lamps. */
+const SIGN = 0x0b0b0c;
+
+/**
+ * The signs' lamps are this far apart, m: the front sign's 2 m across, as
+ * wide as fits under the roof's curve.
+ */
+const LAMP_PITCH = 2 / FRONT_WIDE;
+const SIGN_TALL = SIGN_ROWS * LAMP_PITCH;
 
 const WHEEL_RADIUS = 0.5;
 const FLOOR = 0.32;
 
+/**
+ * The bus, with its signs' faces marked for the lamps drawn on them:
+ * `lamp` is where on the signs' band of lamps each corner is (sign.ts),
+ * across and down, and 1; or all 0 off the signs.
+ */
 export function createBusGeometry({
   length: L,
   width,
@@ -63,12 +77,36 @@ export function createBusGeometry({
   const pane = (x0: number, x1: number, y0: number, y1: number, z: number) =>
     b.quad(inside, [x0, y0, z], [x1, y0, z], [x1, y1, z], [x0, y1, z]);
 
-  // Windscreen and destination sign; the back window and engine grille.
+  // The signs: over the windscreen, where it's going and its number; in
+  // the back window's top corner, kerb side, its number. Each reads from
+  // the left of whoever's looking at it.
+  const signs: { from: number; x: number; y: number; left: number }[] = [];
+
+  const sign = (
+    left: number,
+    wide: number,
+    x: number,
+    y: number,
+    z: number
+  ) => {
+    const across = (z > 0 ? 1 : -1) * wide * LAMP_PITCH;
+
+    signs.push({ from: b.size, x, y, left });
+    pane(x, x + across, y - SIGN_TALL, y, z);
+  };
+
+  const rearSign = half * 0.7 - REAR_WIDE * LAMP_PITCH;
+  const rearTop = H - 0.45;
+
+  b.use(SIGN);
+  sign(0, FRONT_WIDE, (-FRONT_WIDE * LAMP_PITCH) / 2, H - 0.21, front);
+  sign(REAR_FROM, REAR_WIDE, half * 0.7, rearTop, rear);
+
+  // Windscreen; the back window, round its sign, and engine grille.
   b.use(GLASS, WINDOW_GLOW);
   pane(-half * 0.88, half * 0.88, 1.0, H - 0.5, front);
-  pane(-half * 0.7, half * 0.7, 2.0, H - 0.45, rear);
-  b.use(0x141414, SIGN_GLOW);
-  pane(-half * 0.7, half * 0.7, H - 0.43, H - 0.18, front);
+  pane(-half * 0.7, half * 0.7, 2.0, rearTop - SIGN_TALL, rear);
+  pane(-half * 0.7, rearSign, rearTop - SIGN_TALL, rearTop, rear);
   b.use(DARK);
   b.box([-half * 0.95, FLOOR, L / 2 - 0.1], [half * 0.95, 0.62, L / 2 + 0.06]);
   pane(-half * 0.7, half * 0.7, 0.7, 1.4, rear);
@@ -145,5 +183,21 @@ export function createBusGeometry({
     );
   }
 
-  return b.build();
+  const geometry = b.build();
+  const position = geometry.getAttribute("position");
+  const lamp = new Float32Array(position.count * 3);
+
+  // A sign's two triangles: each corner's lamps from where it is on the
+  // face, which runs toward -x on the back.
+  for (const { from, x, y, left } of signs) {
+    for (let i = from; i < from + 6; i++) {
+      lamp[i * 3] = left + Math.abs(position.getX(i) - x) / LAMP_PITCH;
+      lamp[i * 3 + 1] = (y - position.getY(i)) / LAMP_PITCH;
+      lamp[i * 3 + 2] = 1;
+    }
+  }
+
+  geometry.setAttribute("lamp", new BufferAttribute(lamp, 3));
+
+  return geometry;
 }

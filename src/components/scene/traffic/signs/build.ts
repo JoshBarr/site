@@ -1,37 +1,17 @@
 import {
   CanvasTexture,
   Color,
-  DataTexture,
   Group,
-  LinearFilter,
-  LinearMipmapLinearFilter,
   Mesh,
   MeshStandardNodeMaterial,
-  RedFormat,
   SRGBColorSpace,
-  UnsignedByteType,
 } from "three/webgpu";
-import {
-  attribute,
-  float,
-  floor,
-  fract,
-  fwidth,
-  length,
-  max,
-  mix,
-  select,
-  smoothstep,
-  texture,
-  uniform,
-  uv,
-  vec2,
-  vec3,
-} from "three/tsl";
+import { attribute, select, texture, uniform, uv, vec2, vec3 } from "three/tsl";
 import { parseMessage } from "../../../../lib/signs";
 import { DOTS_HIGH, DOTS_WIDE, litDots, litLane } from "./dots";
 import { BACK, buildSigns, HOUSING, LAMPS, PAINTED } from "./geometry";
 import { pack, type PlacedFace, type PlacedStructure } from "./layout";
+import { createLampMap, lampLight } from "./matrix";
 import { GUTTER, paintDirection, paintSpeed } from "./paint";
 
 // The signs as the scene draws them: a few meshes of steel and faces, one
@@ -48,25 +28,12 @@ const DISC_PIXELS = 96;
 const GALVANISED = new Color(0x8b8f92);
 const ALUMINIUM = new Color(0x6f7376);
 const HOUSED = new Color(0x0b0b0c);
-const AMBER = new Color(1, 0.5, 0.03);
 
 /**
- * How bright a lit lamp is, by day and by night (they're dimmed after
- * dark); and how much of its own colour a painted face gives back at
- * night, as headlights find its reflective sheeting.
+ * How much of its own colour a painted face gives back at night, as
+ * headlights find its reflective sheeting.
  */
-const LAMP_DAY = 2;
-const LAMP_NIGHT = 1.4;
 const REFLECTIVE = 0.3;
-
-/** A lamp's round, within its square of the grid: lit to here, dark by here. */
-const LAMP = [0.4, 0.56];
-
-/** Lamps this many to a pixel, and they're drawn as their blur: from, to. */
-const BLURRED = [0.35, 0.9];
-
-/** A lamp's share of its square, for the blur to be as bright. */
-const LAMP_SHARE = 0.8;
 
 /**
  * The signs `placed`, ready to draw: `group` holds their meshes. Their
@@ -133,18 +100,7 @@ export function createSigns(placed: PlacedStructure[]) {
     DOTS_WIDE * 2 * DOTS_HIGH * Math.max(lit.length, 1)
   );
 
-  const lampMap = new DataTexture(
-    lamps,
-    DOTS_WIDE * 2,
-    DOTS_HIGH * Math.max(lit.length, 1),
-    RedFormat,
-    UnsignedByteType
-  );
-
-  lampMap.magFilter = LinearFilter;
-  lampMap.minFilter = LinearMipmapLinearFilter;
-  lampMap.generateMipmaps = true;
-  lampMap.needsUpdate = true;
+  const lampMap = createLampMap(lamps, DOTS_WIDE * 2);
 
   const night = uniform(0);
   const page = uniform(0);
@@ -158,8 +114,7 @@ export function createSigns(placed: PlacedStructure[]) {
 
   const paint = texture(sheetMap, uv()).rgb;
 
-  // Which lamp, and where in the map its sign's band and page are.
-  const band = vec2(DOTS_WIDE * 2, DOTS_HIGH * Math.max(lit.length, 1));
+  // Where in the map its sign's band and page are.
   const shift = vec2(page.mul(DOTS_WIDE), dot.z.mul(DOTS_HIGH));
 
   const inGrid = dot.x
@@ -168,18 +123,7 @@ export function createSigns(placed: PlacedStructure[]) {
     .and(dot.y.greaterThan(0))
     .and(dot.y.lessThan(DOTS_HIGH));
 
-  const lamp = texture(lampMap, floor(dot.xy).add(0.5).add(shift).div(band))
-    .level(float(0))
-    .r.mul(smoothstep(LAMP[1], LAMP[0], length(fract(dot.xy).sub(0.5))));
-
-  // Further off than a lamp to a pixel, the map's own blur stands in.
-  const blur = texture(lampMap, dot.xy.add(shift).div(band)).r.mul(LAMP_SHARE);
-
-  const glow = mix(
-    lamp,
-    blur,
-    smoothstep(BLURRED[0], BLURRED[1], max(fwidth(dot.x), fwidth(dot.y)))
-  ).mul(select(inGrid, float(1), float(0)));
+  const light = lampLight(lampMap, dot.xy.add(shift), night);
 
   const tone = (c: Color) => vec3(c.r, c.g, c.b);
   const material = new MeshStandardNodeMaterial({ roughness: 0.75 });
@@ -196,13 +140,7 @@ export function createSigns(placed: PlacedStructure[]) {
   material.emissiveNode = select(
     is(PAINTED),
     paint.mul(night.mul(REFLECTIVE)),
-    select(
-      is(LAMPS),
-      tone(AMBER)
-        .mul(glow)
-        .mul(mix(float(LAMP_DAY), float(LAMP_NIGHT), night)),
-      vec3(0)
-    )
+    select(is(LAMPS).and(inGrid), light, vec3(0))
   );
 
   const group = new Group();

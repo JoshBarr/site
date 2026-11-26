@@ -118,6 +118,66 @@ describe("bus routes", () => {
   });
 });
 
+describe("where a bus says it's going", () => {
+  // Route 1 goes up the road and along the top to Churton Park, or only
+  // up the road to Johnsonville; and back to Island Bay.
+  const signed = new BusRoutes(
+    {
+      chains: encode([UP_THE_ROAD, ALONG_THE_TOP]),
+      shapes: [[1, 1], [1], [-2, 1]],
+      headsigns: ["Churton Park", "Johnsonville", "Island Bay"],
+      routes: {
+        "10": {
+          name: "1",
+          directions: [[0, 1], [2]],
+          headsigns: [[0, 1], [-1]],
+          usual: [0, 2],
+        },
+      },
+    },
+    originIndex()
+  );
+
+  it("is what most trips show that go the way it's going", () => {
+    expect(signed.destinationOf("10", 0, 0)).toBe("Churton Park");
+    expect(signed.destinationOf("10", 0, 1)).toBe("Johnsonville");
+  });
+
+  it("is what most of its route's show, off every way it goes", () => {
+    expect(signed.destinationOf("10", 0)).toBe("Churton Park");
+    // Or on a way the timetable has no headsign for.
+    expect(signed.destinationOf("10", 1, 0)).toBe("Island Bay");
+  });
+
+  it("is nothing for a route that isn't known, or a file without them", () => {
+    expect(signed.destinationOf("999", 0)).toBe("");
+    expect(routes.destinationOf("14", 0, 0)).toBe("");
+  });
+
+  it("goes with the way its fixes fit", () => {
+    const going = (fixes: [number, number, number][]) =>
+      follow(bus(fixes, { route: "10" }), signed, originIndex(), START, () => 0)
+        ?.destination;
+
+    // Round the corner at the top: only Churton Park's way goes there.
+    expect(
+      going([
+        [0, 400, 0],
+        [0, 500, 20],
+        [100, 500, 40],
+      ])
+    ).toBe("Churton Park");
+
+    // Nowhere near either: what the route usually says.
+    expect(
+      going([
+        [2000, 2000, 0],
+        [2000, 2100, 20],
+      ])
+    ).toBe("Churton Park");
+  });
+});
+
 describe("a shape", () => {
   // Out 200 m east and back 2 m to the north.
   const outAndBack = new IndexedShape([

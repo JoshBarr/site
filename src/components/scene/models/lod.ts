@@ -65,6 +65,11 @@ export class NearModels {
     this.count = 0;
   }
 
+  /** How many have been added since `begin`: the last one's at `size - 1`. */
+  get size() {
+    return this.count;
+  }
+
   /** False when there's no room: draw it the simple way instead. */
   add(matrix: Matrix4) {
     if (this.count >= this.capacity) return false;
