@@ -55,6 +55,8 @@ import {
 } from "./terrain/Terrain";
 import { SunPosition, sunDirection, sunPosition } from "./sun";
 import * as environment from "./environment";
+import { Lakes } from "./lakes/Lakes";
+import { Rivers } from "./rivers/Rivers";
 import { Ocean, OCEAN_DESKTOP, OCEAN_MOBILE } from "./ocean/Ocean";
 import { useTide } from "./ocean/tide";
 import { type Gauge, useRainGauges } from "./rainGauges";
@@ -2018,6 +2020,8 @@ function useIsMobile() {
  */
 export const LAYERS = [
   "ocean",
+  "lakes",
+  "rivers",
   "farland",
   "buildings",
   "trees",
@@ -2217,6 +2221,8 @@ export function Scene({
           />
         </Suspense>
       )}
+      {shown("lakes") && <Lakes index={index} />}
+      {shown("rivers") && <Rivers index={index} sea={shown("ocean")} />}
       {shown("farland") && <FarLand index={index} time={time} />}
       {shown("quakes") && <Quakes index={index} />}
       {shown("landmarks") && (

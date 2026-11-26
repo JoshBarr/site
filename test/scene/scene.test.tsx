@@ -166,6 +166,8 @@ describe("the scene", { timeout: 30_000 }, () => {
       "sun",
       "terrain",
       "ocean",
+      "lakes",
+      "rivers",
       "South Island",
       "buildings",
       "trees",

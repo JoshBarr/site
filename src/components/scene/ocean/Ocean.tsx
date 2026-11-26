@@ -67,6 +67,17 @@ import {
   hazeTransmittance,
   outsideClearing,
 } from "../haze";
+import {
+  type CalmSea,
+  GLINT,
+  MIRROR,
+  MIRROR_SHADED,
+  seaReflectance,
+  setCalmSea,
+  sheen,
+  sparkle as sunSparkle,
+  sunScatter,
+} from "./calm";
 import { OceanSimulation } from "./OceanSimulation";
 import { quakeGlow } from "../quakes/glow";
 import { hazeGlowAtNight } from "../skyglow";
@@ -122,8 +133,7 @@ const RADIUS = 45000;
 const FAR_RADIUS = 240000;
 const FAR_STEP = 0.08;
 
-/** How much of the mirror the sea shows, and the far sea, past the map. */
-const MIRROR = 0.5;
+/** How much of the mirror the far sea shows, past the map (see ./calm.ts). */
 const FAR_MIRROR = 0.3;
 
 /** The last of it fades out over this share of FAR_RADIUS, so it has no rim. */
@@ -136,9 +146,6 @@ const RIM = 0.25;
  */
 const DEEP = 300;
 const OPEN_OVER = 0.1;
-
-/** How tight the sun's glint is off smooth water: the exponent of its lobe. */
-const GLINT = 900;
 
 /**
  * Disc of rings around the origin. Ring spacing grows with radius so cells
@@ -503,6 +510,15 @@ function createMaterial(
 
   mirror.target.rotateX(-Math.PI / 2);
 
+  // The mirror as a level, unruffled sea has it, for the water that runs
+  // into this one (./calm.ts): taken before the waves move it, below.
+  const calm: CalmSea = {
+    mirrored: switchedOff("reflection")
+      ? vec3(0.04)
+      : mirror.sample(mirror.uvNode!).rgb,
+    depthAt,
+  };
+
   // Left out of the material, the mirror isn't rendered.
   const sky = switchedOff("reflection")
     ? vec3(0.04)
@@ -521,7 +537,7 @@ function createMaterial(
     .mul(cloudShadow);
 
   // The sun's glint off each facet that mirrors it.
-  const sparkle = pow(sunAmount, GLINT).mul(40);
+  const sparkle = sunSparkle(sunAmount);
 
   // Far off, the waves that carry those glints are smaller than a pixel and
   // averaged out of the normal, so the glint stopped a couple of kilometres
@@ -546,7 +562,7 @@ function createMaterial(
   const averaged = unseen.div(unseen.add(1 / GLINT));
 
   const glint = mix(sparkle, path, averaged)
-    .add(pow(sunAmount, 60).mul(0.25))
+    .add(sheen(sunAmount))
     .mul(sunIntensity)
     .mul(lit);
 
@@ -560,17 +576,12 @@ function createMaterial(
     .add(skylight)
     .div(Math.PI);
 
-  // Light that enters and scatters back out: brighter on crests facing the sun.
-  // Deep water swallows the light and goes darker. Two falloffs, so the chart's
-  // bands read: pale shelves over the first five metres or so, the harbour
-  // basin and dredged berths (10-20m) a mid tone, Cook Strait (100m+) black.
-  // Reflectances, well under the land's (sand 0.26, grass 0.15).
-  const reflectance = float(0.001)
-    .add(exp(depth.div(-40)).mul(0.014))
-    .add(exp(depth.div(-4.5)).mul(0.07));
-
-  const scatter = vec3(reflectance.mul(irradiance)).add(
-    max(dot(normal, sunDirection), 0).mul(0.02).mul(sunIntensity).mul(lit)
+  // Light that enters and scatters back out: less of it the deeper the
+  // water, and brighter on crests facing the sun (./calm.ts).
+  const scatter = vec3(seaReflectance(depth).mul(irradiance)).add(
+    sunScatter(max(dot(normal, sunDirection), 0))
+      .mul(sunIntensity)
+      .mul(lit)
   );
 
   // Whitecaps where the surface folds over (jacobian drops below 1), and
@@ -617,7 +628,7 @@ function createMaterial(
   // far sea mirrors, which is about the far land's grey, and the land was
   // lost in it. This keeps the sea the darker of the two, as it is by the
   // nearer land.
-  const reflection = sky.mul(mix(0.85, 1, lit));
+  const reflection = sky.mul(mix(MIRROR_SHADED, 1, lit));
 
   const color = mix(
     scatter,
@@ -658,7 +669,7 @@ function createMaterial(
     gone
   );
 
-  return { material, mirror };
+  return { material, mirror, calm };
 }
 
 function isWebGPU(renderer: WebGPURenderer) {
@@ -683,7 +694,7 @@ export function Ocean({
   const water = useLoader(TextureLoader, `${TERRAIN_URL}/water.png`);
   const coast = useLoader(TextureLoader, COAST_URL);
 
-  const { simulation, mesh, mirror } = useMemo(() => {
+  const { simulation, mesh, mirror, calm } = useMemo(() => {
     for (const map of [water, coast]) {
       map.colorSpace = NoColorSpace;
       // Row 0 is the northern edge, matching world -z.
@@ -698,7 +709,7 @@ export function Ocean({
       ? new OceanSimulation(quality.fftSize, createCascades(CASCADE_SIZES))
       : null;
 
-    const { material, mirror } = createMaterial(
+    const { material, mirror, calm } = createMaterial(
       simulation,
       water,
       coast,
@@ -712,8 +723,15 @@ export function Ocean({
     // After the terrain, so the depth behind the water is known.
     mesh.renderOrder = 1;
 
-    return { simulation, mesh, mirror };
+    return { simulation, mesh, mirror, calm };
   }, [index, quality, water, coast, supported, camera]);
+
+  // What runs out into the sea is shaded as it is, where they meet.
+  useEffect(() => {
+    setCalmSea(calm);
+
+    return () => setCalmSea(null);
+  }, [calm]);
 
   useEffect(() => {
     const { maxDepth = 30, encoding } = index.manifest.water ?? {};
