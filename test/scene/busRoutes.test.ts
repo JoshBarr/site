@@ -3,6 +3,7 @@ import {
   BusRoutes,
   IndexedShape,
 } from "../../src/components/scene/buses/routes";
+import { easedDistance } from "../../src/components/scene/buses/ease";
 import { follow } from "../../src/components/scene/buses/run";
 import { verticalScale } from "../../src/components/scene/terrain/Terrain";
 import type { Point } from "../../src/components/scene/trains/network";
@@ -89,8 +90,9 @@ const bus = (
 
 const run = (
   b: Bus,
-  heightAt: ((x: number, z: number) => number | undefined) | null = null
-) => follow(b, routes, originIndex(), START, heightAt);
+  heightAt: ((x: number, z: number) => number | undefined) | null = null,
+  eased = true
+) => follow(b, routes, originIndex(), START, heightAt, eased);
 
 describe("bus routes", () => {
   it("are named as on the front of the bus", () => {
@@ -205,13 +207,14 @@ describe("a shape", () => {
 
 describe("a bus followed along its route", () => {
   it("runs through its fixes at a steady pace, round the corner", () => {
-    const r = run(
-      bus([
-        [1, 100, 10],
-        [-1, 300, 30],
-        [100, 501, 50],
-      ])
-    );
+    const fixes = bus([
+      [1, 100, 10],
+      [-1, 300, 30],
+      [100, 501, 50],
+    ]);
+
+    // Under ?off=busease, straight from fix to fix.
+    const r = run(fixes, null, false);
 
     expect(r?.fixes.map(({ s, time }) => [Math.round(s), time])).toEqual([
       [100, 10],
@@ -224,6 +227,18 @@ describe("a bus followed along its route", () => {
 
     expect(r?.arrived[at(200)]).toBeCloseTo(20, 1);
     expect(r?.left[at(200)]).toBeCloseTo(20, 1);
+
+    // Eased, it's still speeding up halfway to the second fix (10 m/s to
+    // 15), so it's there a moment later; and it's at each fix on time.
+    const e = run(fixes);
+
+    const on = (d: number) =>
+      e?.s.findIndex((s) => Math.abs(s - d) < 0.5) ?? -1;
+
+    expect(e?.arrived[on(200)]).toBeGreaterThan(20);
+    expect(e?.arrived[on(200)]).toBeLessThan(21);
+    expect(e?.left[on(200)]).toBe(e?.arrived[on(200)]);
+    expect(e?.arrived[on(300)]).toBeCloseTo(30, 6);
     // Ten metres either side to stand on, when it wasn't there.
     expect(r?.s[0]).toBeCloseTo(90, 1);
     expect(r?.arrived[0]).toBeNaN();
@@ -266,6 +281,43 @@ describe("a bus followed along its route", () => {
 
     expect(r?.arrived[stop]).toBe(10);
     expect(r?.left[stop]).toBe(30);
+  });
+
+  it("keeps the head of its trail inside the bus, eased", () => {
+    const r = run(
+      bus([
+        [0, 100, 10],
+        [0, 100, 30],
+        [0, 300, 50],
+        [200, 500, 70],
+      ])
+    )!;
+
+    // As the trail's drawn: each segment shown up to where its time,
+    // straight between its ends, has reached the playhead.
+    const head = (time: number) => {
+      let tip = NaN;
+
+      for (let i = 0; i < r.s.length - 1; i++) {
+        const [from, to] = [r.left[i], r.arrived[i + 1]];
+
+        if (Number.isNaN(from) || Number.isNaN(to) || from > time) continue;
+        const t = Math.min((time - from) / (to - from || 1), 1);
+        tip = r.s[i] + t * (r.s[i + 1] - r.s[i]);
+      }
+
+      return tip;
+    };
+
+    for (let time = 10; time <= 70; time += 0.25) {
+      const middle = easedDistance(r.fixes, r.slopes!, time);
+      const tip = head(time);
+
+      // No trail yet, standing at its first fix; otherwise within half a
+      // 12.5 m bus.
+      if (Number.isNaN(tip)) expect(middle).toBe(r.fixes[0].s);
+      else expect(Math.abs(tip - middle)).toBeLessThan(6.25);
+    }
   });
 
   it("holds a bus where it was when its fix wanders back", () => {

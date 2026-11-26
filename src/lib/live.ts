@@ -1,5 +1,5 @@
 import { foldBuses } from "./busStore";
-import type { Bus } from "./buses";
+import { type Bus, TRAIL as BUS_TRAIL } from "./buses";
 import type { Timetable } from "./cablecar";
 import type { CloudMap } from "./cloudMap";
 import type { VenueEvent } from "./events";
@@ -118,7 +118,8 @@ export const loadTrains = (at?: number): Promise<Train[]> =>
 export const loadBuses = (at?: number): Promise<Bus[]> =>
   fromTable(
     "buses",
-    async () => foldBuses(await readWindow(buses, TRAIL, at), at ?? Date.now()),
+    async () =>
+      foldBuses(await readWindow(buses, BUS_TRAIL, at), at ?? Date.now()),
     (positions) => positions.buses,
     at
   );

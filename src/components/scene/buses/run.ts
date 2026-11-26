@@ -3,6 +3,7 @@ import type { HeightQuery } from "../terrain/Terrain";
 import { random } from "../landmarks/common";
 import type { Roads } from "../traffic/roads";
 import type { Point } from "../trains/network";
+import { easedTime, easeSlopes } from "./ease";
 import { BusRoutes, IndexedShape, Shape } from "./routes";
 import { keepLeft } from "./side";
 import type { Bus } from "./useBuses";
@@ -38,6 +39,15 @@ const STARTS = 3;
 const EXTEND = 10;
 
 /**
+ * Eased between its fixes (ease.ts), a bus's trail is timed at points no
+ * further apart than this, m: the trail's time runs straight between
+ * them, so its head then keeps within about 5 m of the bus's middle,
+ * inside the bus (measured). Route points are 22 m apart on average; this
+ * adds about 34 a km.
+ */
+const TRAIL_STEP = 20;
+
+/**
  * Off the middle of the road, m: about half a lane. A route's shape is the
  * road's centreline, the same both ways, so without it buses going
  * opposite ways drive through each other. NZ drives on the left.
@@ -65,6 +75,11 @@ export interface Run {
   left: number[];
   /** Distance along and time, seconds since the scene clock's epoch, of each fix. */
   fixes: { s: number; time: number }[];
+  /**
+   * The slope at each fix of the curve it's eased along between them
+   * (ease.ts), m/s; null when it's drawn straight from fix to fix.
+   */
+  slopes: number[] | null;
   /** How far through lighting-up its driver switches on, 0..1. */
   switchOn: number;
 }
@@ -256,14 +271,16 @@ export function keepToKerb<T extends Pick<Run, "points" | "s">>(
 
 /**
  * Follows a bus along its route from fix to fix, or straight between them
- * if it's off every way its route goes.
+ * if it's off every way its route goes; eased through its fixes unless
+ * `eased` is false.
  */
 export function follow(
   bus: Bus,
   routes: BusRoutes,
   index: TileIndex,
   epoch: number,
-  heightAt: HeightQuery | null
+  heightAt: HeightQuery | null,
+  eased = true
 ): Run | null {
   // Nothing to place it by.
   if (!bus.trail.length) return null;
@@ -327,6 +344,34 @@ export function follow(
   const s = along.filter((d, i) => i === 0 || d - along[i - 1] > 0.01);
   const times = fixes.map(([, , time]) => time);
   const last = at.length - 1;
+  const timed = at.map((d, k) => ({ s: d, time: times[k] }));
+
+  if (eased) {
+    // Its trail timed often enough to keep up with it.
+    const slopes = easeSlopes(timed);
+
+    const often = s.flatMap((d, i) => {
+      const gap = i ? d - s[i - 1] : 0;
+      const more = Math.ceil(gap / TRAIL_STEP) - 1;
+
+      return [
+        ...Array.from(
+          { length: Math.max(more, 0) },
+          (_, k) => s[i - 1] + (gap * (k + 1)) / (more + 1)
+        ),
+        d,
+      ];
+    });
+
+    return {
+      ...ran(bus, shape, often),
+      destination,
+      arrived: often.map((d) => easedTime(timed, slopes, d, false)),
+      left: often.map((d) => easedTime(timed, slopes, d, true)),
+      fixes: timed,
+      slopes,
+    };
+  }
 
   // It's taken to have kept a steady pace between fixes.
   const arrived = s.map((d) => {
@@ -355,19 +400,27 @@ export function follow(
     );
   });
 
+  return {
+    ...ran(bus, shape, s),
+    destination,
+    arrived,
+    left,
+    fixes: timed,
+    slopes: null,
+  };
+}
+
+/** The way a bus goes along `shape`, through distances `s` along it. */
+function ran(bus: Bus, shape: Shape, s: number[]) {
   const id = Number(bus.id) || bus.id.length;
 
   return {
     bus,
-    destination,
     points: keepLeft(
       s.map((d) => pointOn(shape, d)),
       KEEP_LEFT
     ),
     s,
-    arrived,
-    left,
-    fixes: at.map((d, k) => ({ s: d, time: times[k] })),
     switchOn: random(id) * 0.6,
   };
 }

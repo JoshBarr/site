@@ -38,11 +38,13 @@ import { seenUnderground } from "../tunnels/reveal";
 import type { RoadUser } from "../traffic/sim";
 import { createBusGeometry } from "./model";
 import { BusRoutes, loadBusRoutes } from "./routes";
+import { easedDistance } from "./ease";
 import { follow, keepToKerb, Run } from "./run";
 import { BAND_WIDE, BusSigns, SIGN_ROWS } from "./sign";
 import { createSpacing } from "./spacing";
 import { useBuses } from "./useBuses";
 import { sceneNow, useSeek } from "../clock";
+import { switchedOff } from "../stats";
 
 const MAX_BUSES = 640;
 
@@ -221,6 +223,15 @@ const user: RoadUser = {
   held: 0,
 };
 
+/**
+ * How far along its run a bus is at `time`: eased through its fixes, or
+ * under `?off=busease` straight between them.
+ */
+const distanceOf = (run: Run, time: number) =>
+  run.slopes
+    ? easedDistance(run.fixes, run.slopes, time)
+    : distanceAt(run, time);
+
 /** Puts the bus `run` drives with its middle at `middle` along it. */
 function place(run: Run, middle: number) {
   pointAt(run, middle + BUS.length / 2, front);
@@ -270,20 +281,29 @@ function Fleet({
   const middles = useMemo(() => new Float32Array(MAX_BUSES), []);
   /** How fast each bus's run takes it now, m/s. */
   const speeds = useMemo(() => new Float32Array(MAX_BUSES), []);
+  const eased = useMemo(() => !switchedOff("busease"), []);
 
   const runs = useMemo(
     () =>
       buses
         .slice(0, MAX_BUSES)
         .map((bus) => {
-          const run = follow(bus, routes, index, epoch, heightAt.current);
+          const run = follow(
+            bus,
+            routes,
+            index,
+            epoch,
+            heightAt.current,
+            eased
+          );
+
           const roads = highways.traffic?.roads;
 
           // In traffic, over in the kerb lane.
           return run && roads ? keepToKerb(run, roads) : run;
         })
         .filter((run): run is Run => run !== null),
-    [buses, routes, index, epoch, heightAt]
+    [buses, routes, index, epoch, heightAt, eased]
   );
 
   useFollowCandidates(
@@ -397,9 +417,9 @@ function Fleet({
 
       holds.current.set(bus.id, hold);
       // The fix is taken as the middle of the bus.
-      const at = distanceAt(run, playhead);
+      const at = distanceOf(run, playhead);
       middles[i] = at - hold;
-      speeds[i] = distanceAt(run, playhead + 1) - at;
+      speeds[i] = distanceOf(run, playhead + 1) - at;
       place(run, middles[i]);
       const level = Math.hypot(along.x, along.z) || 1;
       spacing.x[i] = centre.x;
