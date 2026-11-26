@@ -3,6 +3,14 @@ import { nztmToWorld, TileIndex } from "../terrain/manifest";
 import { random } from "../landmarks/common";
 import type { Line } from "../../../lib/trains";
 import { Point, RailNetwork, Snap } from "./network";
+import {
+  fitPace,
+  HAULED_LIMITS,
+  MATANGI_LIMITS,
+  type Pace,
+  paceDistance,
+  paceTime,
+} from "./pace";
 import type { Train } from "./useTrains";
 
 // A train's run along the tracks: matched to them from its fixes, with the
@@ -15,10 +23,12 @@ const TOP_SPEED = 45;
 const EXTEND = 120;
 
 /**
- * Track found on past the last fix, m: as far as a train gets in the time
- * a level crossing has to be flashing before it (see crossingWatch.ts).
+ * Track found on past the last fix, m: for a level crossing to know a
+ * train's coming (see crossingWatch.ts), and for it to run on along until
+ * the next fix comes in (see pace.ts). Through the Tawa tunnels the feed
+ * hears nothing from a train for two to four minutes (replays, 2026-11-25).
  */
-const AHEAD = 1200;
+const AHEAD = 5000;
 
 /** Fixes this far apart, m, say which way a train's going. */
 const MOVED = 20;
@@ -120,6 +130,11 @@ export interface Run {
   fixes: { s: number; time: number }[];
   /** How far through lighting-up its crew switch on, 0..1. */
   switchOn: number;
+  /**
+   * How it's driven from fix to fix (see pace.ts), once it's been fitted;
+   * without, it's drawn straight from one to the next.
+   */
+  pace?: Pace;
 }
 
 const radians = (degrees: number) => (degrees * Math.PI) / 180;
@@ -393,8 +408,16 @@ export function orient(along: Vector3, out: Quaternion) {
   );
 }
 
-/** How far along its run a train is at `time`, seconds since the epoch. */
-export function distanceAt({ fixes }: Pick<Run, "fixes">, time: number) {
+/**
+ * How far along its run a train is at `time`, seconds since the epoch: as
+ * its pace has it, or else straight between its fixes.
+ */
+export function distanceAt(
+  { fixes, pace }: Pick<Run, "fixes" | "pace">,
+  time: number
+) {
+  if (pace) return paceDistance(pace, time);
+
   if (time <= fixes[0].time) return fixes[0].s;
 
   for (let k = 1; k < fixes.length; k++) {
@@ -407,4 +430,119 @@ export function distanceAt({ fixes }: Pick<Run, "fixes">, time: number) {
   }
 
   return fixes[fixes.length - 1].s;
+}
+
+/** A station this far from a run's track, m, is on it. */
+const ON_LINE = 40;
+
+/**
+ * How far along a run each station it goes through is, in order: where
+ * its track passes nearest each of `stations` (world x/z) within ON_LINE.
+ */
+export function stationsAlong(
+  { points, s }: Pick<Run, "points" | "s">,
+  stations: [number, number][]
+) {
+  const along: number[] = [];
+
+  for (const [x, z] of stations) {
+    let nearest = ON_LINE;
+    let at = NaN;
+
+    for (let k = 1; k < points.length; k++) {
+      const [ax, , az] = points[k - 1];
+      const [bx, , bz] = points[k];
+      const dx = bx - ax;
+      const dz = bz - az;
+
+      if (
+        Math.min(ax, bx) - x > nearest ||
+        x - Math.max(ax, bx) > nearest ||
+        Math.min(az, bz) - z > nearest ||
+        z - Math.max(az, bz) > nearest
+      ) {
+        continue;
+      }
+
+      const t = Math.min(
+        Math.max(((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz || 1), 0),
+        1
+      );
+
+      const off = Math.hypot(ax + dx * t - x, az + dz * t - z);
+
+      if (off < nearest) {
+        nearest = off;
+        at = s[k - 1] + (s[k] - s[k - 1]) * t;
+      }
+    }
+
+    if (!Number.isNaN(at)) along.push(at);
+  }
+
+  return along.sort((a, b) => a - b);
+}
+
+/** A train stands this far short of the end of its track, m. */
+const BUFFER = 5;
+
+/**
+ * Its trail's laid this far past the time it's drawn at, s: as far as it
+ * gets before the next poll, and more, but not the whole of the way it's
+ * guessed it'll go.
+ */
+const TRAIL_AHEAD = 30;
+
+/**
+ * The same train's distances along `run` less those along `before`, by a
+ * fix both have; null if they've none in common. Fixes' times can differ
+ * by the clock's skew between polls.
+ */
+export function shiftBetween(
+  before: Run["fixes"],
+  run: Run["fixes"]
+): number | null {
+  for (let i = run.length - 1; i >= 0; i--) {
+    const same = before.find(({ time }) => Math.abs(time - run[i].time) < 2);
+
+    if (same) return run[i].s - same.s;
+  }
+
+  return null;
+}
+
+/**
+ * Fits a run's pace (see pace.ts), going on from `before`, the same
+ * train's run as it was, where it's been drawn to by `now`; and times its
+ * points by it, for its trail. `stations` are world x/z.
+ */
+export function drive(
+  run: Run,
+  stations: [number, number][],
+  before: Run | undefined,
+  now: number
+) {
+  const course = {
+    fixes: run.fixes,
+    stations: stationsAlong(run, stations),
+    end: run.s[run.s.length - 1] - run.length / 2 - BUFFER,
+  };
+
+  const shift = before?.pace ? shiftBetween(before.fixes, run.fixes) : null;
+
+  const pace = fitPace(
+    course,
+    run.train.line === "WRL" ? HAULED_LIMITS : MATANGI_LIMITS,
+    before?.pace && shift !== null
+      ? { pace: before.pace, shift, now }
+      : undefined
+  );
+
+  if (!pace) return;
+  run.pace = pace;
+  run.times = run.s.map((along) => {
+    const time = paceTime(pace, along);
+
+    return time <= now + TRAIL_AHEAD ? time : NaN;
+  });
 }

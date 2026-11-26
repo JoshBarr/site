@@ -85,9 +85,9 @@ describe("folding the logs", () => {
       expect(quiet(21)).toEqual([]);
     });
 
-    it("trails back three minutes", () => {
+    it("trails back four minutes", () => {
       const [folded] = foldTrains([
-        { sk: ago(200), data: { trains: [train(PETONE, 200)] } },
+        { sk: ago(260), data: { trains: [train(PETONE, 260)] } },
         { sk: ago(5), data: { trains: [train(STATION, 10)] } },
       ]);
 

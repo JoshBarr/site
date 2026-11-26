@@ -46,6 +46,7 @@ import { Point, RAIL_TOP, RailNetwork } from "./network";
 import {
   CARRIAGE,
   distanceAt,
+  drive,
   follow,
   GAP,
   isPeak,
@@ -65,6 +66,7 @@ import { createModelMaterial, isNear, NearModels } from "../models/lod";
 import { useTrains } from "./useTrains";
 import type { Watch } from "./crossingWatch";
 import { sceneNow, useSeek } from "../clock";
+import { switchedOff } from "../stats";
 import type { Line } from "../../../lib/trains";
 import {
   Candidate,
@@ -81,13 +83,19 @@ const MAX_CARS = MAX_TRAINS * 8;
 const MAX_DETAILED = 24;
 
 /**
- * Trains are drawn this far behind live, ms, so there's nearly always a
- * fix ahead of them to run to: they report in a batch every 30 seconds,
- * and through Metlink, the poller and the page's own polls, the newest fix
- * is up to ~55 s old when it arrives (measured 2026-11-04).
+ * Trains are drawn this far behind live, ms, so the fix after where one's
+ * drawn is nearly always in hand for its pace (pace.ts) to be fitted to,
+ * not guessed at: they report in a batch every 30 seconds, each position
+ * up to 30 s older than its stamp, and the newest reaches the page some
+ * seconds after that. The "up to ~55 s old" measured 2026-11-04 was before
+ * the AWS poller; a live check on 2026-11-27 had buses' newest fixes
+ * reaching the page 2–32 s old.
  */
-const DELAY = 60_000;
+const DELAY = 90_000;
 
+// Under `?off=pace`, as trains were run before pace.ts: straight from fix
+// to fix by their stamps, waiting at the last for the next, then making
+// the time up:
 /**
  * Seconds behind at which a train that's waited at its last fix for the
  * next is making the time up at its fastest, FASTER than the usual pace;
@@ -373,6 +381,8 @@ export function createRunLights(count: number) {
   return { sprite, light, tint };
 }
 
+const NO_STATIONS: [number, number][] = [];
+
 const matrix = new Matrix4();
 const rotation = new Quaternion();
 const scale = new Vector3();
@@ -388,20 +398,23 @@ const TURN = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), Math.PI);
 const turned = new Quaternion();
 
 /**
- * Metlink's trains at their live positions, run along the tracks from fix
- * to fix a little behind live, with trails behind them. Each one's cars
- * follow the curves. `lights` (0..1), how far through lighting-up, lights
- * their windows and head and tail lights, for night. `watch` is told where
- * each is drawn, for the level crossings to go by.
+ * Metlink's trains at their live positions, driven along the tracks from
+ * fix to fix a little behind live (see pace.ts), standing at `stations`
+ * (world x/z), with trails behind them. Each one's cars follow the curves.
+ * `lights` (0..1), how far through lighting-up, lights their windows and
+ * head and tail lights, for night. `watch` is told where each is drawn,
+ * for the level crossings to go by.
  */
 export function Trains({
   index,
   network,
+  stations = NO_STATIONS,
   lights = 0,
   watch,
 }: {
   index: TileIndex;
   network: RailNetwork;
+  stations?: [number, number][];
   lights?: number;
   watch?: Watch | null;
 }) {
@@ -427,6 +440,10 @@ export function Trains({
   const spots = useFollowSpots("train");
   const routes = useRef(new Map<string, Point[] | null>());
   const playheads = useRef(new Map<string, number>());
+  const driven = useMemo(() => !switchedOff("pace"), []);
+
+  /** Each train's run as last fitted, to carry its pace on from. */
+  const fitted = useRef({ epoch, runs: new Map<string, Run>() });
 
   const runs = useMemo(() => {
     // Ways between fixes are found once, and kept while they're in use.
@@ -454,8 +471,29 @@ export function Trains({
 
     routes.current = kept;
 
+    if (driven) {
+      // Fitted as far as they've been drawn, and on from there.
+      const now = (sceneNow() - DELAY - epoch) / 1000;
+      const before = fitted.current;
+      const same = before.epoch === epoch;
+
+      for (const run of result) {
+        drive(
+          run,
+          stations,
+          same ? before.runs.get(run.train.id) : undefined,
+          now
+        );
+      }
+
+      fitted.current = {
+        epoch,
+        runs: new Map(result.map((run) => [run.train.id, run])),
+      };
+    }
+
     return result;
-  }, [trains, network, index, epoch]);
+  }, [trains, network, index, epoch, stations, driven]);
 
   useFollowCandidates(
     "train",
@@ -543,11 +581,13 @@ export function Trains({
     runs.forEach((run, i) => {
       const { train, fixes } = run;
       const latest = fixes[fixes.length - 1].time;
-      // Run on toward now less DELAY; wait at the last fix for the next,
-      // then make the time up.
+      // Driven, it's drawn at now less DELAY. Otherwise, run on toward
+      // that; wait at the last fix for the next, then make the time up.
       let playhead = playheads.current.get(train.id);
 
-      if (playhead === undefined) {
+      if (run.pace) {
+        playhead = target;
+      } else if (playhead === undefined) {
         playhead = Math.min(target, latest);
       } else {
         const rate =

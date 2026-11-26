@@ -51,8 +51,9 @@
 #   tunnels    public/tunnels/tunnels.json: the road tunnels (the highways'
 #              from roads.json, the rest OSM)
 #   buses      public/buses/routes.json (Metlink GTFS), through the tunnels
-#   trains     public/rail/network.json, and public/rail/crossings.json: the
-#              level crossings on it (OSM)
+#   trains     public/rail/network.json, public/rail/crossings.json: the
+#              level crossings on it (OSM), and public/rail/stations.json:
+#              where trains call (Metlink GTFS)
 #   stars      src/components/scene/sky/stars.ts (d3-celestial)
 #
 # Everything after landcover reads ground heights from public/terrain.
@@ -127,6 +128,7 @@ wants tunnels && run tunnels node scripts/tunnels/build_tunnels.mjs
 wants buses && run buses node scripts/buses/build_routes.mjs
 wants trains && run trains node scripts/trains/build_rail.mjs
 wants trains && run crossings node scripts/trains/build_crossings.mjs
+wants trains && run stations node scripts/trains/build_stations.mjs
 wants stars && run stars node scripts/sky/build_stars.mjs
 
 echo

@@ -82,9 +82,9 @@ describe("the live API routes, from the table", () => {
       ],
     });
 
-    // Three minutes, and a minute for fixes polled late.
+    // Four minutes, and a minute for fixes polled late.
     expect(table.queries[0].ExpressionAttributeValues[":from"]).toEqual({
-      S: sortTime(ago(4 * 60)),
+      S: sortTime(ago(5 * 60)),
     });
   });
 

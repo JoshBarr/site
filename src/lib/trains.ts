@@ -32,9 +32,10 @@ export interface TrainsResponse {
 
 /**
  * How far back trails go: they've faded out two minutes behind a train,
- * which is drawn a little behind live.
+ * which is drawn 90 s behind live (the scene's trains/Trains.tsx DELAY),
+ * so 3.5 minutes at least.
  */
-export const TRAIL = 3 * 60_000;
+export const TRAIL = 4 * 60_000;
 
 /** A train not heard from in this long has gone out of service, or dark. */
 const STALE = 5 * 60_000;

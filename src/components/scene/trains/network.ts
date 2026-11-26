@@ -413,3 +413,20 @@ export async function loadRailNetwork(index: TileIndex) {
 
   return new RailNetwork(await response.json(), index);
 }
+
+/**
+ * Where Metlink's trains call, world x/z, from public/rail/stations.json
+ * (built by scripts/trains/build_stations.mjs).
+ */
+export async function loadStations(
+  index: TileIndex
+): Promise<[number, number][]> {
+  const response = await fetch(`${RAIL_URL}/stations.json`);
+
+  if (!response.ok) throw new Error(`stations: HTTP ${response.status}`);
+
+  const { stations }: { stations: [string, number, number][] } =
+    await response.json();
+
+  return stations.map(([, e, n]) => nztmToWorld(index.manifest, e, n));
+}

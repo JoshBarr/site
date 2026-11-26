@@ -1,6 +1,7 @@
 import { nztmToWorld, TileIndex } from "../terrain/manifest";
 import { verticalScale } from "../terrain/Terrain";
 import { RAIL_URL } from "./network";
+import { paceTime } from "./pace";
 import { distanceAt, type Run } from "./run";
 
 // Level crossings, from public/rail/crossings.json (built by
@@ -323,7 +324,7 @@ function timeAt(fixes: Run["fixes"], goal: number, target: number) {
  * time the train's drawn at, `target` the time it's making for.
  */
 export function arrival(
-  run: Pick<Run, "fixes" | "length">,
+  run: Pick<Run, "fixes" | "length" | "pace">,
   s: number,
   span: number,
   playhead: number,
@@ -335,11 +336,14 @@ export function arrival(
   if (front - run.length > s + span + CLEAR) return Infinity;
 
   if (front >= s - span) return 0;
+  const goal = s - span - run.length / 2;
 
-  return Math.max(
-    timeAt(run.fixes, s - span - run.length / 2, target) - playhead,
-    0
-  );
+  // Driven, it's there when its pace says, if it gets there at all.
+  const when = run.pace
+    ? paceTime(run.pace, goal)
+    : timeAt(run.fixes, goal, target);
+
+  return Number.isNaN(when) ? Infinity : Math.max(when - playhead, 0);
 }
 
 // --- The sequence at each. ---

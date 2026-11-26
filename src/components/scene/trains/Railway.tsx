@@ -14,7 +14,7 @@ import { Bores } from "../tunnels/Tunnels";
 import { type Crossing, loadCrossings, Watch } from "./crossingWatch";
 import { Crossings } from "./Crossings";
 import { createTrackChunks } from "./geometry";
-import { loadRailNetwork, RailNetwork } from "./network";
+import { loadRailNetwork, loadStations, RailNetwork } from "./network";
 import { Trains } from "./Trains";
 
 /**
@@ -112,9 +112,14 @@ export function Railway({
 }) {
   const [network, setNetwork] = useState<RailNetwork | null>(null);
   const [crossings, setCrossings] = useState<Crossing[] | null>(null);
+  const [stations, setStations] = useState<[number, number][]>([]);
 
   useEffect(() => {
     loadRailNetwork(index).then(setNetwork, (e) => console.error(e));
+
+    // Without them trains stand only where their track runs out, or when
+    // they're held.
+    loadStations(index).then(setStations, (e) => console.error(e));
 
     // Without them the trains still run.
     if (!switchedOff("crossings")) {
@@ -135,7 +140,13 @@ export function Railway({
     <>
       <Tracks network={network} />
       {!switchedOff("tunnels") && <Bores bores={bores} name="rail tunnels" />}
-      <Trains index={index} network={network} lights={lights} watch={watch} />
+      <Trains
+        index={index}
+        network={network}
+        stations={stations}
+        lights={lights}
+        watch={watch}
+      />
       {watch && <Crossings watch={watch} />}
     </>
   );
