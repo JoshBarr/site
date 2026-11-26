@@ -48,6 +48,12 @@ export const SHOTS: Shot[] = [
     view: [1750395, 5427938, 35, 1750088, 5427300, 25],
   },
   {
+    id: "fountain",
+    name: "Oriental Bay fountain",
+    group: "City and harbour",
+    view: [1750330, 5427620, 10, 1750250, 5427518, 8],
+  },
+  {
     id: "waterfront",
     name: "Waterfront and Te Papa",
     group: "City and harbour",
