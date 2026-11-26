@@ -11,7 +11,9 @@ import {
   float,
   fract,
   inverseSqrt,
+  max,
   mix,
+  sign,
   sin,
   smoothstep,
   texture,
@@ -78,7 +80,31 @@ const LANE = 1.5;
  */
 const LANES = 260;
 const ACROSS = 0.45;
-const LIGHTER = 0.5;
+const LIGHTER = 0.4;
+
+/**
+ * That's a channel up to this wide, m. A wider one has more lanes, each as
+ * wide as this one's: a few to an estuary's width are as broad as they're
+ * long, and it's blotched with them, like a hide.
+ */
+const WIDE = 40;
+
+/**
+ * Lane shades into slick over this much of the lanes' field either way, of
+ * -0.5..0.5: most of its spread, so the water's every tone between the two
+ * and not patches of one or the other.
+ */
+const EDGE = 0.35;
+
+/**
+ * Nor are the lanes as plain everywhere: stretches of the water show them,
+ * and stretches between are near enough all one tone, as a breeze gets at
+ * some of a river and not the rest. The stretches are this long and (on a
+ * channel WIDE across) this much of the pattern from bank to bank, and the
+ * lanes in the plainest are this share of what they are in the most marked.
+ */
+const STRETCHES = [900, 0.12];
+const PLAIN = 0.45;
 
 /**
  * At its most broken, this much of the surface is white; and between the
@@ -325,6 +351,10 @@ export function ripples() {
 
   const sway = sin(flow.x.div(47).add(sin(flow.x.div(19)).mul(1.3))).mul(SWAY);
 
+  // How far across, for the lanes: the side, bank to bank, on a channel up
+  // to WIDE across, and on a wider one as far as that again each WIDE.
+  const across = sign(side).mul(max(abs(side), abs(flow.y).div(WIDE / 2)));
+
   /**
    * The pattern `phase` of the way through its carry, moved on `shift`:
    * its slopes either way, its streaks about 0, and what's white in it.
@@ -370,7 +400,7 @@ export function ripples() {
 
     const lanes = texture(
       pattern,
-      vec2(at.x.div(LANES), side.mul(ACROSS)).add(shift * 3.1)
+      vec2(at.x.div(LANES), across.mul(ACROSS)).add(shift * 3.1)
     ).z;
 
     const lines = drawn.w
@@ -405,7 +435,21 @@ export function ripples() {
   );
 
   // Rippled lanes and the slicks between, soft-edged.
-  const lane = smoothstep(-0.2, 0.2, blended.w);
+  const lane = smoothstep(-EDGE, EDGE, blended.w);
+
+  // Where they show: not carried with the water, as its ripples are.
+  const marked = mix(
+    PLAIN,
+    1,
+    smoothstep(
+      0.35,
+      0.65,
+      texture(
+        pattern,
+        vec2(flow.x.div(STRETCHES[0]), across.mul(STRETCHES[1])).add(0.61)
+      ).z
+    )
+  );
 
   // Out past the coast it's the sea's surface, which has waves of its own.
   const river = attribute<"float">("fade", "float");
@@ -429,6 +473,7 @@ export function ripples() {
       .mul(2)
       .sub(1)
       .mul(LIGHTER)
+      .mul(marked)
       .add(
         blended.z
           .mul(2)
