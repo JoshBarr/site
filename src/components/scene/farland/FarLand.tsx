@@ -27,6 +27,7 @@ import {
   sunDirection,
   sunIntensity,
 } from "../environment";
+import { sunUnderCloud } from "../cloudLight";
 import { track } from "../loading";
 import { skyAlong } from "../sky/backdrop";
 import type { TileIndex } from "../terrain/manifest";
@@ -110,7 +111,8 @@ function createMaterial(rootSize: number) {
   // adapting to the dark: it doesn't, to snow 100 km off.
   const light = varying(
     max(dot(normalGeometry, sunDirection), 0)
-      .mul(sunIntensity)
+      // What gets under the cloud here: there's no saying what's over it.
+      .mul(sunIntensity.mul(sunUnderCloud))
       .mul(3 / Math.PI)
       .add(skylight.mul(skyBrightness).div(Math.PI))
   );

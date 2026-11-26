@@ -134,6 +134,17 @@ export function skyThrough({ shape }: CloudLayerUniforms, h) {
   return mix(floor, 1, clamp(h, 0, 1));
 }
 
+/**
+ * The same, on the CPU, for the cloud itself and not the layer it's part
+ * of: what comes out under `thickness` m of cloud at `density` of the
+ * layer's full density, of the light on its top.
+ */
+export function throughCloud(thickness: number, density: number) {
+  const depth = Math.max(thickness, 0) * density * EXTINCTION * MEAN_DENSITY;
+
+  return 1 / (1 + 0.75 * (1 - ASYMMETRY) * depth);
+}
+
 /** Cloud body noise repeats every this many metres. */
 const SHAPE_SCALE = 3200;
 const DETAIL_SCALE = 520;

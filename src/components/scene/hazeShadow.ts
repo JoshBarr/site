@@ -18,7 +18,8 @@ import {
 } from "three/tsl";
 import { cloudShadowMap, moonlit, overcast, sunDirection } from "./environment";
 import { hazeGlowToward, hazeTransmittance, outsideClearing } from "./haze";
-import { hazeSunRadiance, skyStage } from "./sky/skyModel";
+import { cloudLit, sunUnderCloud } from "./cloudLight";
+import { hazeSunFull, hazeSunRadiance, skyStage } from "./sky/skyModel";
 import { cloudLayers } from "./clouds/density";
 
 // The haze is worked out in one go along each ray, as though the sun lit
@@ -42,9 +43,10 @@ const BLUR = 2;
 
 /**
  * Of each pixel's haze, the share (of the whole frame's light, 0..1) that
- * lies in cloud shadow, as a texture at low resolution: `shadedHaze` takes
- * it out. `depth` is the scene's depth texture, the rest the scene camera's;
- * `resolutionScale` the clouds', of the drawing buffer.
+ * lies in cloud shadow, and (in g) the share the sun's on, as a texture at
+ * low resolution: `shadedHaze` takes the one out. `depth` is the scene's
+ * depth texture, the rest the scene camera's; `resolutionScale` the
+ * clouds', of the drawing buffer.
  */
 export function hazeShadow({
   depth,
@@ -62,7 +64,9 @@ export function hazeShadow({
   const { low, mid } = cloudLayers;
 
   // Whether there are shadows to find: some cloud, and not a full deck,
-  // under which they fade out (see cloudShadow in environment).
+  // under which they fade out (see cloudShadow in environment), or with
+  // the light under cloud worked out there's no sun for the haze to have
+  // more or less of.
   const shadows = low.shape.z
     .greaterThan(0)
     .or(mid.shape.z.greaterThan(0))
@@ -70,6 +74,7 @@ export function hazeShadow({
 
   const march = Fn(() => {
     const lost = float(0).toVar();
+    const lit = float(0).toVar();
 
     If(shadows, () => {
       const sceneDepth = depth.sample(screenUV).r;
@@ -98,21 +103,22 @@ export function hazeShadow({
         // What this stretch of haze adds to the ray, of all it could.
         const beyond = hazeTransmittance(cameraPosition, far).toVar();
 
-        lost.addAssign(
-          through.sub(beyond).mul(float(1).sub(cloudShadowMap.sample(p)))
-        );
+        const seen = cloudShadowMap.sample(p).toVar();
+
+        lost.addAssign(through.sub(beyond).mul(float(1).sub(seen)));
+        lit.addAssign(through.sub(beyond).mul(seen));
         through.assign(beyond);
       });
 
       // No haze is drawn around a followed vehicle; none to take back.
-      lost.mulAssign(
-        float(1)
-          .sub(overcast)
-          .mul(sky.select(float(1), outsideClearing(world)))
-      );
+      const cleared = sky.select(float(1), outsideClearing(world));
+      const shown = cloudLit ? cleared : float(1).sub(overcast).mul(cleared);
+
+      lost.mulAssign(shown);
+      lit.mulAssign(shown);
     });
 
-    return vec4(lost, 0, 0, 1);
+    return vec4(lost, lit, 0, 1);
   })();
 
   const walked = rtt(march, null, null, {
@@ -128,17 +134,19 @@ export function hazeShadow({
 /**
  * `color` (the scene, hazed as though the sun reached all of it) less the
  * sun's glow in the haze found in cloud or hill shadow: `lost`, that share
- * of the frame's light (see hazeShadow, or the haze volume). The volume
- * gives the share that's `lit` too, and `rays`, how much to make of the
- * glow there (1 as it is).
+ * of the frame's light (see hazeShadow, or the haze volume), and `lit` the
+ * share the sun's on. The volume gives `rays` too, how much to make of the
+ * glow there (1 as it is). `depth` is the scene's depth texture, the rest
+ * the scene camera's.
  */
 export function shadedHaze(
   color,
   { lost, lit, rays }: { lost: any; lit?: any; rays?: any },
   {
+    depth,
     cameraWorld,
     projectionInverse,
-  }: { cameraWorld: any; projectionInverse: any }
+  }: { depth: any; cameraWorld: any; projectionInverse: any }
 ): any {
   const view = getViewPosition(screenUV, float(0.5), projectionInverse);
   const direction = normalize(cameraWorld.mul(vec4(view, 0)).xyz);
@@ -146,6 +154,29 @@ export function shadedHaze(
   // The sun's share of the haze's glow, as the fog on every material has
   // it (hazeColor): the sky model's from its fourth stage.
   const lobe = hazeGlowToward(dot(direction, sunDirection), 0.6);
+
+  // With the light under cloud worked out (./cloudLight.ts) the scene's
+  // hazed as though the share of the sun that gets under the cloud reached
+  // all of it evenly, and this puts the sun where it is: more of its glow
+  // where the ray's in the open, less where it's in shadow, and nothing to
+  // change under a clear sky or a full deck.
+  if (cloudLit && lit) {
+    const full = hazeSunFull(direction).add(lobe.mul(moonlit));
+    const sunned = rays ? lit.mul(rays) : lit;
+
+    const all = lit.add(lost);
+
+    // The sky's haze is drawn with that share too, but it's only ever
+    // darkened here, never brightened: the cloud laid over it after has
+    // nothing put back, and a brighter sky behind shows along every
+    // ridge, where the cloud's soft edge lets it by.
+    const drawn = depth
+      .sample(screenUV)
+      .r.greaterThanEqual(0.99999)
+      .select(max(sunUnderCloud.mul(all), lit), sunUnderCloud.mul(all));
+
+    return max(color.add(full.mul(sunned.sub(drawn))), 0);
+  }
 
   const glow =
     skyStage() >= 4 ? hazeSunRadiance(direction).add(lobe.mul(moonlit)) : lobe;

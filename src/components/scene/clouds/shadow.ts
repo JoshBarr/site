@@ -12,6 +12,7 @@ import {
   exp,
   float,
   max,
+  min,
   mix,
   normalize,
   smoothstep,
@@ -25,12 +26,14 @@ import {
 import {
   CloudLayerUniforms,
   cloudLayers,
+  deckLid,
   EXTINCTION,
   layerDensity,
   LayerStyle,
   LOW_STYLE,
   MID_STYLE,
 } from "./density";
+import { cloudLit, sunUnderCloud } from "../cloudLight";
 import { rainDeck } from "./rainField";
 
 // The clouds' shadows, worked out once a frame into a small map over the
@@ -78,7 +81,9 @@ const EROSION = 0.3;
  * A map of the sun let through the clouds (1 clear, 0 shadowed), toward
  * `toSun`. `sample` reads it at a world position; `update` redraws it around
  * a point every so often, which Clouds calls each frame as they drift.
- * Leaves out the overcast lid (see cloudShadow in environment).
+ * With the light under cloud worked out (../cloudLight.ts) an overcast
+ * deck's in it, closed as the march closes it; before that it was left out
+ * (see cloudShadow in environment).
  */
 export function createCloudShadowMap(toSun) {
   const target = new RenderTarget(MAP_SIZE, MAP_SIZE, {
@@ -95,6 +100,12 @@ export function createCloudShadowMap(toSun) {
   const plane = low.shape.x.add(low.shape.y).mul(0.5);
   // Across the ground per metre climbed along the ray.
   const slope = ray.xz.div(ray.y);
+
+  const lid = (xz) => (share) =>
+    cloudLit ? max(deckLid.mul(min(share, 1)), rainDeck(xz)) : rainDeck(xz);
+
+  // Past the map's edge the sun's taken as it is over the whole sky.
+  const beyond = cloudLit ? sunUnderCloud : float(1);
 
   /** Depth through a layer along the ray crossing the plane at c. */
   const through = (
@@ -124,8 +135,9 @@ export function createCloudShadowMap(toSun) {
           layerDensity(q, layer, style, {
             cheap: true,
             erosion: EROSION,
-            // The deck over measured rain shades what's under it.
-            lid: layer === low ? () => rainDeck(xz) : null,
+            // The deck over measured rain shades what's under it, and
+            // an overcast's where the satellite saw cloud.
+            lid: layer === low ? lid(xz) : null,
           })
         );
       }
@@ -174,7 +186,7 @@ export function createCloudShadowMap(toSun) {
       // Ground above the low cloud's base is partly or wholly over it.
       const under = mix(1, map.r, smoothstep(low.shape.y, low.shape.x, p.y));
 
-      return mix(under.mul(map.g), 1, past);
+      return mix(under.mul(map.g), beyond, past);
     },
 
     /**

@@ -32,7 +32,8 @@ import {
   sunDirection,
   sunIntensity,
 } from "../environment";
-import { skyOnCloud } from "../sky/skyModel";
+import { cloudLit } from "../cloudLight";
+import { skyOnCloud, sunThroughDeck } from "../sky/skyModel";
 import { hazeColor, hazeTransmittance, phase } from "../haze";
 import { cloudGlowAtNight, hazeGlowAtNight } from "../skyglow";
 import {
@@ -459,11 +460,15 @@ export function createCloudNode({
               stride *= 2;
             }
 
-            // As on the ground, an overcast's dimmed sun stands in for it.
+            // As on the ground: all of its shadow with the light under
+            // cloud worked out (../cloudLight.ts), and before that an
+            // overcast's dimmed sun stood in for it.
             if (midShadows) {
               If(midCloud.and(underMid), () => {
                 throughMid.assign(
-                  mix(cloudShadowMap.sampleMid(p), 1, overcast)
+                  cloudLit
+                    ? cloudShadowMap.sampleMid(p)
+                    : mix(cloudShadowMap.sampleMid(p), 1, overcast)
                 );
               });
             }
@@ -495,17 +500,19 @@ export function createCloudNode({
           // darker than the land).
           const height = saturate(p.y.sub(bottom).div(top.sub(bottom)));
 
-          const shade = skyShaded
-            ? p.y
-                .lessThan(low.shape.y)
-                .select(
-                  skyThrough(low, heightIn(low, p)).mul(skyThrough(mid, 0)),
-                  skyThrough(mid, heightIn(mid, p))
-                )
-            : float(1);
+          const down = p.y
+            .lessThan(low.shape.y)
+            .select(
+              skyThrough(low, heightIn(low, p)).mul(skyThrough(mid, 0)),
+              skyThrough(mid, heightIn(mid, p))
+            );
 
+          const shade = skyShaded ? down : float(1);
+
+          // And the sun's own light gets down through a deck the same way
+          // the sky's does (sunThroughDeck).
           const ambient = skyOnCloud(height, 1.4, shade).add(
-            overcast.mul(sunIntensity).mul(1.2)
+            sunThroughDeck(down)
           );
 
           // At night the city lights the base; it's spent a little way in.

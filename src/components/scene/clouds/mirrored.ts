@@ -11,11 +11,17 @@ import {
 } from "three/tsl";
 import { overcast, seaLevel, sunIntensity } from "../environment";
 import { hazeColor, hazeTransmittance } from "../haze";
-import { skyOnCloud } from "../sky/skyModel";
+import { skyOnCloud, sunThroughDeck } from "../sky/skyModel";
 import { cloudGlowAtNight } from "../skyglow";
 import { cloudShare } from "./cloudField";
 import { coverageMap, LOW_ANGLE } from "./coverage";
-import { cloudLayers, cloudNoise, deckLid, saturate } from "./density";
+import {
+  cloudLayers,
+  cloudNoise,
+  deckLid,
+  saturate,
+  skyThrough,
+} from "./density";
 
 // The clouds are a pass over the finished frame, so the sea's mirror (a
 // render of the scene from under the water) never had them in it: under
@@ -46,7 +52,7 @@ const inMirror = cameraPosition.y.lessThan(seaLevel);
 export const withMirroredCloud = (sky, direction) =>
   Fn(() => {
     const shown = vec3(sky).toVar();
-    const { low } = cloudLayers;
+    const { low, mid } = cloudLayers;
     const clouded = low.shape.z.greaterThan(0).or(deckLid.greaterThan(0));
 
     If(inMirror.and(direction.y.greaterThan(0.01)).and(clouded), () => {
@@ -76,7 +82,7 @@ export const withMirroredCloud = (sky, direction) =>
         .mul(float(1).sub(overcast));
 
       const underside = skyOnCloud(0)
-        .add(overcast.mul(sunIntensity).mul(1.2))
+        .add(sunThroughDeck(skyThrough(low, 0).mul(skyThrough(mid, 0))))
         .add(sunIntensity.mul(UNDERSIDE_SUN))
         .add(cloudGlowAtNight(vec3(xz.x, low.shape.x, xz.y)));
 

@@ -19,6 +19,7 @@ import {
   sunDirection,
   sunIntensity,
 } from "./environment";
+import { cloudLit, sunUnderCloud } from "./cloudLight";
 import { hazeLobes, hazeRadiance, nightSky, skyStage } from "./sky/skyModel";
 
 // Atmospheric haze: extinction falls off exponentially with height, so the
@@ -167,11 +168,14 @@ export function hazeColor(direction, model = (glow) => glow) {
   const glow = hazeGlowToward(toward, 0.6);
 
   // From the sky model, the day's glow is its; the night's grey and the
-  // moon's glow stay.
+  // moon's glow stay. The moon's, like the sun's, as much as gets under
+  // the cloud (./cloudLight.ts).
   if (skyStage() >= 4) {
+    const moon = glow.mul(moonlit);
+
     return hazeGrey
       .mul(nightSky)
-      .add(glow.mul(moonlit))
+      .add(cloudLit ? moon.mul(sunUnderCloud) : moon)
       .add(model(hazeRadiance(along)));
   }
 

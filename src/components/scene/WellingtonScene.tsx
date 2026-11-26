@@ -66,6 +66,8 @@ import { Quakes } from "./quakes/Quakes";
 import { OceanConditions, openHeight } from "./ocean/spectrum";
 import { seaConditions, useSwell } from "./ocean/swell";
 import { Clouds } from "./clouds/Clouds";
+import { cloudsOver } from "./clouds/layers";
+import { cloudLit } from "./cloudLight";
 import { useMeasuredWind } from "./wind/stations";
 import type { SeenClouds } from "./clouds/cloudField";
 import { useSeenClouds } from "./clouds/seenClouds";
@@ -1940,8 +1942,12 @@ function Sun({
     return new Vector3(x, 0, z);
   }, [index]);
 
-  // Under a full deck the sun barely gets through; light goes flat.
-  const lit = intensity * (1 - 0.85 * environment.overcastFor(cloudCover));
+  // Under a full deck the sun barely gets through; light goes flat. With
+  // the light under cloud worked out (./cloudLight.ts) that's the clouds'
+  // shadow, deck and all, and the light's the sun above them.
+  const lit = cloudLit
+    ? intensity
+    : intensity * (1 - 0.85 * environment.overcastFor(cloudCover));
 
   useEffect(() => {
     environment.sunDirection.value.set(...direction);
@@ -2108,6 +2114,8 @@ export function Scene({
 
   // The day's light from the sky model, unless the page asks for less (?sky=).
   const stage = skyStage();
+  // And under the cloud, what it leaves of that (./cloudLight.ts).
+  const clouds = useMemo(() => cloudsOver(conditions), [conditions]);
 
   const sky = useMemo(
     () =>
@@ -2115,10 +2123,11 @@ export function Scene({
         ? skyFor(
             sun.altitude,
             hazeDensityForVisibility(conditions.visibility),
-            hazeHeight.value
+            hazeHeight.value,
+            clouds
           )
         : null,
-    [stage, sun.altitude, conditions.visibility]
+    [stage, sun.altitude, conditions.visibility, clouds]
   );
 
   const light = useMemo(
@@ -2132,7 +2141,8 @@ export function Scene({
   const skylight = environment.skylightFor(
     conditions.cloudCover,
     1 - lights,
-    stage >= 3 && sky ? sky.sky : null
+    stage >= 3 && sky ? sky.sky : null,
+    cloudLit && sky ? sky.under : null
   );
 
   useEffect(() => {

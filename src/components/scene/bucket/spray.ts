@@ -25,6 +25,7 @@ import {
   varying,
   vec3,
 } from "three/tsl";
+import { sunUnderCloud } from "../cloudLight";
 import { moonlit, sunDirection, sunIntensity } from "../environment";
 import { hazeColor, phase } from "../haze";
 import { pixelAngle } from "../landmarks/common";
@@ -393,7 +394,9 @@ function createSprayMaterial() {
   const view = positionWorld.sub(cameraPosition);
   const forward = phase(normalize(view).dot(sunDirection), 0.6);
 
+  // As much of the sun as gets under the cloud (../cloudLight.ts).
   const sunlit = sunIntensity
+    .mul(sunUnderCloud)
     .mul(mix(1, 0.3, moonlit))
     .mul(forward.mul(4 * Math.PI).add(0.4))
     .mul(SUN);

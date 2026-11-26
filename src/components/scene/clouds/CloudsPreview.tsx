@@ -24,7 +24,9 @@ import {
 import { showSky, skyFor, skyRadiance, skyStage } from "../sky/skyModel";
 import { updateLens } from "../lens";
 import { Conditions } from "../weather";
+import { cloudLit } from "../cloudLight";
 import { Clouds } from "./Clouds";
+import { cloudsOver } from "./layers";
 import { CLOUDS_DESKTOP, CLOUDS_MOBILE } from "./cloudNode";
 import { applyToneMapping } from "../tone";
 
@@ -121,7 +123,7 @@ function Sky() {
   );
 }
 
-function Sun({ altitude, bearing, cover }) {
+function Sun({ altitude, bearing, cover, clouds }) {
   const direction = useMemo(() => {
     const a = (altitude * Math.PI) / 180;
     const b = (bearing * Math.PI) / 180;
@@ -139,17 +141,24 @@ function Sun({ altitude, bearing, cover }) {
 
   const sky = useMemo(
     () =>
-      stage ? skyFor(altitude, hazeDensity.value, hazeHeight.value) : null,
-    [stage, altitude]
+      stage
+        ? skyFor(altitude, hazeDensity.value, hazeHeight.value, clouds)
+        : null,
+    [stage, altitude, clouds]
   );
 
   const sun = stage >= 2 && sky ? sky.sun : 3;
-  const lit = sun * (1 - 0.85 * environment.overcastFor(cover));
+
+  // As the scene's Sun has it (../cloudLight.ts).
+  const lit = cloudLit
+    ? sun
+    : sun * (1 - 0.85 * environment.overcastFor(cover));
 
   const skylight = environment.skylightFor(
     cover,
     1,
-    stage >= 3 && sky ? sky.sky : null
+    stage >= 3 && sky ? sky.sky : null,
+    cloudLit && sky ? sky.under : null
   );
 
   useEffect(() => {
@@ -320,6 +329,8 @@ export const CloudsPreview: React.FC = () => {
     [settings.cover, settings.base, settings.windSpeed, settings.windDirection]
   );
 
+  const clouds = useMemo(() => cloudsOver(conditions), [conditions]);
+
   return (
     <Canvas
       // As the scene: 1.5× at most.
@@ -346,6 +357,7 @@ export const CloudsPreview: React.FC = () => {
         altitude={settings.sunAltitude}
         bearing={settings.sunBearing}
         cover={conditions.cloudCover}
+        clouds={clouds}
       />
       <Clouds
         conditions={conditions}

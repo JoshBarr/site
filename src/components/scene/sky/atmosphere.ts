@@ -48,7 +48,7 @@ export const hazePeaked = !new URLSearchParams(
   .includes("hazepeak");
 
 /** Of the light landing on it, what the land and sea send back up. */
-const GROUND = 0.1;
+export const GROUND = 0.1;
 
 // The table: for each direction, by its height above the horizon and how far
 // round from the sun it is, how much sunlight the air and the haze along it

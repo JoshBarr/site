@@ -12,6 +12,7 @@ import {
   shadow,
   uniform,
 } from "three/tsl";
+import { cloudLit } from "./cloudLight";
 import { createCloudShadowMap } from "./clouds/shadow";
 
 // Scene-wide lighting state, shared by materials that shade themselves
@@ -101,8 +102,19 @@ const NIGHT_FILL = 0.3;
 export function skylightFor(
   cloudCover: number,
   daylight: number,
-  sky: number | null = null
+  sky: number | null = null,
+  under: number | null = null
 ) {
+  // With the light under the cloud worked out (./cloudLight.ts), `under`
+  // is the day's: the sky through the gaps and what the cloud passes. The
+  // night's is as it was.
+  if (under !== null) {
+    return (
+      under * daylight +
+      (CLEAR_SKY + NIGHT_FILL + 0.3 * overcastFor(cloudCover)) * (1 - daylight)
+    );
+  }
+
   const deck = overcastFor(cloudCover) * (0.3 + 0.6 * daylight);
 
   // From the sky model (./sky/skyModel.ts): the clear sky's light by day,
@@ -218,17 +230,17 @@ export const nearShadow = shadow(nearShadowLight, nearShadowLight.shadow);
 filterOnce(nearShadowLight);
 
 /**
- * The sun let through the clouds at a surface (1 clear, 0 shadowed). Under
- * an overcast deck the dimmed sun stands in for the even light through it,
- * so the shadows fade out as the deck closes.
+ * The sun let through the clouds at a surface (1 clear, 0 shadowed). With
+ * the light under cloud worked out (./cloudLight.ts) that's the map, deck
+ * and all: under one there's no sun, and the even light it passes is the
+ * sky's. Before, under an overcast deck the dimmed sun stood in for that
+ * even light, so the shadows faded out as the deck closed.
  */
 export const cloudShadowMap = createCloudShadowMap(sunDirection);
 
-export const cloudShadow = mix(
-  cloudShadowMap.sample(positionWorld),
-  1,
-  overcast
-);
+export const cloudShadow = cloudLit
+  ? cloudShadowMap.sample(positionWorld)
+  : mix(cloudShadowMap.sample(positionWorld), 1, overcast);
 
 // Lit materials get all three; outside the near map's square it reads as lit.
 // SAFETY: shadow() makes a float node, the light's shadow factor; it's typed

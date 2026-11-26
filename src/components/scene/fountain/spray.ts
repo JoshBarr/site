@@ -36,6 +36,7 @@ import {
   vec3,
   vec4,
 } from "three/tsl";
+import { sunUnderCloud } from "../cloudLight";
 import { moonlit, seaLevel, sunDirection, sunIntensity } from "../environment";
 import { hazeColor, hazeTransmittance, phase } from "../haze";
 import { pixelAngle } from "../landmarks/common";
@@ -382,7 +383,9 @@ export function createSpray(centre: Vector3, count: number) {
   const view = toCamera.negate();
   const forward = phase(normalize(view).dot(sunDirection), 0.6);
 
+  // As much of the sun as gets under the cloud (../cloudLight.ts).
   const sunlit = sunIntensity
+    .mul(sunUnderCloud)
     .mul(mix(1, 0.3, moonlit))
     .mul(forward.mul(4 * Math.PI).add(0.4))
     .mul(SUN);
