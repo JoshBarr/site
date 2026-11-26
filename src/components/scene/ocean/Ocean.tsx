@@ -224,9 +224,14 @@ function belowShare(share) {
   );
 }
 
+/** A slope moves what the mirror shows this far, of the screen, for each 1. */
+const MIRROR_NUDGE = 0.12;
+
 /** The mirror as it was: nudged a little by the drawn slope (?off=searough). */
 function roughMirrorBefore(mirror: ReturnType<typeof reflector>, slope) {
-  if (mirror.uvNode) mirror.uvNode = mirror.uvNode.add(slope.mul(0.12));
+  if (mirror.uvNode) {
+    mirror.uvNode = mirror.uvNode.add(slope.mul(MIRROR_NUDGE));
+  }
 
   return mirror.rgb;
 }
@@ -512,10 +517,14 @@ function createMaterial(
 
   // The mirror as a level, unruffled sea has it, for the water that runs
   // into this one (./calm.ts): taken before the waves move it, below.
+  const level = mirror.uvNode!;
+
   const calm: CalmSea = {
-    mirrored: switchedOff("reflection")
-      ? vec3(0.04)
-      : mirror.sample(mirror.uvNode!).rgb,
+    mirrored: switchedOff("reflection") ? vec3(0.04) : mirror.sample(level).rgb,
+    mirroredBy: (tilt) =>
+      switchedOff("reflection")
+        ? vec3(0.04)
+        : mirror.sample(level.add(tilt.mul(MIRROR_NUDGE))).rgb,
     depthAt,
   };
 

@@ -1,4 +1,5 @@
 import { BufferAttribute, BufferGeometry } from "three/webgpu";
+import { flowAlong } from "./flow";
 
 /** public/rivers/rivers.json, from scripts/rivers/build_rivers.py. */
 export interface RiversFile {
@@ -26,7 +27,13 @@ interface River {
  * are the world's, from `origin` (the terrain's, NZTM); y is the water's
  * height in metres, which the material scales as the land is. `level` is
  * the water's own, bank to bank the same. `fade` is 1 down to the coast,
- * then falls to 0 at the ribbon's end, out over the sea.
+ * then falls to 0 at the ribbon's end, out over the sea. `flow` is how the
+ * water runs there (./flow.ts): how far down the river and how far off its
+ * middle (the left bank's under 0), both in the moving pattern's metres,
+ * which on a narrow river are shorter than life; its speed, m/s; and how
+ * broken its surface is, 0..1. `reach` is which side (-1 at the left bank,
+ * 1 at the right), how much foam the water carries there, 0..1, and how
+ * much smaller than life the pattern's drawn, 0..1.
  */
 export function createRiversGeometry(
   file: RiversFile,
@@ -37,9 +44,11 @@ export function createRiversGeometry(
   const positions: number[] = [];
   const fades: number[] = [];
   const levels: number[] = [];
+  const flows: number[] = [];
+  const reaches: number[] = [];
   const indices: number[] = [];
 
-  for (const { points, levels: stationLevels } of file.rivers) {
+  for (const { name, points, levels: stationLevels } of file.rivers) {
     const base = positions.length / 3;
     const count = points.length / 3;
 
@@ -70,6 +79,22 @@ export function createRiversGeometry(
     for (const fade of fading) fades.push(fade, fade);
 
     for (const level of stationLevels) levels.push(level, level);
+
+    const flowing = flowAlong(name, points, stationLevels);
+
+    for (let station = 0; station < stations; station++) {
+      const scale = flowing.scales[station];
+
+      for (const side of [-1, 1]) {
+        flows.push(
+          flowing.drifts[station],
+          (side * flowing.halfWidths[station]) / scale,
+          flowing.speeds[station],
+          flowing.roughs[station]
+        );
+        reaches.push(side, flowing.foams[station], scale);
+      }
+    }
 
     // Up, times twice the area, of the triangle a b c: anticlockwise seen
     // from above (east right, north up) faces up.
@@ -106,6 +131,14 @@ export function createRiversGeometry(
   geometry.setAttribute(
     "level",
     new BufferAttribute(new Float32Array(levels), 1)
+  );
+  geometry.setAttribute(
+    "flow",
+    new BufferAttribute(new Float32Array(flows), 4)
+  );
+  geometry.setAttribute(
+    "reach",
+    new BufferAttribute(new Float32Array(reaches), 3)
   );
   geometry.setIndex(indices);
   geometry.computeBoundingSphere();

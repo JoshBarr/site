@@ -11,14 +11,20 @@ const RIVERS_URL = process.env.NEXT_PUBLIC_RIVERS_URL ?? "/rivers";
  * to read as water against the shingle beside it. Out on a valley's floor
  * the far bank's low, so the sky's in more of it than a lake's.
  */
-const LOOK: WaterLook = { reflectance: 0.03, banks: 0.05, fades: true };
+const LOOK: WaterLook = {
+  reflectance: 0.03,
+  banks: 0.05,
+  fades: true,
+  flows: true,
+};
 
 /**
  * Te Awa Kairangi / the Hutt, the Wainuiomata and the Ōrongorongo
  * (scripts/rivers): ribbons on their water's surface as the lidar has it,
  * falling to the sea. Down at its level they're shaded as it is (see
  * `sea` in ../lakes/water.ts), so what fades out into it past the coast is
- * the same water. `sea` is whether there's one drawn for them to run into:
+ * the same water. And they run: rippled and broken by how fast the lidar's
+ * levels have them falling (./flow.ts). `sea` is whether there's one drawn for them to run into:
  * they wait for it.
  */
 export function Rivers({ index, sea }: { index: TileIndex; sea: boolean }) {

@@ -12,6 +12,7 @@ import {
   positionGeometry,
   positionWorld,
   pow,
+  reflect,
   smoothstep,
   vec3,
 } from "three/tsl";
@@ -36,6 +37,8 @@ import {
   sparkle,
   sunScatter,
 } from "../ocean/calm";
+import { ripples } from "../rivers/ripples";
+import { switchedOff } from "../stats";
 import { verticalScale } from "../terrain/Terrain";
 
 type WaterMesh = Mesh<BufferGeometry, MeshBasicNodeMaterial>;
@@ -61,6 +64,12 @@ export interface WaterLook {
    * `level` attribute: the water's height, m above mean sea level.
    */
   sea?: CalmSea;
+  /**
+   * It runs: its surface is rippled, the ripples carried downstream, and
+   * broken white down its riffles, by the geometry's `flow` and `side`
+   * attributes (../rivers/ripples.ts). `?off=flow` stills it.
+   */
+  flows?: boolean;
 }
 
 /**
@@ -88,6 +97,15 @@ const PULL_MOST = 60;
 const TIDAL = 0.3;
 const FRESH = 1.5;
 
+/** Broken water's reflectance: about the shingle's beside it. */
+const WHITE = 0.22;
+
+/**
+ * A running river's own tone goes this much lighter and darker, as a share
+ * of it, along the streaks its currents draw.
+ */
+const STIR = 0.5;
+
 /**
  * An estuary's this deep at least, m, for its colour: the sea's depth map
  * has none up a river, and its shallowest shelf is the palest water there
@@ -107,6 +125,7 @@ function createWaterMaterial({
   banks: hills,
   fades = false,
   sea,
+  flows = false,
 }: WaterLook) {
   const material = new MeshBasicNodeMaterial({
     polygonOffset: true,
@@ -130,10 +149,17 @@ function createWaterMaterial({
     normalize(toEye).mul(min(toEye.length().mul(PULL), PULL_MOST))
   );
 
+  const running = flows && !switchedOff("flow") ? ripples() : null;
+
+  // Level, but for a running river's ripples.
+  const normal = running
+    ? normalize(vec3(running.tilt.x.negate(), 1, running.tilt.y.negate()))
+    : vec3(0, 1, 0);
+
   const view = normalize(cameraPosition.sub(positionWorld));
-  const facing = max(view.y, 0);
+  const facing = max(dot(view, normal), 0);
   const fresnel = float(0.02).add(pow(float(1).sub(facing), 5).mul(0.98));
-  const reflected = vec3(view.x.negate(), view.y, view.z.negate());
+  const reflected = reflect(view.negate(), normal);
 
   // SAFETY: shadow() makes a float node; see environment.ts.
   const lit = float(sunShadow as any)
@@ -168,15 +194,19 @@ function createWaterMaterial({
     .mul(smoothstep(0, hills, reflected.y));
 
   const own = mix(
-    vec3(irradiance.mul(reflectance)),
+    vec3(
+      irradiance.mul(
+        running ? running.stir.mul(STIR).add(1).mul(reflectance) : reflectance
+      )
+    ),
     mirror,
     fresnel.mul(MIRROR)
   ).add(glint);
 
-  material.colorNode = sea
+  const water = sea
     ? mix(
         own,
-        asTheSea(sea, { fresnel, irradiance, lit, sunAmount }),
+        asTheSea(sea, { fresnel, irradiance, lit, sunAmount, running }),
         // By the water's level, not the ribbon's height: its banks are
         // lifted onto the terrain's coarse tiles, vertex by vertex.
         float(1).sub(
@@ -184,6 +214,10 @@ function createWaterMaterial({
         )
       )
     : own;
+
+  material.colorNode = running
+    ? mix(water, vec3(irradiance.mul(WHITE)), running.white)
+    : water;
 
   if (fades) {
     material.transparent = true;
@@ -199,17 +233,28 @@ function createWaterMaterial({
  * back out, by its depth; its mirror, which is true this near its level;
  * and its glint.
  */
-function asTheSea(sea: CalmSea, { fresnel, irradiance, lit, sunAmount }) {
+function asTheSea(
+  sea: CalmSea,
+  { fresnel, irradiance, lit, sunAmount, running }
+) {
   // Where the water is, not where it's drawn (pulled toward the eye).
   const depth = max(sea.depthAt(positionGeometry.xz), ESTUARY);
+  const reflectance = seaReflectance(depth);
 
-  const scatter = vec3(seaReflectance(depth).mul(irradiance)).add(
-    sunScatter(max(sunDirection.y, 0)).mul(sunIntensity).mul(lit)
-  );
+  // A river's ripples are on it here too: lighter down their lanes, and
+  // the mirror broken up by them.
+  const scatter = vec3(
+    (running
+      ? running.stir.mul(STIR).add(1).mul(reflectance)
+      : reflectance
+    ).mul(irradiance)
+  ).add(sunScatter(max(sunDirection.y, 0)).mul(sunIntensity).mul(lit));
 
   return mix(
     scatter,
-    sea.mirrored.mul(mix(MIRROR_SHADED, 1, lit)),
+    (running ? sea.mirroredBy(running.tilt) : sea.mirrored).mul(
+      mix(MIRROR_SHADED, 1, lit)
+    ),
     fresnel.mul(MIRROR)
   ).add(sparkle(sunAmount).add(sheen(sunAmount)).mul(sunIntensity).mul(lit));
 }

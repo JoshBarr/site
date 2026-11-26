@@ -51,6 +51,11 @@ export interface CalmSea {
   /** What a level, unruffled sea mirrors at this pixel: a colour node. */
   // SAFETY: a TSL vec3 node, which three's types don't name usefully.
   mirrored: any;
+  /**
+   * And what it mirrors where its surface is tilted by `slope` (along x
+   * and z, a vec2 node): the same mirror, looked up a little to one side.
+   */
+  mirroredBy: (slope: any) => any;
   /** The sea's depth at a world xz, m: a float node. */
   depthAt: (xz: any) => any;
 }
