@@ -49,19 +49,6 @@ const REACH = SPRAY_HEIGHT / 2 + 8;
 /** Far off: when a pump that's running stops. */
 const NEVER = 1e9;
 
-let field: Promise<WindField | null> | null = null;
-
-/** The land's wind field, once; the wind trails and the sea load it too. */
-function windField() {
-  field ??= loadWindField().catch((e) => {
-    console.error("[fountain] wind field:", e);
-
-    return null;
-  });
-
-  return field;
-}
-
 /**
  * The Carter Fountain in Oriental Bay, running to its hours unless the wind
  * at the Band Rotunda's sensor is up: its pontoon, riding the tide, and the
@@ -117,7 +104,10 @@ export function Fountain({
   useEffect(() => {
     let current = true;
 
-    windField().then((loaded) => current && setLand(loaded));
+    loadWindField().then(
+      (loaded) => current && setLand(loaded),
+      (e) => console.error("[fountain] wind field:", e)
+    );
 
     return () => {
       current = false;

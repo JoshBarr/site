@@ -118,7 +118,28 @@ export function fieldTextures({ size, data, land }: WindField) {
   };
 }
 
-export async function loadWindField(): Promise<WindField> {
+let loading: Promise<WindField> | null = null;
+
+/**
+ * The field, fetched and unpacked once for all that read it: the trails,
+ * the sea and the fountain's spray. They share the one, so none may write
+ * to it. A load that fails is forgotten, and the next to ask tries again.
+ */
+export function loadWindField(): Promise<WindField> {
+  if (loading) return loading;
+
+  const load = fetchWindField();
+
+  loading = load;
+
+  load.catch(() => {
+    if (loading === load) loading = null;
+  });
+
+  return load;
+}
+
+async function fetchWindField(): Promise<WindField> {
   const response = await fetch(FIELD_URL);
 
   if (!response.ok) throw new Error(`wind field: ${response.status}`);

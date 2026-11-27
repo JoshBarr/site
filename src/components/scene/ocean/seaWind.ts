@@ -88,7 +88,7 @@ export const openWind = uniform(new Vector2(7, 0));
 
 let loading: Promise<void> | null = null;
 
-/** Fills the maps from the field, once; the wind trails load it too. */
+/** Fills the maps from the field, once: it's loaded once for all (../wind/field.ts). */
 export function loadSeaWind() {
   loading ??= loadWindField().then((field) => {
     if (field.size !== SIZE) {
