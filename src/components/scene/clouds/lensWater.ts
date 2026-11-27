@@ -130,7 +130,7 @@ const DRYING_IN_RAIN = 0.00003;
 const GONE = 0.0007;
 
 /** Drops landing per second over a screen height square, in rain of RAIN_AT. */
-const LANDING = 70;
+const LANDING = 56;
 
 /** Rain on the glass of 1, mm/h. */
 const RAIN_AT = 6;
