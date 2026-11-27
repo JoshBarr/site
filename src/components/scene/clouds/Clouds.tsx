@@ -50,7 +50,8 @@ import {
   stepRainField,
 } from "./rainField";
 import { cloudHistory } from "./temporal";
-import { lensWetness, updateLensWetness, wetLens } from "./wetLens";
+import { lensRain } from "./lensWater";
+import { dryLens, updateWetLens, wetLens } from "./wetLens";
 import { useRenderer } from "../renderer";
 import { setSceneDepth } from "../sceneDepth";
 import {
@@ -79,9 +80,6 @@ const CIRRUS_VEER = 25;
 
 /** How often the radar's showers are carried on downwind, ms. */
 const RAIN_STEP = 1000;
-
-/** Water on the lens in rain. Off until it looks like water. */
-const WET_LENS = false;
 
 /**
  * The finished frame as the canvas shows it: stopped down where the sky
@@ -406,8 +404,20 @@ export function Clouds({
         depth
       );
 
+      // Water on the lens over everything (?off=wetlens for none). What it
+      // bends into view is blurred anyway, so that goes without the depth of
+      // field (and glow). It dries off after the rain's stopped.
+      const over = (under, layer) =>
+        under.mul(layer.a.oneMinus()).add(layer.rgb);
+
+      const behind = (uv) => {
+        const sky = settled.sample(uv);
+
+        return output.sample(uv).rgb.mul(sky.a).add(sky.rgb);
+      };
+
       if (!raining) {
-        const tv = tvScreen(lay(composite));
+        const tv = tvScreen(wetLens(lay(composite), behind));
         pipeline.outputNode = shown(tv.node);
 
         return { scenePass, pipeline, glow, history, drops: null, tv, volume };
@@ -430,27 +440,10 @@ export function Clouds({
         "output"
       );
 
-      // And water on the lens over everything. What it bends into view is
-      // blurred anyway, so it goes without the depth of field (and glow).
-      const over = (under, layer) =>
-        under.mul(layer.a.oneMinus()).add(layer.rgb);
-
-      if (!WET_LENS) {
-        const tv = tvScreen(vec4(over(lay(composite).rgb, streaks), 1));
-        pipeline.outputNode = shown(tv.node);
-
-        return { scenePass, pipeline, glow, history, drops, tv, volume };
-      }
-
       const tv = tvScreen(
-        wetLens(vec4(over(lay(composite).rgb, streaks), 1), (uv) => {
-          const sky = settled.sample(uv);
-
-          return over(
-            output.sample(uv).rgb.mul(sky.a).add(sky.rgb),
-            streaks.sample(uv)
-          );
-        })
+        wetLens(vec4(over(lay(composite).rgb, streaks), 1), (uv) =>
+          over(behind(uv), streaks.sample(uv))
+        )
       );
 
       pipeline.outputNode = shown(tv.node);
@@ -518,23 +511,19 @@ export function Clouds({
     // Far enough above the cloud base there are no drops to see.
     if (drops) {
       drops.visible = camera.position.y - DROP_REACH < layers.low.shape.value.x;
+    }
 
-      const onCamera = rainfallAt(
-        cloudNoise.weather,
-        layers.low,
-        rain,
-        camera.position
-      );
-
-      if (WET_LENS)
-        updateLensWetness(
-          camera,
-          onCamera * dropFraction(conditions.precipitation),
-          rain,
-          delta
-        );
+    // How hard it's raining on the lens. With the clouds hidden (the map)
+    // there's no lens to wet.
+    if (hidden) {
+      dryLens();
     } else {
-      lensWetness.value = 0;
+      const onCamera = drops
+        ? rainfallAt(cloudNoise.weather, layers.low, rain, camera.position) *
+          lensRain(conditions.precipitation)
+        : 0;
+
+      updateWetLens(renderer, camera, onCamera, rain, delta, held);
     }
 
     cloudShadowMap.update(
