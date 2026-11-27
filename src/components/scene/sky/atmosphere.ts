@@ -1,11 +1,16 @@
 // The daytime sky as the air makes it: sunlight scattered once on its way
-// down, by the air itself (Rayleigh) and by the haze in it (Mie), worked out
-// on a round Earth so it holds through sunset and twilight. Luminance only:
-// the scene is grey. Everything's relative to the sun above the air, 1.
+// down, by the air itself (Rayleigh) and by the haze in it (Mie), and some of
+// it taken out by the ozone high above both, worked out on a round Earth so
+// it holds through sunset and twilight. Luminance only: the scene is grey.
+// Everything's relative to the sun above the air, 1.
 //
 // It gives the scene one account of the light where it had a handful of
 // constants: how strong the sun is through the air at its height, how much
 // the sky adds and from where, and what the haze glows with.
+
+const off = (
+  new URLSearchParams(globalThis.location?.search ?? "").get("off") ?? ""
+).split(",");
 
 const EARTH = 6_371_000;
 
@@ -19,6 +24,27 @@ const TOP = 60_000;
  */
 const AIR = 1.33e-5;
 const AIR_HEIGHT = 8000;
+
+/**
+ * A reported visibility is through air and haze together, so what it says
+ * is taken out of the light a metre has the air's share in it: the haze is
+ * the rest. ?off=airshare for the air counted on top of it, as it was: 5%
+ * too much haze in 10 km air, 29% in 50.
+ */
+const airShared = !off.includes("airshare");
+
+/**
+ * What the ozone takes out of the light a metre where it's thickest, weighted
+ * as the air's is (0.65, 1.88 and 0.09e-6: it takes the middle of what the
+ * eye sees, and scatters none of it on). It's a layer from 10 km up to 40,
+ * thickest halfway, as sky models have it (Bruneton's, Hillaire's): 15 km of
+ * it straight up, which takes 2.5% of a high sun, an eighth of one 8° up and
+ * half the sky's light in twilight, when the sun's rays come the length of
+ * it. ?off=ozone for the sky without.
+ */
+const OZONE = off.includes("ozone") ? 0 : 1.49e-6;
+const OZONE_FROM = 10_000;
+const OZONE_TO = 40_000;
 
 /** Of the light the haze takes out of a ray, the share it scatters on. */
 const HAZE_ALBEDO = 0.92;
@@ -40,12 +66,7 @@ export const HAZE_PEAK = 0.8;
 export const HAZE_PEAK_SHARE = 0.1;
 
 /** Whether the haze has its narrow lobe: ?off=hazepeak for the look without. */
-export const hazePeaked = !new URLSearchParams(
-  globalThis.location?.search ?? ""
-)
-  .get("off")
-  ?.split(",")
-  .includes("hazepeak");
+export const hazePeaked = !off.includes("hazepeak");
 
 /** Of the light landing on it, what the land and sea send back up. */
 export const GROUND = 0.1;
@@ -168,6 +189,58 @@ function column(columns: Columns, height: number, cosine: number) {
 
 const air = columnsFor(AIR_HEIGHT);
 
+// The ozone doesn't thin with height like that, but it's a layer a ray's
+// length in can be had exactly: as shells, each of one thickness of ozone,
+// and a ray's length inside a sphere is a square root.
+
+const SHELLS = 10;
+
+/** How thick the ozone is `height` m up, of its thickest. */
+const ozoneAt = (height: number) =>
+  Math.max(
+    1 -
+      Math.abs(height - (OZONE_FROM + OZONE_TO) / 2) /
+        ((OZONE_TO - OZONE_FROM) / 2),
+    0
+  );
+
+/**
+ * Of a ray from `r` m from the Earth's centre at slant `cosine`, the length
+ * inside the sphere of `radius` round it.
+ */
+function inside(r: number, cosine: number, radius: number) {
+  const nearest = r * r * (1 - cosine * cosine);
+
+  if (radius * radius <= nearest) return 0;
+
+  const half = Math.sqrt(radius * radius - nearest);
+  const middle = -r * cosine;
+
+  return Math.max(middle + half, 0) - Math.max(middle - half, 0);
+}
+
+/**
+ * The ozone a ray passes from `height` at slant `cosine` (1 straight up,
+ * under 0 dipping), as metres of it at its thickest. The ground's not in its
+ * way: the air's column says when it is.
+ */
+export function ozoneColumn(height: number, cosine: number) {
+  const r = EARTH + height;
+  let within = inside(r, cosine, EARTH + OZONE_FROM);
+  let sum = 0;
+
+  for (let k = 0; k < SHELLS; k++) {
+    const base = OZONE_FROM + ((OZONE_TO - OZONE_FROM) * k) / SHELLS;
+    const top = OZONE_FROM + ((OZONE_TO - OZONE_FROM) * (k + 1)) / SHELLS;
+    const under = within;
+
+    within = inside(r, cosine, EARTH + top);
+    sum += ozoneAt((base + top) / 2) * (within - under);
+  }
+
+  return sum;
+}
+
 /** The haze's columns, by the height it thins over: it's seldom changed. */
 const hazes = new Map<number, Columns>();
 
@@ -184,7 +257,10 @@ function hazeColumns(scale: number) {
 
 /** The air the sky's worked out through. */
 export interface Air {
-  /** The haze's extinction at sea level, per metre (see ../haze.ts). */
+  /**
+   * What's taken out of the light a metre at sea level, as the visibility
+   * has it (see ../haze.ts): the haze's, and the air's own with it.
+   */
   haze: number;
   /** The height it thins by e over, m. */
   hazeHeight: number;
@@ -244,8 +320,9 @@ const elevationOf = (j: number) => (Math.PI / 2) * (j / (ELEVATIONS - 1)) ** 2;
  */
 export function skyLight(
   altitude: number,
-  { haze, hazeHeight }: Air
+  { haze: reported, hazeHeight }: Air
 ): SkyLight {
+  const haze = airShared ? Math.max(reported - AIR, 0) : reported;
   const mist = hazeColumns(hazeHeight);
   const up = (altitude * Math.PI) / 180;
   const sunX = Math.cos(up);
@@ -258,7 +335,11 @@ export function skyLight(
     // Behind the Earth, whatever the haze.
     if (through === Infinity) return Infinity;
 
-    return AIR * through + haze * column(mist, height, cosine);
+    return (
+      AIR * through +
+      haze * column(mist, height, cosine) +
+      (OZONE && OZONE * ozoneColumn(height, cosine))
+    );
   };
 
   const table = new Float32Array(BEARINGS * ELEVATIONS * CHANNELS);
@@ -300,7 +381,7 @@ export function skyLight(
 
         const byAir = AIR * Math.exp(-height / AIR_HEIGHT);
         const byHaze = haze * Math.exp(-height / hazeHeight);
-        const taken = byAir + byHaze;
+        const taken = byAir + byHaze + OZONE * ozoneAt(height);
 
         if (taken * length < 1e-9) continue;
 
