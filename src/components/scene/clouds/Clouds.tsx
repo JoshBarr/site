@@ -62,7 +62,7 @@ import { createGovernor } from "../governor";
 import { hazeShadow, shadedHaze } from "../hazeShadow";
 import { airGlow, glowInAir } from "../skyglow";
 import { createHazeVolume } from "../hazeVolume";
-import { meterSky, skyStage, stopDown } from "../sky/skyModel";
+import { meterSky, stopDown } from "../sky/skyModel";
 import { hasFirstViewLoaded } from "../loading";
 import { sceneShown } from "../visibility";
 
@@ -85,10 +85,9 @@ const WET_LENS = false;
 
 /**
  * The finished frame as the canvas shows it: stopped down where the sky
- * model's glow ahead is bright (?sky=), then tone mapped and dithered.
+ * model's glow ahead is bright, then tone mapped and dithered.
  */
-const shown = (frame) =>
-  dithered(skyStage() ? vec4(frame.rgb.mul(stopDown), frame.a) : frame);
+const shown = (frame) => dithered(vec4(frame.rgb.mul(stopDown), frame.a));
 
 /**
  * Fills the shared noise textures off the main thread. True once they hold

@@ -21,23 +21,12 @@ import {
   vec2,
 } from "three/tsl";
 import {
-  clearVeil,
-  cloudExposed,
-  cloudLit,
-  fullVeil,
   type CloudOver,
   lightUnder,
   sunOnDeck,
   sunUnderCloud,
 } from "../cloudLight";
-import {
-  overcast,
-  overcastFor,
-  skyBrightness,
-  skyHorizon,
-  skyZenith,
-  sunIntensity,
-} from "../environment";
+import { overcast, overcastFor, skyHorizon, skyZenith } from "../environment";
 import {
   airPhase as airPhaseOf,
   BEARINGS,
@@ -56,40 +45,12 @@ import {
 // The scene's daylight from one model of the sky (./atmosphere.ts), in
 // place of constants balanced by hand: how bright the sky is in each
 // direction, how strong the sun is through the air, how much the sky lights
-// the ground, and what the haze glows with. It came in a stage at a time,
-// each on top of the last, judged against the sheets, and ?sky=0..3 still
-// goes back to each (0 is the scene as it was before the model):
-//
-//   1  the sky drawn behind everything
-//   2  the sun's strength
-//   3  the sky's light on the ground and the clouds
-//   4  the haze's glow
+// the ground, and what the haze glows with. The night's not its: the sky's
+// old greys are still what's drawn then.
 //
 // The model's numbers are shares of the sun above the air. The scene's are
 // what the camera makes of them: it opens up as the light goes, so they're
 // scaled by an exposure that follows the light, part of the way.
-
-/** How far the model lights the scene: all the way, unless the page says. */
-const STAGES = 4;
-
-/** The stage the scene's at: 0 is as it was before the model. */
-export const skyStage = (() => {
-  let stage: number | null = null;
-
-  return () => {
-    if (stage === null) {
-      const params = new URLSearchParams(globalThis.location?.search ?? "");
-      const asked = Number(params.get("sky"));
-
-      stage =
-        params.has("sky") && Number.isFinite(asked)
-          ? Math.min(Math.max(asked, 0), STAGES)
-          : STAGES;
-    }
-
-    return stage;
-  };
-})();
 
 /**
  * The sun the scene's other numbers were balanced under: 60° up through air
@@ -109,55 +70,20 @@ const ADAPTATION = 0.8;
 const MAX_EXPOSURE = 400;
 
 /**
- * Of the glow the model gives the haze, how much is drawn. All of it is the
- * bright veil a camera sees, the far shore lost in it on a wet day, and under
- * a clear sky that's what's drawn: sunlit ground keeps its contrast through
- * bright air, and it's the far hills going pale that gives a fine day its
- * depth. At less they faded to a grey as dark as themselves, and midday came
- * out flat (2026-11-23).
+ * Of the glow the model gives the haze, how much is drawn: all of it. That's
+ * the bright veil a camera sees, the far shore lost in it on a wet day, and
+ * it's the far hills going pale that gives a fine day its depth.
  *
- * Under cloud the ground's dim and the same veil glares, so it's drawn
- * darker, as the scene was first balanced: a half until a grey 9 km morning
- * (2026-11-21) came out flat and glaring, 0.4 since, where the hills keep
- * their relief and the far shore its edge under a deck.
+ * The one dial to turn if the scene is to be less milky again. Until
+ * 2026-11-27 it was drawn down by hand where it glared: to 0.4 under cloud
+ * (from 75% cover) and to 0.6 in thick air (10 km or less). With the light
+ * under cloud worked out (../cloudLight.ts) the haze there is lit by less
+ * to begin with, and all of it is drawn whatever the sky and the air, the
+ * milkier and the truer picture.
  *
- * And in thick air there's so much of it that all of it, toward a low sun,
- * whites out the far hills and half the city: under a clear sky it's eased
- * to 0.6 as the visibility falls from 15 km to 10.
- *
- * ?veil= holds it at one level whatever the sky: 0.4 is the look before it
- * followed the cloud.
- *
- * With the light under cloud worked out (../cloudLight.ts) the haze there
- * is lit by less to begin with, and the cover no longer draws it down; nor,
- * since 2026-11-27, does thick air: all of it is drawn (VEIL_WORKED), the
- * milkier and the truer picture. ?off=fullveil eases it in thick air as
- * above, and ?off=clearveil has it follow the cover as well.
+ * ?veil= holds it at another level, to try one.
  */
-const VEIL_CLEAR = 1;
-const VEIL_THICK = 0.6;
-const VEIL_CLOUDED = 0.4;
-
-/**
- * With the light worked out, how much is drawn whatever the sky and the air:
- * all of it. The one dial to turn if the scene is to be less milky again.
- */
-const VEIL_WORKED = 1;
-
-/** The cloud cover the veil's all a clear sky's up to, and all a clouded one's from. */
-const CLEAR_TO = 0.25;
-const CLOUDED_FROM = 0.75;
-
-/** The visibility, m, a clear sky's veil is all thick air's down to, and all clear air's from. */
-const THICK_TO = 10000;
-const CLEAR_FROM = 15000;
-
-/** 0 at `from` or under to 1 at `to` or over, eased at both ends. */
-function eased(from: number, to: number, value: number) {
-  const t = Math.min(Math.max((value - from) / (to - from), 0), 1);
-
-  return t * t * (3 - 2 * t);
-}
+const VEIL = 1;
 
 const askedVeil = (() => {
   let veil: number | null | undefined;
@@ -174,27 +100,8 @@ const askedVeil = (() => {
   };
 })();
 
-/**
- * How much of the haze's glow is drawn with `cloudCover` of the sky clouded,
- * through air you can see `visibility` m through.
- */
-function veilFor(cloudCover: number, visibility: number) {
-  const asked = askedVeil();
-
-  if (asked !== null) return asked;
-
-  if (fullVeil) return VEIL_WORKED;
-
-  const clear =
-    VEIL_THICK +
-    (VEIL_CLEAR - VEIL_THICK) * eased(THICK_TO, CLEAR_FROM, visibility);
-
-  if (clearVeil) return clear;
-
-  return (
-    clear + (VEIL_CLOUDED - clear) * eased(CLEAR_TO, CLOUDED_FROM, cloudCover)
-  );
-}
+/** How much of the haze's glow is drawn: VEIL, unless the page says. */
+const veilFor = () => askedVeil() ?? VEIL;
 
 /** Of the old sky's greys, what's left of them on a moonless night. */
 const NIGHT_SKY = 0.2;
@@ -243,24 +150,8 @@ const daylight = uniform(0);
 const aroundSky = uniform(0);
 const aroundHaze = uniform(0);
 
-/**
- * Of the sun, what gets through the cloud to light the air under it, as it
- * was set by hand. Worked out (../cloudLight.ts), that's sunUnderCloud for
- * the haze, and the sky above the cloud has all of it.
- */
-const sunlit = uniform(1);
-
 /** Of the model's glow, how much the haze is drawn with: see veilFor. */
-const veil = uniform(VEIL_CLOUDED);
-
-/**
- * Under a full deck the sun's a seventh of itself (see Sun), and the even
- * light nearly twice a clear sky's: the deck adds 0.9 to the sky's light on
- * the ground (skylightFor), and takes away the sunlight the ground sent
- * back up.
- */
-const DECK_SUN = 0.85;
-const DECK_GLOW = 0.9;
+const veil = uniform(VEIL);
 
 /**
  * Of the sky's light on it, what a cloud sends on to the eye: under what a
@@ -341,15 +232,13 @@ function towards(direction, level: boolean) {
   const haze = scattered.g.mul(hazePhase(cosine));
   const full = air.add(haze).mul(daylight).mul(drawn);
 
-  // With the light under cloud worked out (../cloudLight.ts), the haze is
-  // lit by what gets under the cloud: it lies low, under the cloud's base.
-  // Looked up through, the air above the cloud has all of the sun, and
-  // looked along (`level`), all that's seen is under it.
-  const sun = cloudLit
-    ? level
-      ? full.mul(sunUnderCloud)
-      : air.add(haze.mul(sunUnderCloud)).mul(daylight)
-    : full.mul(sunlit);
+  // The haze is lit by what gets under the cloud (../cloudLight.ts): it
+  // lies low, under the cloud's base. Looked up through, the air above the
+  // cloud has all of the sun, and looked along (`level`), all that's seen
+  // is under it.
+  const sun = level
+    ? full.mul(sunUnderCloud)
+    : air.add(haze.mul(sunUnderCloud)).mul(daylight);
 
   return {
     sun,
@@ -369,38 +258,31 @@ export const skyRadiance = (direction) => both(towards(direction, false));
  */
 export const hazeRadiance = (direction) => both(towards(direction, true));
 
-/** Of hazeRadiance, the sun's own light: what a shadow takes away. */
-export const hazeSunRadiance = (direction) => towards(direction, true).sun;
-
 /**
- * And what it'd be with the sun on all of the air that way, no cloud over
- * it: hazeRadiance has the share that gets under the cloud (sunUnderCloud).
+ * What the sun's own light in it would be with the sun on all of the air
+ * that way, no cloud over it: hazeRadiance has the share that gets under
+ * the cloud (sunUnderCloud).
  */
 export const hazeSunFull = (direction) => towards(direction, true).full;
 
 /**
  * The sky's light on a cloud, from `height` 0 at its base to 1 at its top:
- * the old greys, or from stage 3 the model's sky by day and what's left of
- * the greys by night. The model's is the same at every height, so `shade`
- * is how much of it gets down that far through the cloud (skyThrough).
+ * the model's sky by day and what's left of the old greys by night. The
+ * model's is the same at every height, so `shade` is how much of it gets
+ * down that far through the cloud (skyThrough).
  */
 export function skyOnCloud(height, greys = 1.4, shade: any = 1) {
   const grey = mix(skyHorizon, skyZenith.mul(3), height).mul(greys);
 
-  return skyStage() >= 3
-    ? grey.mul(nightSky).add(skyMean.mul(CLOUD_SKY).mul(shade))
-    : grey.mul(skyBrightness);
+  return grey.mul(nightSky).add(skyMean.mul(CLOUD_SKY).mul(shade));
 }
 
 /**
  * The sun's light on a deck's underside, where `shade` of what's on its top
  * gets down to: the same light its base sheds on the ground (lightUnder).
- * Before that was worked out, 1.2 of the sun as the deck had dimmed it.
  */
 export function sunThroughDeck(shade: any = 1) {
-  return cloudLit
-    ? overcast.mul(sunOnDeck).mul(CLOUD_SKY).mul(shade)
-    : overcast.mul(sunIntensity).mul(1.2);
+  return overcast.mul(sunOnDeck).mul(CLOUD_SKY).mul(shade);
 }
 
 /** The sky and its exposure for a moment: see skyFor. */
@@ -430,8 +312,8 @@ const sunLevel = (light: SkyLight, altitude: number) =>
  * The model's sky with the sun `altitude` degrees up, through haze of
  * extinction `haze` a metre at sea level thinning over `hazeHeight` m, as the
  * scene's light; and under `clouds` (the highest layer first), what's left
- * of it on the ground. The camera's exposed for the light on the ground:
- * under cloud too, once that's worked out (../cloudLight.ts).
+ * of it on the ground. The camera's exposed for the light on the ground,
+ * under the cloud.
  */
 export function skyFor(
   altitude: number,
@@ -452,10 +334,7 @@ export function skyFor(
   const beam = sunLevel(light, altitude);
   const below = lightUnder(clouds, beam, light.sky);
 
-  const level = Math.max(
-    cloudExposed ? below.beam * beam + below.diffuse : beam + light.sky,
-    1e-9
-  );
+  const level = Math.max(below.beam * beam + below.diffuse, 1e-9);
 
   const exposure = Math.min(
     Math.pow(reference.level / level, ADAPTATION),
@@ -478,16 +357,14 @@ export function skyFor(
 /**
  * Shows `sky` in the nodes above: with the sun toward `direction`, `night`
  * (0 by day to 1) of the way into night, the `moonlight` (the light's
- * intensity while it's the moon's), `cloudCover` of the sky clouded, and
- * the `visibility`, m.
+ * intensity while it's the moon's), and `cloudCover` of the sky clouded.
  */
 export function showSky(
   sky: Sky,
   direction: [number, number, number],
   night: number,
   moonlight: number,
-  cloudCover: number,
-  visibility: number
+  cloudCover: number
 ) {
   const { light, scale } = sky;
 
@@ -509,38 +386,30 @@ export function showSky(
   const deck = overcastFor(cloudCover);
 
   daylight.value = scale * day;
-  veil.value = veilFor(cloudCover, visibility);
+  veil.value = veilFor();
 
-  if (cloudLit) {
-    // The camera's metered by the glow the way it faces, and through
-    // broken cloud that's two things: the cloud, as bright toward the sun
-    // as ever, and between it the haze, lit by what gets under (the gaps'
-    // share of the sky, which is the beam's). Under a deck there's only
-    // what gets under. A guess at a whole view from one direction, as the
-    // meter is: with the haze's share alone a view at the sun through
-    // cloud whited out, and with all of the sun it came out darker than
-    // it used to.
-    const gaps = sky.beam;
-    const broken = 1 - gaps + gaps * gaps;
+  // The camera's metered by the glow the way it faces, and through broken
+  // cloud that's two things: the cloud, as bright toward the sun as ever,
+  // and between it the haze, lit by what gets under (the gaps' share of the
+  // sky, which is the beam's). Under a deck there's only what gets under. A
+  // guess at a whole view from one direction, as the meter is: with the
+  // haze's share alone a view at the sun through cloud whited out, and with
+  // all of the sun it came out darker than it used to.
+  const gaps = sky.beam;
+  const broken = 1 - gaps + gaps * gaps;
 
-    meterSun = broken + (gaps - broken) * deck;
+  meterSun = broken + (gaps - broken) * deck;
 
-    // The air under the cloud is lit as the ground there is: by the sky
-    // that reaches it, and what the ground sends back up of all it gets.
-    sunUnderCloud.value = sky.beam;
-    sunOnDeck.value = (sky.level * day) / Math.PI;
-    aroundSky.value = light.around * scale * day;
+  // The air under the cloud is lit as the ground there is: by the sky that
+  // reaches it, and what the ground sends back up of all it gets.
+  sunUnderCloud.value = sky.beam;
+  sunOnDeck.value = (sky.level * day) / Math.PI;
+  aroundSky.value = light.around * scale * day;
 
-    aroundHaze.value =
-      (((1 + GROUND) * sky.under + GROUND * sky.beam * sky.level) /
-        (2 * Math.PI)) *
-      day;
-  } else {
-    sunlit.value = 1 - DECK_SUN * deck;
-    meterSun = sunlit.value;
-    aroundSky.value = light.around * scale * day * (1 + DECK_GLOW * deck);
-    aroundHaze.value = aroundSky.value;
-  }
+  aroundHaze.value =
+    (((1 + GROUND) * sky.under + GROUND * sky.beam * sky.level) /
+      (2 * Math.PI)) *
+    day;
 
   skyMean.value = (sky.sky * day) / Math.PI;
   nightSky.value = NIGHT_SKY * night + MOON_SKY * moonlight;
@@ -607,8 +476,6 @@ let metered = false;
  * seconds after the last.
  */
 export function meterSky(forward: Vector3, delta: number) {
-  if (!skyStage()) return;
-
   const glow = glowToward(forward);
   const target = glow > KEY ? Math.pow(KEY / glow, STOP) : 1;
 

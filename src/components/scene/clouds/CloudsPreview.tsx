@@ -14,17 +14,10 @@ import {
 } from "three/tsl";
 import GUI from "lil-gui";
 import * as environment from "../environment";
-import {
-  hazeColor,
-  hazeDensity,
-  hazeHeight,
-  hazeTransmittance,
-  phase,
-} from "../haze";
-import { showSky, skyFor, skyRadiance, skyStage } from "../sky/skyModel";
+import { hazeColor, hazeDensity, hazeHeight, hazeTransmittance } from "../haze";
+import { showSky, skyFor, skyRadiance } from "../sky/skyModel";
 import { updateLens } from "../lens";
 import { Conditions } from "../weather";
-import { cloudLit } from "../cloudLight";
 import { Clouds } from "./Clouds";
 import { cloudsOver } from "./layers";
 import { CLOUDS_DESKTOP, CLOUDS_MOBILE } from "./cloudNode";
@@ -90,22 +83,14 @@ function Sky() {
     const direction = positionWorldDirection;
     const toward = dot(direction, environment.sunDirection);
 
-    const gradient = mix(
-      environment.skyHorizon,
-      mix(environment.skyZenith, environment.skyHorizon, environment.overcast),
-      smoothstep(0, 0.35, direction.y)
-    );
-
     const horizon = float(1).sub(smoothstep(0, 0.25, direction.y.max(0)));
 
-    // From the sky model, the day's sky is its own, glow and all.
-    const air = skyStage()
-      ? skyRadiance(direction)
-      : gradient.add(
-          phase(toward, 0.7).mul(environment.sunIntensity).mul(0.15)
-        );
-
-    scene.backgroundNode = mix(air, hazeColor(direction), horizon.mul(0.8)).add(
+    // The sky model's sky, glow and all.
+    scene.backgroundNode = mix(
+      skyRadiance(direction),
+      hazeColor(direction),
+      horizon.mul(0.8)
+    ).add(
       smoothstep(0.99996, 0.99999, toward).mul(environment.sunIntensity.mul(3))
     );
 
@@ -136,46 +121,20 @@ function Sun({ altitude, bearing, cover, clouds }) {
     );
   }, [altitude, bearing]);
 
-  // The light from the sky model, as far as the scene takes it (?sky=).
-  const stage = skyStage();
-
+  // The light from the sky model, as the scene's Sun has it.
   const sky = useMemo(
-    () =>
-      stage
-        ? skyFor(altitude, hazeDensity.value, hazeHeight.value, clouds)
-        : null,
-    [stage, altitude, clouds]
+    () => skyFor(altitude, hazeDensity.value, hazeHeight.value, clouds),
+    [altitude, clouds]
   );
 
-  const sun = stage >= 2 && sky ? sky.sun : 3;
-
-  // As the scene's Sun has it (../cloudLight.ts).
-  const lit = cloudLit
-    ? sun
-    : sun * (1 - 0.85 * environment.overcastFor(cover));
-
-  const skylight = environment.skylightFor(
-    cover,
-    1,
-    stage >= 3 && sky ? sky.sky : null,
-    cloudLit && sky ? sky.under : null
-  );
+  const lit = sky.sun;
+  const skylight = environment.skylightFor(cover, 1, sky.under);
 
   useEffect(() => {
     environment.sunDirection.value.copy(direction);
     environment.sunIntensity.value = lit / 3;
     environment.skylight.value = skylight;
-
-    if (sky) {
-      showSky(
-        sky,
-        [direction.x, direction.y, direction.z],
-        0,
-        0,
-        cover,
-        VISIBILITY
-      );
-    }
+    showSky(sky, [direction.x, direction.y, direction.z], 0, 0, cover);
   }, [direction, lit, cover, sky, skylight]);
 
   return (

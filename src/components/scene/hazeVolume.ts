@@ -31,14 +31,8 @@ import {
   vec3,
   vec4,
 } from "three/tsl";
-import {
-  cloudShadowMap,
-  overcast,
-  SHADOW_MAP_SIZE,
-  sunLight,
-} from "./environment";
+import { cloudShadowMap, SHADOW_MAP_SIZE, sunLight } from "./environment";
 import { windowLights } from "./buildings/material";
-import { cloudLit } from "./cloudLight";
 import { hazeTransmittance, outsideClearing } from "./haze";
 import { cityLightAt } from "./skyglow";
 import { track } from "./loading";
@@ -265,15 +259,12 @@ export function createHazeVolume(eye: Eye) {
       // No haze is drawn around a followed vehicle; none to take back.
       const world = cameraWorld.mul(vec4(view, 1)).xyz;
 
+      // Under a deck too: the deck's in the shadow map (./cloudLight.ts).
       const cleared = sky.select(float(1), outsideClearing(world));
 
-      // Under a deck the shadows used to fade out; worked out
-      // (./cloudLight.ts), the deck's in the shadow map and they don't.
-      const shown = cloudLit ? cleared : float(1).sub(overcast).mul(cleared);
-
       return {
-        lost: read.r.mul(shown),
-        lit: read.g.mul(shown),
+        lost: read.r.mul(cleared),
+        lit: read.g.mul(cleared),
         // The sky's own is the backdrop's under ?off=airsky.
         glow: read.b.mul(
           sky.select(

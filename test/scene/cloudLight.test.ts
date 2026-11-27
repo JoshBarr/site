@@ -171,10 +171,11 @@ describe("the scene's light under cloud", () => {
   it("lights the ground by day with what gets under the cloud", () => {
     const deck = light(1);
 
-    expect(skylightFor(1, 1, deck.sky, deck.under)).toBeCloseTo(deck.under);
-    // By night it's as it was, whatever the day's light would have been.
-    expect(skylightFor(1, 0, deck.sky, deck.under)).toBeCloseTo(
-      skylightFor(1, 0, deck.sky)
-    );
+    expect(skylightFor(1, 1, deck.under)).toBeCloseTo(deck.under);
+
+    // By night it's set by hand, whatever the day's light would have been:
+    // a clear night's fill, and a little more under a deck.
+    expect(skylightFor(0, 0, deck.under)).toBeCloseTo(0.55);
+    expect(skylightFor(1, 0, deck.under)).toBeCloseTo(0.85);
   });
 });

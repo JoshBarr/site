@@ -18,8 +18,8 @@ import {
 } from "three/tsl";
 import { cloudShadowMap, moonlit, overcast, sunDirection } from "./environment";
 import { hazeGlowToward, hazeTransmittance, outsideClearing } from "./haze";
-import { cloudLit, sunUnderCloud } from "./cloudLight";
-import { hazeSunFull, hazeSunRadiance, skyStage } from "./sky/skyModel";
+import { sunUnderCloud } from "./cloudLight";
+import { hazeSunFull } from "./sky/skyModel";
 import { cloudLayers } from "./clouds/density";
 
 // The haze is worked out in one go along each ray, as though the sun lit
@@ -64,9 +64,7 @@ export function hazeShadow({
   const { low, mid } = cloudLayers;
 
   // Whether there are shadows to find: some cloud, and not a full deck,
-  // under which they fade out (see cloudShadow in environment), or with
-  // the light under cloud worked out there's no sun for the haze to have
-  // more or less of.
+  // under which there's no sun for the haze to have more or less of.
   const shadows = low.shape.z
     .greaterThan(0)
     .or(mid.shape.z.greaterThan(0))
@@ -112,10 +110,9 @@ export function hazeShadow({
 
       // No haze is drawn around a followed vehicle; none to take back.
       const cleared = sky.select(float(1), outsideClearing(world));
-      const shown = cloudLit ? cleared : float(1).sub(overcast).mul(cleared);
 
-      lost.mulAssign(shown);
-      lit.mulAssign(shown);
+      lost.mulAssign(cleared);
+      lit.mulAssign(cleared);
     });
 
     return vec4(lost, lit, 0, 1);
@@ -141,7 +138,7 @@ export function hazeShadow({
  */
 export function shadedHaze(
   color,
-  { lost, lit, rays }: { lost: any; lit?: any; rays?: any },
+  { lost, lit, rays }: { lost: any; lit: any; rays?: any },
   {
     depth,
     cameraWorld,
@@ -152,36 +149,25 @@ export function shadedHaze(
   const direction = normalize(cameraWorld.mul(vec4(view, 0)).xyz);
 
   // The sun's share of the haze's glow, as the fog on every material has
-  // it (hazeColor): the sky model's from its fourth stage.
+  // it (hazeColor): the sky model's by day, the moon's lobe by night.
   const lobe = hazeGlowToward(dot(direction, sunDirection), 0.6);
+  const full = hazeSunFull(direction).add(lobe.mul(moonlit));
 
-  // With the light under cloud worked out (./cloudLight.ts) the scene's
-  // hazed as though the share of the sun that gets under the cloud reached
-  // all of it evenly, and this puts the sun where it is: more of its glow
-  // where the ray's in the open, less where it's in shadow, and nothing to
-  // change under a clear sky or a full deck.
-  if (cloudLit && lit) {
-    const full = hazeSunFull(direction).add(lobe.mul(moonlit));
-    const sunned = rays ? lit.mul(rays) : lit;
+  // The scene's hazed as though the share of the sun that gets under the
+  // cloud (./cloudLight.ts) reached all of it evenly, and this puts the sun
+  // where it is: more of its glow where the ray's in the open, less where
+  // it's in shadow, and nothing to change under a clear sky or a full deck.
+  const sunned = rays ? lit.mul(rays) : lit;
+  const all = lit.add(lost);
 
-    const all = lit.add(lost);
+  // The sky's haze is drawn with that share too, but it's only ever
+  // darkened here, never brightened: the cloud laid over it after has
+  // nothing put back, and a brighter sky behind shows along every ridge,
+  // where the cloud's soft edge lets it by.
+  const drawn = depth
+    .sample(screenUV)
+    .r.greaterThanEqual(0.99999)
+    .select(max(sunUnderCloud.mul(all), lit), sunUnderCloud.mul(all));
 
-    // The sky's haze is drawn with that share too, but it's only ever
-    // darkened here, never brightened: the cloud laid over it after has
-    // nothing put back, and a brighter sky behind shows along every
-    // ridge, where the cloud's soft edge lets it by.
-    const drawn = depth
-      .sample(screenUV)
-      .r.greaterThanEqual(0.99999)
-      .select(max(sunUnderCloud.mul(all), lit), sunUnderCloud.mul(all));
-
-    return max(color.add(full.mul(sunned.sub(drawn))), 0);
-  }
-
-  const glow =
-    skyStage() >= 4 ? hazeSunRadiance(direction).add(lobe.mul(moonlit)) : lobe;
-
-  const taken = lit && rays ? lost.sub(lit.mul(rays.sub(1))) : lost;
-
-  return max(color.sub(glow.mul(taken)), 0);
+  return max(color.add(full.mul(sunned.sub(drawn))), 0);
 }

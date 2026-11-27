@@ -67,7 +67,6 @@ import { OceanConditions, openHeight } from "./ocean/spectrum";
 import { seaConditions, useSwell } from "./ocean/swell";
 import { Clouds } from "./clouds/Clouds";
 import { cloudsOver } from "./clouds/layers";
-import { cloudLit } from "./cloudLight";
 import { useMeasuredWind } from "./wind/stations";
 import type { SeenClouds } from "./clouds/cloudField";
 import { useSeenClouds } from "./clouds/seenClouds";
@@ -101,12 +100,7 @@ import { Tunnels } from "./tunnels/Tunnels";
 import { AirfieldLights } from "./airport/AirfieldLights";
 import { Sky } from "./sky/Sky";
 import { skyAlong } from "./sky/backdrop";
-import {
-  showSky,
-  skyFor,
-  skyStage,
-  type Sky as SkyModel,
-} from "./sky/skyModel";
+import { showSky, skyFor, type Sky as SkyModel } from "./sky/skyModel";
 import { moonAt, moonDisc, moonlight } from "./sky/moon";
 import { sight } from "./sky/orbits";
 import { Telescope } from "./scope/Telescope";
@@ -1895,14 +1889,10 @@ interface SceneLight {
 
 /**
  * The sun at its real position over Wellington, at `time`; while it's down,
- * the moon at its, by its phase, once twilight's over. With `sky`, the sun's
- * as strong as the sky model has it.
+ * the moon at its, by its phase, once twilight's over. The sun's as strong
+ * as `sky`, the sky model, has it.
  */
-function lightAt(
-  sun: SunPosition,
-  time: Date,
-  sky: SkyModel | null
-): SceneLight {
+function lightAt(sun: SunPosition, time: Date, sky: SkyModel): SceneLight {
   if (sun.altitude < 0) {
     const { body, direction, altitude } = moonAt(time.getTime());
 
@@ -1914,24 +1904,15 @@ function lightAt(
   }
 
   // As strong as the air it comes through leaves it (./sky/skyModel.ts).
-  if (sky) {
-    return { direction: sunDirection(sun), intensity: sky.sun, moon: false };
-  }
-
-  // Fade in through the first few degrees above the horizon.
-  const fade = Math.min(1, sun.altitude / 6);
-
-  return { direction: sunDirection(sun), intensity: 3 * fade, moon: false };
+  return { direction: sunDirection(sun), intensity: sky.sun, moon: false };
 }
 
 /** The sun, or the moon (see lightAt), shining and casting its shadows. */
 function Sun({
   index,
-  cloudCover,
   light: { direction, intensity, moon },
 }: {
   index: TileIndex;
-  cloudCover: number;
   light: SceneLight;
 }) {
   const light = useRef<DirectionalLight>(environment.sunLight);
@@ -1942,18 +1923,14 @@ function Sun({
     return new Vector3(x, 0, z);
   }, [index]);
 
-  // Under a full deck the sun barely gets through; light goes flat. With
-  // the light under cloud worked out (./cloudLight.ts) that's the clouds'
-  // shadow, deck and all, and the light's the sun above them.
-  const lit = cloudLit
-    ? intensity
-    : intensity * (1 - 0.85 * environment.overcastFor(cloudCover));
-
+  // The light's the sun above the clouds: under a deck it barely gets
+  // through and the light goes flat, which is the clouds' shadow, deck and
+  // all (./cloudLight.ts).
   useEffect(() => {
     environment.sunDirection.value.set(...direction);
-    environment.sunIntensity.value = lit / 3;
+    environment.sunIntensity.value = intensity / 3;
     environment.moonlit.value = moon ? 1 : 0;
-  }, [direction, lit, moon]);
+  }, [direction, intensity, moon]);
 
   // The sun moves as the scene's clock runs; its shadows follow.
   useEffect(() => {
@@ -2004,7 +1981,7 @@ function Sun({
       object={environment.sunLight}
       name="sun"
       position={[sunX, sunY, sunZ]}
-      intensity={lit}
+      intensity={intensity}
     />
   );
 }
@@ -2112,28 +2089,22 @@ export function Scene({
     [conditions.wind, swell]
   );
 
-  // The day's light from the sky model, unless the page asks for less (?sky=).
-  const stage = skyStage();
-  // And under the cloud, what it leaves of that (./cloudLight.ts).
+  // The day's light from the sky model, and under the cloud what it leaves
+  // of that (./cloudLight.ts).
   const clouds = useMemo(() => cloudsOver(conditions), [conditions]);
 
   const sky = useMemo(
     () =>
-      stage
-        ? skyFor(
-            sun.altitude,
-            hazeDensityForVisibility(conditions.visibility),
-            hazeHeight.value,
-            clouds
-          )
-        : null,
-    [stage, sun.altitude, conditions.visibility, clouds]
+      skyFor(
+        sun.altitude,
+        hazeDensityForVisibility(conditions.visibility),
+        hazeHeight.value,
+        clouds
+      ),
+    [sun.altitude, conditions.visibility, clouds]
   );
 
-  const light = useMemo(
-    () => lightAt(sun, time, stage >= 2 ? sky : null),
-    [sun, time, stage, sky]
-  );
+  const light = useMemo(() => lightAt(sun, time, sky), [sun, time, sky]);
 
   const lights = nightFor(sun.altitude);
   const deck = conditions.cloudCover > 0 ? lowCloudBase(conditions) : null;
@@ -2141,8 +2112,7 @@ export function Scene({
   const skylight = environment.skylightFor(
     conditions.cloudCover,
     1 - lights,
-    stage >= 3 && sky ? sky.sky : null,
-    cloudLit && sky ? sky.under : null
+    sky.under
   );
 
   useEffect(() => {
@@ -2150,17 +2120,14 @@ export function Scene({
   }, [skylight]);
 
   useEffect(() => {
-    if (!sky) return;
-
     showSky(
       sky,
       sunDirection(sun),
       lights,
       light.moon ? light.intensity : 0,
-      conditions.cloudCover,
-      conditions.visibility
+      conditions.cloudCover
     );
-  }, [sky, sun, lights, light, conditions.cloudCover, conditions.visibility]);
+  }, [sky, sun, lights, light, conditions.cloudCover]);
 
   useEffect(() => {
     environment.skyBrightness.value = environment.skyBrightnessFor(
@@ -2209,7 +2176,7 @@ export function Scene({
         intensity={skylight}
       />
       <Atmosphere rootSize={index.manifest.rootSize} conditions={conditions} />
-      <Sun index={index} cloudCover={conditions.cloudCover} light={light} />
+      <Sun index={index} light={light} />
       {shown("sky") && (
         <Sky time={time} sunAltitude={sun.altitude} night={lights} />
       )}

@@ -7,12 +7,10 @@ import {
 import {
   BasicShadowFilter,
   float,
-  mix,
   positionWorld,
   shadow,
   uniform,
 } from "three/tsl";
-import { cloudLit } from "./cloudLight";
 import { createCloudShadowMap } from "./clouds/shadow";
 
 // Scene-wide lighting state, shared by materials that shade themselves
@@ -95,35 +93,20 @@ export const skylight = uniform(CLEAR_SKY);
 const NIGHT_FILL = 0.3;
 
 /**
- * Skylight for a cloud cover fraction, 0 at night to 1 by day. A deck takes
- * the sun but spreads it into flat light from everywhere, so by day an
- * overcast sky lights the scene nearly as much as the sun did.
+ * Skylight for a cloud cover fraction, 0 at night to 1 by day. The day's
+ * is `under`, the even light on level ground under the cloud as it's worked
+ * out (./cloudLight.ts): the sky through the gaps and what the cloud passes.
+ * The night's is set by hand, a little more under a deck.
  */
 export function skylightFor(
   cloudCover: number,
   daylight: number,
-  sky: number | null = null,
-  under: number | null = null
+  under: number
 ) {
-  // With the light under the cloud worked out (./cloudLight.ts), `under`
-  // is the day's: the sky through the gaps and what the cloud passes. The
-  // night's is as it was.
-  if (under !== null) {
-    return (
-      under * daylight +
-      (CLEAR_SKY + NIGHT_FILL + 0.3 * overcastFor(cloudCover)) * (1 - daylight)
-    );
-  }
-
-  const deck = overcastFor(cloudCover) * (0.3 + 0.6 * daylight);
-
-  // From the sky model (./sky/skyModel.ts): the clear sky's light by day,
-  // as it has it, and by night what there was.
-  if (sky !== null) {
-    return sky * daylight + (CLEAR_SKY + NIGHT_FILL) * (1 - daylight) + deck;
-  }
-
-  return CLEAR_SKY + NIGHT_FILL * (1 - daylight) + deck;
+  return (
+    under * daylight +
+    (CLEAR_SKY + NIGHT_FILL + 0.3 * overcastFor(cloudCover)) * (1 - daylight)
+  );
 }
 
 /**
@@ -238,9 +221,7 @@ filterOnce(nearShadowLight);
  */
 export const cloudShadowMap = createCloudShadowMap(sunDirection);
 
-export const cloudShadow = cloudLit
-  ? cloudShadowMap.sample(positionWorld)
-  : mix(cloudShadowMap.sample(positionWorld), 1, overcast);
+export const cloudShadow = cloudShadowMap.sample(positionWorld);
 
 // Lit materials get all three; outside the near map's square it reads as lit.
 // SAFETY: shadow() makes a float node, the light's shadow factor; it's typed

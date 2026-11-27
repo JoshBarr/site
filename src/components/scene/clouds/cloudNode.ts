@@ -26,13 +26,7 @@ import {
   vec3,
   vec4,
 } from "three/tsl";
-import {
-  cloudShadowMap,
-  overcast,
-  sunDirection,
-  sunIntensity,
-} from "../environment";
-import { cloudLit } from "../cloudLight";
+import { cloudShadowMap, sunDirection, sunIntensity } from "../environment";
 import { skyOnCloud, sunThroughDeck } from "../sky/skyModel";
 import { hazeColor, hazeTransmittance, phase } from "../haze";
 import { cloudGlowAtNight, hazeGlowAtNight } from "../skyglow";
@@ -460,16 +454,10 @@ export function createCloudNode({
               stride *= 2;
             }
 
-            // As on the ground: all of its shadow with the light under
-            // cloud worked out (../cloudLight.ts), and before that an
-            // overcast's dimmed sun stood in for it.
+            // As on the ground: all of its shadow (../cloudLight.ts).
             if (midShadows) {
               If(midCloud.and(underMid), () => {
-                throughMid.assign(
-                  cloudLit
-                    ? cloudShadowMap.sampleMid(p)
-                    : mix(cloudShadowMap.sampleMid(p), 1, overcast)
-                );
+                throughMid.assign(cloudShadowMap.sampleMid(p));
               });
             }
           });

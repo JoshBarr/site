@@ -72,7 +72,7 @@ const LIST = [
   ["mt-victoria-noon-overcast", "mt-victoria", NOON, OVERCAST],
   ["airport-dusk-overcast", "airport", DUSK, OVERCAST],
   ["west-wind-evening-half", "west-wind", EVENING, HALF],
-  // Fine air, for the sky's own light (?sky=) through the evening.
+  // Fine air, for the sky's own light through the evening.
   ["overview-noon-fine", "overview", NOON, FINE],
   ["overview-evening-fine", "overview", EVENING, FINE],
   ["overview-twilight-fine", "overview", TWILIGHT, FINE],

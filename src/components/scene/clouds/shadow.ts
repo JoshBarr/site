@@ -33,7 +33,7 @@ import {
   LOW_STYLE,
   MID_STYLE,
 } from "./density";
-import { cloudLit, sunUnderCloud } from "../cloudLight";
+import { sunUnderCloud } from "../cloudLight";
 import { rainDeck } from "./rainField";
 
 // The clouds' shadows, worked out once a frame into a small map over the
@@ -101,11 +101,10 @@ export function createCloudShadowMap(toSun) {
   // Across the ground per metre climbed along the ray.
   const slope = ray.xz.div(ray.y);
 
-  const lid = (xz) => (share) =>
-    cloudLit ? max(deckLid.mul(min(share, 1)), rainDeck(xz)) : rainDeck(xz);
+  const lid = (xz) => (share) => max(deckLid.mul(min(share, 1)), rainDeck(xz));
 
   // Past the map's edge the sun's taken as it is over the whole sky.
-  const beyond = cloudLit ? sunUnderCloud : float(1);
+  const beyond = sunUnderCloud;
 
   /** Depth through a layer along the ray crossing the plane at c. */
   const through = (

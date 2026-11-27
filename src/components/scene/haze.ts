@@ -12,15 +12,9 @@ import {
   smoothstep,
   uniform,
 } from "three/tsl";
-import {
-  moonlit,
-  skyHorizon,
-  skyBrightness,
-  sunDirection,
-  sunIntensity,
-} from "./environment";
-import { cloudLit, sunUnderCloud } from "./cloudLight";
-import { hazeLobes, hazeRadiance, nightSky, skyStage } from "./sky/skyModel";
+import { moonlit, skyHorizon, sunDirection, sunIntensity } from "./environment";
+import { sunUnderCloud } from "./cloudLight";
+import { hazeLobes, hazeRadiance, nightSky } from "./sky/skyModel";
 
 // Atmospheric haze: extinction falls off exponentially with height, so the
 // boundary layer over the harbour is thick and the hilltops clear above it.
@@ -156,28 +150,22 @@ export function hazeGlowToward(toward, strength: number) {
 }
 
 /**
- * Light the haze scatters toward the viewer along `direction`: the horizon
- * colour, dimmed at night, brightened toward the sun by forward scattering.
- * `model` is handed the sky model's share of it (from its fourth stage), to
- * work out where it's cheapest: a table read, which the fog on every
- * material would otherwise make at every pixel.
+ * Light the haze scatters toward the viewer along `direction`: by day the
+ * sky model's glow, and by night a grey and the moon's glow toward it.
+ * `model` is handed the sky model's share of it, to work out where it's
+ * cheapest: a table read, which the fog on every material would otherwise
+ * make at every pixel.
  */
 export function hazeColor(direction, model = (glow) => glow) {
   const along = normalize(direction);
   const toward = dot(along, sunDirection);
-  const glow = hazeGlowToward(toward, 0.6);
 
-  // From the sky model, the day's glow is its; the night's grey and the
-  // moon's glow stay. The moon's, like the sun's, as much as gets under
-  // the cloud (./cloudLight.ts).
-  if (skyStage() >= 4) {
-    const moon = glow.mul(moonlit);
+  // The moon's, like the sun's, as much as gets under the cloud
+  // (./cloudLight.ts).
+  const moon = hazeGlowToward(toward, 0.6).mul(moonlit).mul(sunUnderCloud);
 
-    return hazeGrey
-      .mul(nightSky)
-      .add(cloudLit ? moon.mul(sunUnderCloud) : moon)
-      .add(model(hazeRadiance(along)));
-  }
-
-  return hazeGrey.mul(skyBrightness).add(glow);
+  return hazeGrey
+    .mul(nightSky)
+    .add(moon)
+    .add(model(hazeRadiance(along)));
 }

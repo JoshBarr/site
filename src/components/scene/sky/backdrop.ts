@@ -9,13 +9,7 @@ import {
 import { cloudLayers, skyThrough } from "../clouds/density";
 import { hazeGlowAtNight } from "../skyglow";
 import { switchedOff } from "../stats";
-import {
-  nightSky,
-  skyOnCloud,
-  skyRadiance,
-  skyStage,
-  sunThroughDeck,
-} from "./skyModel";
+import { nightSky, skyOnCloud, skyRadiance, sunThroughDeck } from "./skyModel";
 
 // The sky behind everything, by the direction it's seen in: what the scene's
 // background draws (with the sun's disc and the moon over it), and what the
@@ -51,56 +45,45 @@ export function skyAlong(direction) {
     smoothstep(0, 0.35, direction.y)
   );
 
-  const gradient = greys.mul(environment.skyBrightness);
-
   const horizon = lowDown(direction);
 
   const far = cameraPosition.add(direction.mul(SKYGLOW_DISTANCE));
 
-  // From the sky model (?sky=): the day's sky is its own, hazy horizon,
-  // glow round the sun and all, going over to the deck's underside as the
-  // cloud closes; the old greys are what's left of the sky at night, and
-  // the glow the moon's. Under the horizon there's no sky, only the haze
-  // the far sea's lost in.
-  const modelled = () => {
-    // The sky goes over to the haze toward the horizon, as the old sky
-    // did: far cloud and far hills fade into that, and it's darker than
-    // the model's sky there (the old haze, or the model's at its veil). A
-    // brighter sky behind them showed as a band under the cloud.
-    const hazed = hazedAlong(direction);
+  // The day's sky is the sky model's, hazy horizon, glow round the sun and
+  // all, going over to the deck's underside as the cloud closes; the old
+  // greys are what's left of the sky at night, and the glow the moon's.
+  // Under the horizon there's no sky, only the haze the far sea's lost in.
 
-    // The deck's underside, lost in the haze toward the horizon: the open
-    // sky's light on it as dim as the march has the low layer's base.
-    const shade = switchedOff("cloudshade")
-      ? float(1)
-      : skyThrough(cloudLayers.low, 0).mul(skyThrough(cloudLayers.mid, 0));
+  // The sky goes over to the haze toward the horizon: far cloud and far
+  // hills fade into that, and a brighter sky behind them showed as a band
+  // under the cloud.
+  const hazed = hazedAlong(direction);
 
-    const haze = hazeColor(direction);
+  // The deck's underside, lost in the haze toward the horizon: the open
+  // sky's light on it as dim as the march has the low layer's base.
+  const shade = switchedOff("cloudshade")
+    ? float(1)
+    : skyThrough(cloudLayers.low, 0).mul(skyThrough(cloudLayers.mid, 0));
 
-    const deck = mix(
-      haze,
-      skyOnCloud(0, 1.4, shade).add(
-        sunThroughDeck(
-          skyThrough(cloudLayers.low, 0).mul(skyThrough(cloudLayers.mid, 0))
-        )
-      ),
-      hazeTransmittance(cameraPosition, far)
-    );
+  const haze = hazeColor(direction);
 
-    return mix(
-      mix(skyRadiance(direction), deck, environment.overcast)
-        .add(mix(greys, hazeGrey, horizon.mul(0.8)).mul(nightSky))
-        .add(hazeGlowToward(toward, 0.15).mul(environment.moonlit)),
-      haze,
-      hazed
-    );
-  };
+  const deck = mix(
+    haze,
+    skyOnCloud(0, 1.4, shade).add(
+      sunThroughDeck(
+        skyThrough(cloudLayers.low, 0).mul(skyThrough(cloudLayers.mid, 0))
+      )
+    ),
+    hazeTransmittance(cameraPosition, far)
+  );
 
-  const air = skyStage()
-    ? modelled()
-    : mix(gradient, hazeColor(direction), horizon.mul(0.8)).add(
-        hazeGlowToward(toward, 0.15)
-      );
+  const air = mix(
+    mix(skyRadiance(direction), deck, environment.overcast)
+      .add(mix(greys, hazeGrey, horizon.mul(0.8)).mul(nightSky))
+      .add(hazeGlowToward(toward, 0.15).mul(environment.moonlit)),
+    haze,
+    hazed
+  );
 
   return air.add(
     hazeGlowAtNight(cameraPosition, far, "sky").mul(
