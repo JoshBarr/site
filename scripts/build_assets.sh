@@ -39,6 +39,11 @@
 #   airport    public/airport + src/components/scene/airport/airfield.ts
 #   landmarks  src/components/scene/landmarks/sites.ts
 #   port       src/components/scene/port/terminal.ts
+#   berths     src/components/scene/vessels/berths.ts: the marinas' berths and
+#              moorings (Ethos GIS's survey, fetched once into .cache/moorings;
+#              how full each is, by hand in vessels/moorings.ts); and
+#              vessels/marinaOutlines.ts, their pontoons and breakwaters (OSM,
+#              also cached there; after terrain, which says what it has)
 #   playground src/components/scene/playground/site.ts: Frank Kitts Park's
 #              playground's anchor (OSM) and the DEM's ground under it
 #   power      src/components/scene/power/grid.ts: Transpower's towers and
@@ -66,7 +71,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-ALL=(terrain traffic trees landcover farland wind-stations wind footprints cablecar buildings heroes venues airport landmarks port playground power signs tunnels buses trains stars)
+ALL=(terrain traffic trees landcover farland wind-stations wind footprints cablecar buildings heroes venues airport landmarks port berths playground power signs tunnels buses trains stars)
 VENV=.venv-terrain
 PY="$VENV/bin/python"
 
@@ -121,6 +126,7 @@ wants venues && run venues node scripts/events/build_venues.mjs
 wants airport && run airport node scripts/airport/build_airfield.mjs
 wants landmarks && run landmarks node scripts/landmarks/build_sites.mjs
 wants port && run port node scripts/port/build_port.mjs
+wants berths && run berths node scripts/vessels/build_berths.mjs
 wants playground && run playground node scripts/playground/build_playground.mjs
 wants power && run power "$PY" -I scripts/power/build_power.py
 wants signs && run signs node scripts/traffic/build_signs.mjs

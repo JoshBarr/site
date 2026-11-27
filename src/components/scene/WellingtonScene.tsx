@@ -87,6 +87,7 @@ import { windowsLitAt } from "./buildings/material";
 import { Shrubs, SHRUBS_DESKTOP, SHRUBS_MOBILE } from "./trees/Shrubs";
 import { Trees, TREES_DESKTOP, TREES_MOBILE } from "./trees/Trees";
 import { Vessels } from "./vessels/Vessels";
+import { Marinas } from "./vessels/Marinas";
 import { Flights } from "./flights/Flights";
 import { Railway } from "./trains/Railway";
 import { Birds } from "./birds/Birds";
@@ -2017,6 +2018,7 @@ export const LAYERS = [
   "quakes",
   "railway",
   "vessels",
+  "marinas",
   "cablecar",
   "traffic",
   "signs",
@@ -2231,6 +2233,7 @@ export function Scene({
       )}
       {shown("airfield") && <AirfieldLights index={index} lights={lights} />}
       {shown("vessels") && <Vessels index={index} sea={sea} lights={lights} />}
+      {shown("marinas") && <Marinas index={index} />}
       {shown("railway") && <Railway index={index} lights={lights} />}
       {shown("cablecar") && <CableCar index={index} lights={lights} />}
       {shown("traffic") && (

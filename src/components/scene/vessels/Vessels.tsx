@@ -57,6 +57,8 @@ import { sceneNow, useSeek } from "../clock";
 import { useShore } from "./shore";
 import { createShipModel, Kind, Lights, Point } from "./models";
 import { createModelMaterial, HIDDEN, isNear } from "../models/lod";
+import { switchedOff } from "../stats";
+import { Moored } from "./Moored";
 import { castsNearShadow } from "../landmarks/nearShadow";
 import { seaLevel } from "../environment";
 import {
@@ -766,6 +768,15 @@ export function Vessels({
       .slice(0, MAX_VESSELS);
   }, [vessels, index, epoch, shore]);
 
+  // Moored ships the AIS has: the generic boats leave their berths to them.
+  const taken = useMemo(
+    () =>
+      ships
+        .filter(({ vessel }) => vessel.speed <= UNDER_WAY)
+        .map(({ at }): [number, number] => at),
+    [ships]
+  );
+
   useFollowCandidates(
     "ship",
     useMemo(
@@ -1144,6 +1155,14 @@ export function Vessels({
       <primitive object={trails.heads.lines} />
       <primitive object={sprites.sprite} name="ship lights" />
       <primitive object={detailed.group} name="detailed ships" />
+      {shore && !switchedOff("moored") && (
+        <Moored
+          index={index}
+          shore={shore}
+          taken={taken}
+          windDirection={sea.windDirection}
+        />
+      )}
     </>
   );
 }

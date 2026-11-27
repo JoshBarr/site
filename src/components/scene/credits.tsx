@@ -173,6 +173,11 @@ export const LIVE_CREDITS: Credit[] = [
     ],
   },
   {
+    // The berths and how full each place was; the boats in them are made up.
+    what: "marina berths and moorings",
+    who: [{ name: "Ethos GIS", href: "https://www.ethosgis.com" }],
+  },
+  {
     what: "aircraft positions",
     who: [{ name: "adsb.lol", href: "https://adsb.lol" }],
     licence: ODBL,
